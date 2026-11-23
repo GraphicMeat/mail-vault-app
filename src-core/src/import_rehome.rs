@@ -36,8 +36,18 @@ use tracing::warn;
 
 /// Beside `cur/`: every move and set-aside a pass made, cumulative.
 pub const LEDGER_FILE: &str = ".import-rehome.json";
-/// Beside `cur/`: a full pass ran on this folder. Written by the caller.
+/// Beside `cur/`: a full pass ran on this folder. Written by the caller,
+/// holding the highest server uid that pass saw (`read_stamp`).
 pub const DONE_FILE: &str = ".import-rehome-done";
+
+/// The folder's stamp: `None` when no full pass ran, `Some(None)` for a
+/// stamp an earlier build wrote empty (it recorded no uid, so the folder
+/// gets one more full pass), `Some(Some(uid))` the highest server uid the
+/// pass saw.
+pub fn read_stamp(mailbox_dir: &Path) -> Option<Option<u32>> {
+    let text = fs::read_to_string(mailbox_dir.join(DONE_FILE)).ok()?;
+    Some(text.trim().parse().ok())
+}
 
 /// Below this many compared files the fence never trips: too few to tell.
 const FENCE_MIN: u32 = 10;
@@ -248,12 +258,20 @@ pub struct Plan {
 /// imports still confirms through its real copies, or through imports of
 /// mail the server holds under another uid.
 pub fn plan(mailbox_dir: &Path, server: &ServerView, is_graph: bool, protected: &HashSet<u32>) -> Plan {
+    plan_above(mailbox_dir, server, is_graph, protected, 0)
+}
+
+/// `plan` of the files at uids above `above` alone, for a stamped folder
+/// (`read_stamp`): the server gives out uids in order, so an import it
+/// had not reached when the folder was stamped only meets a server row at a
+/// uid above the stamp's. Below it every file was sorted by an earlier pass.
+pub fn plan_above(mailbox_dir: &Path, server: &ServerView, is_graph: bool, protected: &HashSet<u32>, above: u32) -> Plan {
     let mut plan = Plan::default();
     // Maildir files only: a pass renames by file name, and a JMAP record (or
     // its shared blob) is never one to rename. Its uid still counts as taken
     // (`next_import_uid`, `carry_out`'s target check).
     let files = message_store::maildir_paths_at(mailbox_dir);
-    let mut uids: Vec<u32> = files.keys().copied().filter(|u| !message_store::is_import_uid(*u) && !protected.contains(u)).collect();
+    let mut uids: Vec<u32> = files.keys().copied().filter(|u| *u > above && !message_store::is_import_uid(*u) && !protected.contains(u)).collect();
     uids.sort_unstable();
     let mut confirmed = 0u32;
     for uid in uids {
@@ -268,7 +286,10 @@ pub fn plan(mailbox_dir: &Path, server: &ServerView, is_graph: bool, protected: 
         plan.compared += 1;
         // The row read last under the id, as when the index kept one per id.
         let listed_at = server.by_id.get(&id).and_then(|uids| uids.last()).copied();
-        if id == row.message_id || listed_at == Some(uid) {
+        // The row's own Message-ID spelled another way: a domain literal keeps
+        // its brackets in the raw header and loses them in the envelope.
+        let unbracketed = |id: &str| id.replace(['[', ']'], "");
+        if id == row.message_id || listed_at == Some(uid) || unbracketed(&id) == unbracketed(&row.message_id) {
             confirmed += 1;
             continue;
         }
@@ -1199,5 +1220,28 @@ mod tests {
         assert_eq!(next_import_uid(&mailbox, &[]), Some(IMPORT_UID_BASE));
         crate::message_store::write(root, "acct", "INBOX", IMPORT_UID_BASE, b"Subject: i\r\n\r\nx", &[]).unwrap();
         assert_eq!(next_import_uid(&mailbox, &[]), Some(IMPORT_UID_BASE + 1));
+    }
+
+    /// A copy whose Message-ID ends in a domain literal (the raw header keeps
+    /// `[1.2.3.4]`, the server's envelope drops the brackets) is still the
+    /// server's message U: a real copy, left where it is. Seen on a live
+    /// vault: a re-pass would have moved freshly fetched copies of server mail.
+    #[test]
+    fn a_copy_whose_id_is_a_bracketed_domain_literal_stays() {
+        let dir = tempfile::tempdir().unwrap();
+        let mailbox = dir.path().join("INBOX");
+        put(&mailbox, 5, "AS", &eml("<1.2@[172.25.241.138]>", "Invoice", DATE, "", "body"));
+        let server = view(&[row(5, "<1.2@172.25.241.138>", "Invoice", DATE)]);
+        let (plan, report) = run(&mailbox, &server, false);
+        assert!(plan.to_import.is_empty() && plan.set_aside.is_empty(), "{plan:?}");
+        assert!(report.moved.is_empty());
+        assert_eq!(cur_uids(&mailbox), vec![5]);
+        // Same uid, same Subject, another Message-ID: another message, moved.
+        let dir = tempfile::tempdir().unwrap();
+        let mailbox = dir.path().join("INBOX");
+        put(&mailbox, 1, "A", &eml("<welcome-old@x>", "Welcome", "Mon, 2 Mar 2026 10:00:00 +0000", "", "old"));
+        let server = view(&[row(1, "<welcome-new@x>", "Welcome", "Wed, 3 Jun 2026 06:34:36 +0000")]);
+        let (plan, _) = run(&mailbox, &server, false);
+        assert_eq!(plan.to_import.len(), 1, "{plan:?}");
     }
 }

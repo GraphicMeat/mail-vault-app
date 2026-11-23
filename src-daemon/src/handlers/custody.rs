@@ -435,16 +435,14 @@ impl Drop for Running {
 }
 
 /// The folder's pass on a thread of its own at background QoS, never waited
-/// for: a folder open must not stand behind a pass's header reads. A folder
-/// already done (its stamp) costs one stat and spawns nothing, and neither
-/// does one whose pass is already running.
+/// for: a folder open must not stand behind a pass's header reads. A stamped
+/// folder's pass reads one cached uid and stops there unless the server has
+/// listed uids above its stamp since (`import_rehome::plan_above`). One whose
+/// pass is already running spawns nothing.
 pub(crate) fn rehome_imports_soon(state: &Arc<DaemonState>, account_id: &str, mailbox: &str) {
     let Ok(stamp) = state.account_lifecycle.capture(account_id) else { return };
     let Ok(root) = vault_root(state) else { return };
     let Some(mailbox_dir) = mailbox_dir(&root, account_id, mailbox) else { return };
-    if mailbox_dir.join(import_rehome::DONE_FILE).exists() {
-        return;
-    }
     let Ok(owner) = state.account_lifecycle.try_operation(std::slice::from_ref(&stamp)) else { return };
     let Some(running) = Running::claim(state, account_id, mailbox) else { return };
     let spawned = std::thread::Builder::new().name("import-rehome".into()).spawn(move || {
@@ -455,7 +453,7 @@ pub(crate) fn rehome_imports_soon(state: &Arc<DaemonState>, account_id: &str, ma
         {
             let running = running;
             let (account_id, mailbox) = &running.1;
-            if let Err(e) = rehome_pass(&running.0, &stamp, mailbox) {
+            if let Err(e) = rehome_pass(&running.0, &stamp, mailbox, true) {
                 warn!("import rehome {account_id}/{mailbox}: {e}");
             }
         }
@@ -484,15 +482,19 @@ pub(crate) fn rehome_imports_for(state: &Arc<DaemonState>, account_id: &str, mai
 
 pub(crate) fn rehome_imports_for_owned(state: &Arc<DaemonState>, original: &AccountStamp, _owner: &OperationPermit, mailbox: &str) -> Result<Option<import_rehome::Report>, String> {
     let Some(_running) = Running::claim(state, original.id(), mailbox) else { return Ok(None) };
-    rehome_pass(state, original, mailbox)
+    rehome_pass(state, original, mailbox, false)
 }
 
 /// Moves the folder's old mbox imports out of the server's uid range, and
 /// sets aside import copies of mail the server now lists (`import_rehome`).
-/// The old imports are sorted once: the stamp is written after a pass that
-/// saw the whole folder's headers and hit no error, and a stamped folder's
-/// server-range files are never read again, while its import copies still
-/// are (an upload can make new ones server mail at any time).
+/// The stamp is written after a pass that saw the whole folder's headers and
+/// hit no error, and holds the highest server uid it saw. A stamped folder's
+/// server-range files are read again only above that uid, once the server
+/// lists mail there: an old import at a uid the server had not given out
+/// yet shadows the message it later gets. Its import copies are always
+/// read (an upload can make new ones server mail at any time). A stamp an
+/// earlier build wrote empty gets one more full pass. `open`: a folder open,
+/// which stops at the stamp unless the server listed a uid above it.
 ///
 /// A vault-only folder (its marker) is never touched: no server speaks for
 /// it. Otherwise the generation repair runs first, as a folder read runs it;
@@ -501,7 +503,7 @@ pub(crate) fn rehome_imports_for_owned(state: &Arc<DaemonState>, original: &Acco
 /// covers the folder. The plan is made outside every lock; the ledger is
 /// written in one hold of the mailbox lock and the renames follow a chunk
 /// per hold. `None`: nothing ran.
-fn rehome_pass(state: &Arc<DaemonState>, stamp: &AccountStamp, mailbox: &str) -> Result<Option<import_rehome::Report>, String> {
+fn rehome_pass(state: &Arc<DaemonState>, stamp: &AccountStamp, mailbox: &str, open: bool) -> Result<Option<import_rehome::Report>, String> {
     let account_id = stamp.id();
     let root = vault_root(state)?;
     let dir = mailbox_dir(&root, account_id, mailbox).ok_or("Maildir path has no parent")?;
@@ -510,8 +512,14 @@ fn rehome_pass(state: &Arc<DaemonState>, stamp: &AccountStamp, mailbox: &str) ->
             return Ok(None);
         }
     }
+    let stamped = import_rehome::read_stamp(&dir);
+    if let (true, Some(Some(seen))) = (open, stamped) {
+        let high = daemon_custody::with_conn(state, |c| cache::highest_uid(c, account_id, mailbox))?;
+        if high.is_none_or(|high| high <= seen) {
+            return Ok(None);
+        }
+    }
     repair_generation_for(state, stamp, mailbox)?;
-    let stamped = dir.join(import_rehome::DONE_FILE).exists();
     let (cached_uv, cached_total) = daemon_custody::with_conn(state, |c| cache::sync_meta(c, account_id, mailbox)).unwrap_or((None, None));
     let Some(uid_validity) = cached_uv else { return Ok(None) };
     if maildir::read_generation(&dir) != Some(uid_validity) {
@@ -533,12 +541,19 @@ fn rehome_pass(state: &Arc<DaemonState>, stamp: &AccountStamp, mailbox: &str) ->
             || r.get("_graphId").and_then(Value::as_str).is_some_and(|id| !id.trim().is_empty())
     });
     let view = import_rehome::ServerView::from_headers(&rows);
-    let plan = if stamped {
-        import_rehome::plan_import_twins(&dir, &view, is_graph, &protected)
-    } else {
-        import_rehome::plan(&dir, &view, is_graph, &protected)
+    let high = rows
+        .iter()
+        .filter_map(|r| r.get("uid").and_then(Value::as_u64).and_then(|u| u32::try_from(u).ok()))
+        .filter(|u| !message_store::is_import_uid(*u))
+        .max()
+        .unwrap_or(0);
+    let current = matches!(stamped, Some(Some(seen)) if high <= seen);
+    let plan = match stamped {
+        Some(Some(seen)) if high <= seen => import_rehome::plan_import_twins(&dir, &view, is_graph, &protected),
+        Some(Some(seen)) => import_rehome::plan_above(&dir, &view, is_graph, &protected, seen),
+        _ => import_rehome::plan(&dir, &view, is_graph, &protected),
     };
-    if stamped && plan.set_aside.is_empty() {
+    if current && plan.set_aside.is_empty() {
         return Ok(None);
     }
     if plan.suspicious {
@@ -575,12 +590,12 @@ fn rehome_pass(state: &Arc<DaemonState>, stamp: &AccountStamp, mailbox: &str) ->
         })?;
         report.absorb(part);
     }
-    if !stamped && report.errors == 0 && report.skipped == 0 {
+    if !current && report.errors == 0 && report.skipped == 0 {
         #[cfg(test)]
         rehome_stamp_pause(state);
         with_mailbox_write(state, account_id, mailbox, |root| {
             let dir = mailbox_dir(root, account_id, mailbox).ok_or("Maildir path has no parent")?;
-            std::fs::write(dir.join(import_rehome::DONE_FILE), b"").map_err(|e| format!("Failed to write {}: {}", import_rehome::DONE_FILE, e))
+            std::fs::write(dir.join(import_rehome::DONE_FILE), high.to_string()).map_err(|e| format!("Failed to write {}: {}", import_rehome::DONE_FILE, e))
         })?;
     }
     if !report.moved.is_empty() || !report.set_aside.is_empty() {
@@ -1033,16 +1048,16 @@ mod tests {
         assert!(fs::read_to_string(dir.join(import_rehome::LEDGER_FILE)).unwrap().contains(&b.to_string()));
     }
 
-    /// A folder stamped done long ago: its old imports are not read again,
-    /// but an import copy of mail an upload has since put on the server still
-    /// goes aside.
+    /// A folder stamped done (up to the highest uid the server listed then):
+    /// its old imports are not read again, but an import copy of mail an
+    /// upload has since put on the server still goes aside.
     #[tokio::test]
     async fn a_stamped_folder_still_sets_aside_an_import_copy_of_server_mail() {
         let (v, s) = st(true);
         let _ = daemon_custody::open_into(&s);
         let dir = seed_import_twin(&s, v.path(), "INBOX");
         maildir::write_generation(&dir, 2).unwrap();
-        fs::write(dir.join(import_rehome::DONE_FILE), b"").unwrap();
+        fs::write(dir.join(import_rehome::DONE_FILE), b"7").unwrap();
         // An old import at a server uid the server gives another message: an
         // unstamped pass would move it, a stamped one leaves it.
         let old = dir.join("cur").join(format!("7{}A.eml", maildir::INFO_PREFIX));
@@ -1105,5 +1120,73 @@ mod tests {
     async fn another_domains_method_is_not_routed_here() {
         let (_v, s) = st(true);
         assert!(route(&s, "search_index_status", &json!({}), json!(1)).await.is_none());
+    }
+
+    /// An old import at a uid the server had not given out yet when the
+    /// folder was stamped: the server later gives that uid to new mail, and
+    /// the import then shadows it (the vault never stores over a file, a
+    /// delete everywhere refuses since the bytes name another message). Seen
+    /// live 2026-11-23: an April import at INBOX uid 23, the server's uid 23 a
+    /// newsletter from 2026-11-20. A stamped folder re-checks the files at
+    /// uids the server listed after its stamp.
+    fn save_rows(s: &Arc<DaemonState>, rows: Value) {
+        let total = rows.as_array().unwrap().len();
+        let headers = json!({"uidValidity": 2, "totalEmails": total, "emails": rows});
+        daemon_custody::with_conn(s, |c| cache::save_headers(c, "acc", "INBOX", &headers.to_string())).unwrap();
+    }
+
+    fn seed_future_import(s: &Arc<DaemonState>, root: &std::path::Path) -> std::path::PathBuf {
+        let dir = seed_old_import(s, root, 1);
+        fs::write(dir.join("cur").join(format!("23{}AS.eml", maildir::INFO_PREFIX)),
+            b"Message-ID: <platformer@x.test>\r\nSubject: How a plan fell apart\r\nDate: Fri, 2 Sep 2022 16:06:13 +0000\r\n\r\nbody").unwrap();
+        dir
+    }
+
+    #[tokio::test]
+    async fn a_stamped_folder_moves_an_import_at_a_uid_the_server_gave_out_after_the_stamp() {
+        let (v, s) = st(true);
+        let _ = daemon_custody::open_into(&s);
+        let dir = seed_future_import(&s, v.path());
+        rehome_imports_for(&s, "acc", "INBOX").unwrap().expect("a pass ran");
+        assert!(dir.join(import_rehome::DONE_FILE).exists());
+        assert!(dir.join("cur").join(format!("23{}AS.eml", maildir::INFO_PREFIX)).exists(), "the server had no uid 23 yet");
+
+        save_rows(&s, json!([{"uid": 5, "messageId": "<real@x.test>"}, {"uid": 23, "messageId": "<ksa@x.test>", "subject": "You're Invited"}]));
+        let report = rehome_imports_for(&s, "acc", "INBOX").unwrap().expect("the stamped folder looked at uid 23");
+        assert_eq!(report.moved, vec![(23, maildir::IMPORT_UID_BASE + 1)]);
+        assert!(!dir.join("cur").join(format!("23{}AS.eml", maildir::INFO_PREFIX)).exists());
+
+        // Nothing new since: the next call reads nothing.
+        assert!(rehome_imports_for(&s, "acc", "INBOX").unwrap().is_none());
+    }
+
+    /// A folder stamped by a build that recorded no high-water uid gets one
+    /// full pass, which sorts the imports the server has caught up with since.
+    #[tokio::test]
+    async fn a_folder_stamped_without_a_high_water_uid_gets_one_full_pass() {
+        let (v, s) = st(true);
+        let _ = daemon_custody::open_into(&s);
+        let dir = seed_old_import(&s, v.path(), 1);
+        fs::write(dir.join(import_rehome::DONE_FILE), b"").unwrap();
+
+        let report = rehome_imports_for(&s, "acc", "INBOX").unwrap().expect("a legacy stamp gets one full pass");
+        assert_eq!(report.moved, vec![(5, maildir::IMPORT_UID_BASE)]);
+        assert!(rehome_imports_for(&s, "acc", "INBOX").unwrap().is_none(), "then it is stamped for good");
+    }
+
+    /// Opening a stamped folder runs the pass when the server listed new uids.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn opening_a_stamped_folder_with_new_server_uids_runs_the_pass() {
+        let (v, s) = st(true);
+        let _ = daemon_custody::open_into(&s);
+        let dir = seed_future_import(&s, v.path());
+        rehome_imports_for(&s, "acc", "INBOX").unwrap().expect("a pass ran");
+        save_rows(&s, json!([{"uid": 5, "messageId": "<real@x.test>"}, {"uid": 23, "messageId": "<ksa@x.test>"}]));
+
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        REHOME_DONE_REGISTRY.arm(s.app_dir.clone(), done_tx);
+        rehome_imports_soon(&s, "acc", "INBOX");
+        assert!(done_rx.recv_timeout(std::time::Duration::from_secs(10)).is_ok(), "the folder open spawned no pass");
+        assert!(!dir.join("cur").join(format!("23{}AS.eml", maildir::INFO_PREFIX)).exists());
     }
 }

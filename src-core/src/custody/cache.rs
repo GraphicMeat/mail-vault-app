@@ -318,6 +318,19 @@ pub fn date_rows_page(conn: &Connection, account: &str, mailbox: &str, after_uid
 /// (999 before SQLite 3.32), with the two scope parameters on top.
 const UID_CHUNK: usize = 900;
 
+/// The highest server uid the cache lists for the folder (import-range rows
+/// left out). `None`: none.
+pub fn highest_uid(conn: &Connection, account: &str, mailbox: &str) -> Result<Option<u32>, String> {
+    let top: Option<i64> = conn
+        .query_row(
+            "SELECT max(uid) FROM header_cache WHERE account_id=?1 AND mailbox_path=?2 AND uid < ?3",
+            params![account, mailbox, i64::from(crate::message_store::import_uid_floor())],
+            |r| r.get(0),
+        )
+        .map_err(err)?;
+    Ok(top.and_then(|u| u32::try_from(u).ok()))
+}
+
 /// A floor under the folder's UIDNEXT as this computer knows it: the highest
 /// cached server uid + 1 (a row an mbox import numbered, in the import range
 /// from `message_store::import_uid_floor` up, is never a server's and does not
