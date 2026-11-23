@@ -9,6 +9,7 @@
 // Nothing here removes by clicking a bubble: only the panel's X buttons remove.
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useT, useViewEnv } from '../settings/views/viewContext';
+import { useExpandedStack } from './useExpandedStack';
 import { BOTTOM_CLEARANCE, bubbleLabel, keepId, nudgeDock, snapDock } from '../../shared/keep';
 import '../../styles/keep.css';
 
@@ -131,7 +132,7 @@ function Panel({ stack, onOpen, onRemove, onClose }) {
 
 function Stack({ stack, expanded, peeking, hushed, onExpand, onPeek, onOpen, onRemove, onCloseStack }) {
   const t = useT();
-  const { Private } = useViewEnv();
+  const { Private, privateAttr } = useViewEnv();
   const pointerType = useRef('mouse');
   // A press focuses the bubble too; only keyboard focus peeks, or a tap that folds the panel would reopen it.
   const pressed = useRef(false);
@@ -160,11 +161,14 @@ function Stack({ stack, expanded, peeking, hushed, onExpand, onPeek, onOpen, onR
         data-testid="keep-bubble"
         data-group={count > 1 ? '' : undefined}
         aria-expanded={count > 1 || expanded ? expanded : undefined}
-        aria-label={t('keep.stack', { name, count })}
+        aria-label={t('keep.stack', { name: privateAttr(name, 'name'), count })}
         onPointerDown={event => { pointerType.current = event.pointerType; pressed.current = true; }}
         onClick={() => {
-          if (count > 1 || isTouch(pointerType.current)) onExpand(expanded ? null : stack.key);
-          else open(stack.items[0]);
+          if (count > 1 || isTouch(pointerType.current)) {
+            // A click that folds the panel also drops the hover peek the resting pointer would keep it open with.
+            if (expanded) onPeek(false);
+            onExpand(expanded ? null : stack.key);
+          } else open(stack.items[0]);
         }}
       >
         <span className="keep-count" data-testid="keep-count" aria-hidden="true">
@@ -180,10 +184,8 @@ export function KeepDockView({ stacks, dock, expandedKey, onExpand, onOpen, onRe
   const t = useT();
   const rootRef = useRef(null);
   // The one stack a mouse hover or keyboard focus shows a panel for; a tap's panel is `expandedKey`.
-  const [peekedKey, setPeekKey] = useState(null);
-  // A stack that unmounts fires no pointerleave or blur: a peek on a gone stack is no peek (as useExpandedStack).
-  const peekKey = stacks.some(stack => stack.key === peekedKey) ? peekedKey : null;
-  useEffect(() => { if (peekedKey !== null && peekKey === null) setPeekKey(null); }, [peekedKey, peekKey]);
+  // A stack that unmounts fires no pointerleave or blur: useExpandedStack drops a peek on a gone stack.
+  const [peekKey, setPeekKey] = useExpandedStack(stacks);
   const dismiss = useCallback(() => { setPeekKey(null); onExpand(null); }, [onExpand]);
   useDismissPanels(rootRef, Boolean(expandedKey || peekKey), dismiss);
   if (!stacks.length) return null;

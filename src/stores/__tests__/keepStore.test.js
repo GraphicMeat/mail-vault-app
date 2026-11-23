@@ -32,8 +32,15 @@ describe('keepStore', () => {
   it("removeSender removes only that sender's stack", () => {
     const { toggle } = useKeepStore.getState();
     toggle(entry(1)); toggle(entry(2, 'lena@x')); toggle(entry(3));
-    useKeepStore.getState().removeSender('sam@x');
+    useKeepStore.getState().removeSender('sam@x', ['a1']);
     expect(useKeepStore.getState().items.map(i => i.uid)).toEqual([2]);
+  });
+
+  it("removeSender leaves the sender's emails on an account it was not shown for", () => {
+    const { toggle } = useKeepStore.getState();
+    toggle(entry(1)); toggle({ ...entry(2), accountId: 'a2' });
+    useKeepStore.getState().removeSender('sam@x', ['a1']);
+    expect(useKeepStore.getState().items.map(i => i.accountId)).toEqual(['a2']);
   });
 
   it('remove drops one email', () => {

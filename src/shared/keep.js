@@ -73,9 +73,10 @@ export function withToggled(items, entry, now) {
   return [{ ...entry, keptAt: now }, ...items].slice(0, MAX_KEPT);
 }
 
-/** Items minus one sender's stack. */
-export function withoutSender(items, key) {
-  return items.filter(item => senderKey(item) !== key);
+/** Items minus one sender's stack as the bubble showed it: only the sender's emails on `liveAccountIds`. */
+export function withoutSender(items, key, liveAccountIds) {
+  const live = new Set(liveAccountIds);
+  return items.filter(item => senderKey(item) !== key || !live.has(item.accountId));
 }
 
 /**
@@ -87,7 +88,7 @@ export function keepActions(set, now) {
     /** Keep the email, or un-keep it when already kept. */
     toggle: entry => set(s => ({ items: withToggled(s.items, entry, now()) })),
     remove: id => set(s => ({ items: withoutId(s.items, id) })),
-    removeSender: key => set(s => ({ items: withoutSender(s.items, key) })),
+    removeSender: (key, liveAccountIds) => set(s => ({ items: withoutSender(s.items, key, liveAccountIds) })),
     // An invalid dock falls back to the default through the same validation as stored input.
     moveDock: dock => set({ dock: restoreKeep({ dock }).dock }),
   };

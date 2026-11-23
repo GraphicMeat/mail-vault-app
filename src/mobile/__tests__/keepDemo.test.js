@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { pickKeepDemo, waitForCentreOffset, openGroupAndReport } from '../keepDemo.js';
+import { pickKeepDemo, waitForCentreOffset, openGroupAndReport, stageKeepDemo } from '../keepDemo.js';
 
 const row = (uid, fromAddress) => ({ uid, fromAddress, fromName: '' });
 
@@ -46,5 +46,18 @@ describe('openGroupAndReport', () => {
     await openGroupAndReport(log);
     expect(tapped).toHaveBeenCalledTimes(1);
     expect(log).toHaveBeenCalledWith({ demo: 'keep', dx: 0, dy: 0 });
+  });
+});
+
+describe('stageKeepDemo', () => {
+  afterEach(() => { document.body.innerHTML = ''; });
+
+  it('hands the staging back to the caller, so a failure in it is the caller\'s to catch', async () => {
+    document.body.innerHTML = '<button class="keep-bubble" data-group><span class="keep-count">3</span></button>';
+    const rows = [row(1, 'a@x'), row(2, 'b@x'), row(3, 'b@x'), row(4, 'b@x')];
+    const list = { total: rows.length, rowAt: (i) => rows[i] };
+    const log = vi.fn(() => { throw new Error('log broke'); });
+    const staged = stageKeepDemo({ list, placeOf: () => ({ accountId: 'a1', folder: 'INBOX' }), openRow: vi.fn(), log });
+    await expect(staged).rejects.toThrow('log broke');
   });
 });

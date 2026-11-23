@@ -80,7 +80,12 @@ describe('withToggled', () => {
 describe('withoutSender', () => {
   it("removes only that sender's stack", () => {
     const items = [kept(1, 1, 'sam@x'), kept(2, 2, 'lena@x'), kept(3, 3, 'sam@x')];
-    expect(withoutSender(items, 'sam@x').map(i => i.uid)).toEqual([2]);
+    expect(withoutSender(items, 'sam@x', ['a1']).map(i => i.uid)).toEqual([2]);
+  });
+
+  it('keeps the same sender\'s emails on an account the bubble did not show', () => {
+    const items = [kept(1, 1, 'sam@x'), { ...kept(2, 2, 'sam@x'), accountId: 'a2' }];
+    expect(withoutSender(items, 'sam@x', ['a1']).map(i => i.uid)).toEqual([2]);
   });
 });
 

@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, within, fireEvent, cleanup } from '@testing-library/react';
 import { KeepDockView } from '../KeepDockView';
+import { SettingsViewProvider } from '../../settings/views/viewContext';
 
 afterEach(cleanup);
 
@@ -341,6 +342,22 @@ describe('KeepDockView', () => {
     expect(screen.getByTestId('keep-panel')).toBeTruthy();
     press(samBubble());
     expect(screen.queryByTestId('keep-panel')).toBeNull();
+  });
+
+  it('a click folds a group the pointer is resting on', () => {
+    render(<Host {...hostHandlers()} />);
+    fireEvent.pointerEnter(samBubble().parentElement, { pointerType: 'mouse' });
+    press(samBubble());
+    expect(samBubble().getAttribute('aria-expanded')).toBe('true');
+    press(samBubble());
+    expect(samBubble().getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByTestId('keep-panel')).toBeNull();
+  });
+
+  it("the bubble's label goes through the app's privacy mask", () => {
+    const mask = (value, kind) => (kind === 'name' ? '****' : value);
+    render(<SettingsViewProvider privateAttr={mask}><Host {...hostHandlers()} /></SettingsViewProvider>);
+    expect(samBubble().getAttribute('aria-label')).toBe('****, 3 kept emails');
   });
 
   it('Escape after a folded press is left to the app', () => {

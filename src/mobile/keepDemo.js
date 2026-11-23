@@ -66,5 +66,5 @@ export function stageKeepDemo({ list, placeOf, openRow, log }) {
     if (!isKept(entry)) toggle(entry);
   }
   openRow(picked.group[0]);
-  openGroupAndReport(log);
+  return openGroupAndReport(log);
 }

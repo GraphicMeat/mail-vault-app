@@ -18,7 +18,8 @@ export default function KeepDock({ onOpen }) {
   const dock = useKeepStore((s) => s.dock);
   const accounts = useMobileStore((s) => s.accounts);
   // Kept emails of an account that is gone or hidden stay out of the dock and its counts.
-  const stacks = useMemo(() => keptStacks(items, visibleAccounts(accounts).map((a) => a.id)), [items, accounts]);
+  const liveIds = useMemo(() => visibleAccounts(accounts).map((a) => a.id), [accounts]);
+  const stacks = useMemo(() => keptStacks(items, liveIds), [items, liveIds]);
   const [expandedKey, setExpandedKey] = useExpandedStack(stacks);
   const collapse = useCallback(() => setExpandedKey(null), []);
   useBackLayer(Boolean(expandedKey), collapse);
@@ -32,7 +33,7 @@ export default function KeepDock({ onOpen }) {
         onExpand={setExpandedKey}
         onOpen={({ accountId, mailbox, uid }) => onOpen({ accountId, folder: mailbox, uid })}
         onRemove={remove}
-        onCloseStack={removeSender}
+        onCloseStack={(key) => removeSender(key, liveIds)}
         onMove={moveDock}
       />
     </SettingsViewProvider>

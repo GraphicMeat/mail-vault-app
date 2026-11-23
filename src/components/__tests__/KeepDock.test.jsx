@@ -8,6 +8,7 @@ const { KeepDock } = await import('../KeepDock');
 const { useKeepStore } = await import('../../stores/keepStore');
 const { useMailStore } = await import('../../stores/mailStore');
 const { DEFAULT_DOCK } = await import('../../shared/keep');
+const { usePrivacyStore } = await import('../../stores/privacyStore');
 
 const SAM = { name: 'Sam Rivera', address: 'sam@x' };
 const kept = (accountId, uid, keptAt, sender = SAM) => ({ accountId, mailbox: 'INBOX', uid, subject: `Mail ${uid}`, sender, keptAt });
@@ -50,6 +51,24 @@ describe('desktop KeepDock', () => {
     useKeepStore.setState({ items: [kept('a1', 1, 10), kept('a1', 2, 20), kept('gone', 9, 90)] });
     render(<KeepDock onOpen={vi.fn()} />);
     expect(screen.getByTestId('keep-count').textContent).toBe('2');
+  });
+
+  it("closing a bubble keeps the sender's emails on an account that is gone", () => {
+    useKeepStore.setState({ items: [kept('a1', 1, 10), kept('a1', 2, 20), kept('gone', 9, 90)] });
+    render(<KeepDock onOpen={vi.fn()} />);
+    fireEvent.click(samBubble());
+    fireEvent.click(screen.getByTestId('keep-panel-close'));
+    expect(useKeepStore.getState().items.map(i => i.accountId)).toEqual(['gone']);
+  });
+
+  it('privacy mode masks the sender name in the bubble label', () => {
+    vi.spyOn(usePrivacyStore.persist, 'hasHydrated').mockReturnValue(true);
+    usePrivacyStore.setState({ enabled: true, peek: false, captureMask: false });
+    render(<KeepDock onOpen={vi.fn()} />);
+    const labels = screen.getAllByTestId('keep-bubble').map(b => b.getAttribute('aria-label')).join(' ');
+    expect(labels).not.toContain('Sam Rivera');
+    expect(labels).not.toContain('Lena');
+    usePrivacyStore.setState({ enabled: false });
   });
 
   it('a group whose emails are all removed does not come back open', () => {
