@@ -128,6 +128,14 @@ describe('KeepDockView', () => {
     expect(within(screen.getByTestId('keep-panel')).getAllByTestId('keep-row')).toHaveLength(3);
   });
 
+  it('Escape puts away the panel a keyboard focus peeked', () => {
+    setup();
+    fireEvent.focus(samBubble());
+    expect(screen.getByTestId('keep-panel')).toBeTruthy();
+    fireEvent.keyDown(samBubble(), { key: 'Escape' });
+    expect(screen.queryByTestId('keep-panel')).toBeNull();
+  });
+
   it('a row opens that email and collapses', () => {
     const { onOpen, onExpand } = setup({ expandedKey: 'sam@x' });
     fireEvent.click(screen.getAllByTestId('keep-row')[1]);

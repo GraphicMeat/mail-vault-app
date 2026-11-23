@@ -120,6 +120,7 @@ function Stack({ stack, expanded, onExpand, onOpen, onRemove, onCloseStack }) {
       data-testid="keep-stack"
       onPointerEnter={event => { if (!isTouch(event.pointerType)) setPeeking(true); }}
       onPointerLeave={() => setPeeking(false)}
+      onKeyDown={event => { if (event.key === 'Escape') setPeeking(false); }}
       onFocus={() => { if (!pressed.current) setPeeking(true); }}
       onBlur={event => {
         if (event.currentTarget.contains(event.relatedTarget)) return;

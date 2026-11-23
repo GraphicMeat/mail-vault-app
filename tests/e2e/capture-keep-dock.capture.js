@@ -130,6 +130,12 @@ async function shoot(name, selector) {
   writeFileSync(resolve(out, `${name}.reached`), `${selector}\n`);
 }
 
+/** A mouse pointer entering (or leaving) the element: tauri-wd's moveTo does not hover WKWebView. */
+const pointerOver = (selector, entering) => browser.execute((sel, enter) => {
+  const el = document.querySelector(sel);
+  el.dispatchEvent(new PointerEvent(enter ? 'pointerover' : 'pointerout', { bubbles: true, pointerType: 'mouse', relatedTarget: enter ? null : document.body }));
+}, selector, entering);
+
 const bubble = label => `[data-testid="keep-bubble"][aria-label^="${label}"]`;
 const panelInsideViewport = () => browser.execute(() => {
   const r = document.querySelector('[data-testid="keep-panel"]').getBoundingClientRect();
@@ -188,17 +194,15 @@ describe('Keep in bubble capture', function () {
     await wait(() => browser.execute(() => document.querySelectorAll('[data-testid="keep-panel"] [data-testid="keep-row"]').length === 3), 'Group panel rows');
     assert.equal(await browser.execute(() => !!document.querySelector('[data-testid="keep-panel-close"]')), true);
     await shoot('keep-dock-group-expanded', '[data-testid="keep-panel"]');
-    // The pointer rests on the bubble, whose hover would keep the panel up: move off it first.
-    await $('[data-testid="keep-toggle"]').moveTo();
     await browser.keys('Escape');
     await wait(() => browser.execute(() => !document.querySelector('[data-testid="keep-panel"]')), 'Escape did not fold the group');
     assert.equal(await browser.execute(() => document.querySelectorAll('[data-testid="keep-stack"]').length), 2, 'Escape removes nothing');
 
     // Single bubble: hover shows the subject and its X.
-    await $(bubble('Lena Ortiz')).moveTo();
+    await pointerOver(bubble('Lena Ortiz'), true);
     await wait(() => browser.execute(subject => document.querySelector('[data-testid="keep-panel"]')?.textContent.includes(subject), LENA_SUBJECT), 'Hover panel');
     await shoot('keep-dock-single-hover', '[data-testid="keep-panel"]');
-    await $('[data-testid="keep-toggle"]').moveTo();
+    await pointerOver(bubble('Lena Ortiz'), false);
 
     // Reopen from another folder: Sent is active, a Sam row brings back INBOX and that email.
     await switchToFolder(account().email, 'Sent', { requireRows: false });
