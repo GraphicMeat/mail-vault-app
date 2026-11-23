@@ -62,6 +62,7 @@
   width: max-content;
   min-width: 200px;
   max-width: min(280px, calc(100vw - 88px));
+  z-index: 1; /* above the bubbles of a second dock column, which sit toward the panel */
   padding: 6px;
   border: 1px solid var(--mail-border);
   border-radius: 12px;

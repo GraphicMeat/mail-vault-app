@@ -352,7 +352,7 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
   border-bottom: 1px solid var(--mail-border);
 }
 .mv-viewer__bar { padding-top: var(--mv-safe-top); margin: 0 -8px; display: flex; align-items: center; justify-content: space-between; }
-.mv-viewer__bar [data-mv-keep] { margin-inline-start: auto; }
+.mv-viewer__bar > .mv-viewer__back + * { margin-inline-start: auto; } /* the trailing tools (shield, keep) sit together at the end */
 .mv-viewer__bar [data-mv-keep][aria-pressed='true'] { color: var(--mail-accent-text); }
 .mv-viewer__shield {
   display: inline-flex;

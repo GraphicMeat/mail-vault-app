@@ -216,6 +216,8 @@ describe('KeepDockView', () => {
     expect(css).toMatch(/\.keep-panel::before\s*\{[^}]*position:\s*absolute/);
     const panelRule = css.match(/\n\.keep-panel\s*\{[^}]*\}/)[0];
     expect(panelRule).not.toMatch(/overflow/);
+    // A later column's bubbles must not paint over an earlier stack's open panel.
+    expect(panelRule).toMatch(/z-index:\s*[1-9]/);
     expect(css.match(/\n\.keep-rows\s*\{[^}]*\}/)[0]).toMatch(/overflow-y:\s*auto/);
   });
 
@@ -250,6 +252,15 @@ describe('KeepDockView', () => {
     expect(onMove).toHaveBeenLastCalledWith({ side: 'left', top: 0.4 });
     fireEvent.keyDown(grip, { key: 'ArrowDown' });
     expect(onMove.mock.calls.at(-1)[0].top).toBeCloseTo(0.45);
+  });
+
+  it('the arrow keys keep the dock above the bottom bar', () => {
+    const { onMove } = setup({ dock: { side: 'right', top: 0.8 } });
+    const rect = vi.spyOn(Element.prototype, 'getBoundingClientRect')
+      .mockReturnValue({ top: 640, bottom: 706, height: 66, left: 0, right: 44, width: 44 });
+    fireEvent.keyDown(screen.getByTestId('keep-dock-grip'), { key: 'ArrowDown' });
+    rect.mockRestore();
+    expect(onMove.mock.calls.at(-1)[0].top).toBeCloseTo((window.innerHeight - 66 - 72) / window.innerHeight);
   });
 
   it('dragging the grip snaps the dock to the drop side', () => {

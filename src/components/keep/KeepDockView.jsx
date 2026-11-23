@@ -69,7 +69,8 @@ function Grip({ dock, rootRef, onMove }) {
       }}
       onPointerCancel={() => { start.current = null; rootRef.current.style.transform = ''; }}
       onKeyDown={event => {
-        const next = nudgeDock(dock, event.key);
+        const fit = { height: rootRef.current.getBoundingClientRect().height, viewportHeight: window.innerHeight };
+        const next = nudgeDock(dock, event.key, fit);
         if (next === dock) return;
         event.preventDefault();
         onMove(next);
@@ -122,6 +123,7 @@ function Panel({ stack, onOpen, onRemove, onClose }) {
 
 function Stack({ stack, expanded, hushed, onExpand, onOpen, onRemove, onCloseStack }) {
   const t = useT();
+  const { Private } = useViewEnv();
   const [peeking, setPeeking] = useState(false);
   const pointerType = useRef('mouse');
   // A press focuses the bubble too; only keyboard focus peeks, or a tap that folds the panel would reopen it.
@@ -165,7 +167,9 @@ function Stack({ stack, expanded, hushed, onExpand, onOpen, onRemove, onCloseSta
           else open(stack.items[0]);
         }}
       >
-        <span className="keep-count" data-testid="keep-count" aria-hidden="true">{bubbleLabel(stack)}</span>
+        <span className="keep-count" data-testid="keep-count" aria-hidden="true">
+          {count > 1 ? bubbleLabel(stack) : <Private kind="name">{bubbleLabel(stack)}</Private>}
+        </span>
       </button>
       {showPanel && <Panel stack={stack} onOpen={open} onRemove={onRemove} onClose={close} />}
     </div>

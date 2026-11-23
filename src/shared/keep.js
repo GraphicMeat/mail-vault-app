@@ -117,18 +117,25 @@ export function bubbleLabel({ items, sender }) {
   return name ? name.trim().charAt(0).toUpperCase() || '?' : '?';
 }
 
+/** The lowest top (screen fraction) at which a dock of this height still clears the bottom bar. */
+const lowestTop = (height, viewportHeight) =>
+  Math.max(MIN_TOP, (viewportHeight - height - BOTTOM_CLEARANCE) / viewportHeight);
+
 /** The dock after a drop: nearer side edge, dropped height kept on screen above the bottom bar. */
 export function snapDock(rect, viewport) {
   const side = rect.left + rect.width / 2 < viewport.width / 2 ? 'left' : 'right';
-  const highest = Math.max(MIN_TOP, (viewport.height - rect.height - BOTTOM_CLEARANCE) / viewport.height);
-  return { side, top: clamp(rect.top / viewport.height, MIN_TOP, highest) };
+  return { side, top: clamp(rect.top / viewport.height, MIN_TOP, lowestTop(rect.height, viewport.height)) };
 }
 
-/** The dock after an arrow key on the grip; any other key leaves it unchanged. */
-export function nudgeDock(dock, key) {
+/**
+ * The dock after an arrow key on the grip; any other key leaves it unchanged. `fit` ({ height,
+ * viewportHeight }, the dock as drawn) keeps Down from pushing the dock past the bottom bar.
+ */
+export function nudgeDock(dock, key, fit) {
+  const limit = fit ? Math.min(MAX_NUDGE_TOP, lowestTop(fit.height, fit.viewportHeight)) : MAX_NUDGE_TOP;
   if (key === 'ArrowLeft') return { ...dock, side: 'left' };
   if (key === 'ArrowRight') return { ...dock, side: 'right' };
-  if (key === 'ArrowUp') return { ...dock, top: clamp(dock.top - NUDGE, MIN_TOP, MAX_NUDGE_TOP) };
-  if (key === 'ArrowDown') return { ...dock, top: clamp(dock.top + NUDGE, MIN_TOP, MAX_NUDGE_TOP) };
+  if (key === 'ArrowUp') return { ...dock, top: clamp(dock.top - NUDGE, MIN_TOP, limit) };
+  if (key === 'ArrowDown') return { ...dock, top: clamp(dock.top + NUDGE, MIN_TOP, limit) };
   return dock;
 }

@@ -129,6 +129,12 @@ describe('nudgeDock', () => {
     expect(nudgeDock({ side: 'left', top: 0.04 }, 'ArrowUp').top).toBe(0.04);
     expect(nudgeDock(dock, 'a')).toBe(dock);
   });
+  it('keeps the dock above the bottom bar when its height is known', () => {
+    const fit = { height: 66, viewportHeight: 800 };
+    const low = nudgeDock({ side: 'right', top: 0.8 }, 'ArrowDown', fit);
+    expect(low.top).toBeCloseTo((800 - 66 - 72) / 800);
+    expect(nudgeDock({ side: 'right', top: 0.4 }, 'ArrowDown', fit).top).toBeCloseTo(0.45);
+  });
 });
 
 describe('withoutId', () => {

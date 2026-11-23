@@ -2,6 +2,8 @@
 // The viewer's keep toggle: the open message goes into the phone's kept-email dock, and out again.
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import React from 'react';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { render, cleanup, fireEvent, waitFor } from '@testing-library/react';
 
 vi.mock('../transport.js', () => ({
@@ -46,5 +48,12 @@ describe('phone keep button', () => {
     fireEvent.click(toggle());
     expect(useKeepStore.getState().items).toEqual([]);
     expect(toggle().getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('the tracker shield and keep stay together at the trailing edge', () => {
+    const css = readFileSync(resolve(process.cwd(), 'src/mobile/mobile.css'), 'utf8');
+    // One auto margin on the first tool after Back; one on the keep button alone would strand the shield.
+    expect(css).toMatch(/\.mv-viewer__bar\s*>\s*\.mv-viewer__back\s*\+\s*\*\s*\{[^}]*margin-inline-start:\s*auto/);
+    expect(css).not.toMatch(/\[data-mv-keep\]\s*\{\s*margin-inline-start/);
   });
 });

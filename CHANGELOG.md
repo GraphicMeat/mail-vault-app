@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 - Added: Keep in bubble, on desktop and phone. The bookmark button on an email keeps it in a floating bubble; click the bubble to reopen it, hover to see its subject. Emails from one sender share one bubble with their count in its centre; tap it to list them, each opens with a tap, and the list's X closes the bubble. Drag the bubble by its handle to either side. Kept emails stay after a restart.
+- Fixed: tapping a notification for a message below the first page of a flat list now opens it instead of saying it is gone.
 - Fixed: every account and All Inboxes now show Find folder, not only accounts with ten or more folders, and the All Inboxes folders use the same role colours as an account's folders.
 - Fixed: a flag change or a move no longer lands in Unfinished server actions with "connection lost" when the server had quietly closed an idle connection. MailVault now asks again on a new connection, as it already did for reading and deleting mail; a move that lost the connection after it was sent is still left for you to retry, so it can never leave two copies.
 - Fixed: on macOS, Check for Updates always shows the update the feed offers now, and Update downloads that one. An update check left open since the day before could offer a nightly that had since been replaced and fail to download it; MailVault now checks the feed itself each day, and after a failed download checks it again once. Takes effect from the build after this one: the installed build still has the old updater.
