@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { readStorage, writeStorage } from './store';
-import { DEFAULT_DOCK, restoreKeep, withToggled, withoutSender, keepId } from '../shared/keep';
+import { restoreKeep, keepActions } from '../shared/keep';
 
 // "Keep in bubble" on the phone: same rules as the desktop (shared/keep), kept
 // in localStorage like the recent searches. Per device, not synced.
@@ -16,11 +16,7 @@ function readKept() {
 
 export const useKeepStore = create((set) => ({
   ...readKept(),
-  toggle: (entry) => set(s => ({ items: withToggled(s.items, entry, Date.now()) })),
-  remove: (id) => set(s => ({ items: s.items.filter(item => keepId(item) !== id) })),
-  removeSender: (key) => set(s => ({ items: withoutSender(s.items, key) })),
-  moveDock: (dock) => set({ dock: restoreKeep({ dock }).dock }),
+  ...keepActions(set, () => Date.now()),
 }));
 
 useKeepStore.subscribe(({ items, dock }) => writeStorage(STORAGE_KEY, JSON.stringify({ items, dock })));
-export { DEFAULT_DOCK };

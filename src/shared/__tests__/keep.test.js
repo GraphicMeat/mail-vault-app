@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect } from 'vitest';
 import {
-  MAX_KEPT, DEFAULT_DOCK, keepId, senderKey, restoreKeep, withToggled, withoutSender,
+  MAX_KEPT, DEFAULT_DOCK, keepId, senderKey, restoreKeep, withToggled, withoutSender, withoutId, keepActions,
   keptStacks, bubbleLabel, snapDock, nudgeDock,
 } from '../keep.js';
 
@@ -128,5 +128,29 @@ describe('nudgeDock', () => {
     expect(nudgeDock(dock, 'ArrowUp').top).toBeCloseTo(0.35);
     expect(nudgeDock({ side: 'left', top: 0.04 }, 'ArrowUp').top).toBe(0.04);
     expect(nudgeDock(dock, 'a')).toBe(dock);
+  });
+});
+
+describe('withoutId', () => {
+  it('removes only that message', () => {
+    const items = [{ accountId: 'a1', mailbox: 'INBOX', uid: 1 }, { accountId: 'a1', mailbox: 'INBOX', uid: 2 }];
+    expect(withoutId(items, 'a1|INBOX|1').map(i => i.uid)).toEqual([2]);
+  });
+});
+
+describe('keepActions', () => {
+  it('apply the rules to a store state through the injected set and clock', () => {
+    let state = { items: [], dock: DEFAULT_DOCK };
+    const set = patch => { state = { ...state, ...(typeof patch === 'function' ? patch(state) : patch) }; };
+    const actions = keepActions(set, () => 7);
+    const entry = { accountId: 'a1', mailbox: 'INBOX', uid: 1, subject: 's', sender: { name: 'Sam', address: 'sam@x' } };
+    actions.toggle(entry);
+    expect(state.items).toEqual([{ ...entry, keptAt: 7 }]);
+    actions.remove('a1|INBOX|1');
+    expect(state.items).toEqual([]);
+    actions.moveDock({ side: 'left', top: 0.2 });
+    expect(state.dock).toEqual({ side: 'left', top: 0.2 });
+    actions.moveDock({ side: 'up' });
+    expect(state.dock).toEqual(DEFAULT_DOCK);
   });
 });

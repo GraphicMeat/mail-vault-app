@@ -61,16 +61,36 @@ export function restoreKeep(raw) {
   return { items, dock: restoreDock(source.dock) };
 }
 
+/** Items minus one message. */
+export function withoutId(items, id) {
+  return items.filter(item => keepId(item) !== id);
+}
+
 /** Items after the reader toggle: removed when kept, else added in front; oldest drops past the cap. */
 export function withToggled(items, entry, now) {
   const id = keepId(entry);
-  if (items.some(item => keepId(item) === id)) return items.filter(item => keepId(item) !== id);
+  if (items.some(item => keepId(item) === id)) return withoutId(items, id);
   return [{ ...entry, keptAt: now }, ...items].slice(0, MAX_KEPT);
 }
 
 /** Items minus one sender's stack. */
 export function withoutSender(items, key) {
   return items.filter(item => senderKey(item) !== key);
+}
+
+/**
+ * The store actions both apps share, over their own `set` (zustand's) and clock, so a rule change
+ * touches this file only.
+ */
+export function keepActions(set, now) {
+  return {
+    /** Keep the email, or un-keep it when already kept. */
+    toggle: entry => set(s => ({ items: withToggled(s.items, entry, now()) })),
+    remove: id => set(s => ({ items: withoutId(s.items, id) })),
+    removeSender: key => set(s => ({ items: withoutSender(s.items, key) })),
+    // An invalid dock falls back to the default through the same validation as stored input.
+    moveDock: dock => set({ dock: restoreKeep({ dock }).dock }),
+  };
 }
 
 /**

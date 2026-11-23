@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { DEFAULT_DOCK } from '../../shared/keep';
 
 const entry = (uid) => ({ accountId: 'a1', mailbox: 'INBOX', uid, subject: `s${uid}`, sender: { name: 'Sam', address: 'sam@x' } });
 const valid = { ...entry(9), keptAt: 5 };
@@ -23,11 +24,11 @@ describe('phone keep store', () => {
 
   it('drops malformed kept emails read from storage', async () => {
     localStorage.setItem(KEY, '{bad');
-    let { useKeepStore, DEFAULT_DOCK } = await load();
+    let { useKeepStore } = await load();
     expect(useKeepStore.getState().items).toEqual([]);
     expect(useKeepStore.getState().dock).toEqual(DEFAULT_DOCK);
     localStorage.setItem(KEY, JSON.stringify({ items: [null, { uid: -1 }, valid], dock: 7 }));
-    ({ useKeepStore, DEFAULT_DOCK } = await load());
+    ({ useKeepStore } = await load());
     expect(useKeepStore.getState().items).toEqual([valid]);
     expect(useKeepStore.getState().dock).toEqual(DEFAULT_DOCK);
     useKeepStore.getState().toggle(entry(2));

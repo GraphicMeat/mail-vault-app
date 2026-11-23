@@ -3,6 +3,7 @@
 // message (kept first, so the group is the newest stack), then opens the viewer on the first kept
 // message and reports how far the group's count sits from the bubble's centre.
 import { useKeepStore } from './keep.js';
+import { keepId } from '../shared/keep';
 
 const senderOf = (row) => (row.fromAddress || row.fromName || '').toLowerCase();
 
@@ -42,7 +43,7 @@ export function stageKeepDemo({ list, placeOf, openRow, log }) {
     };
   };
   const { toggle, items } = useKeepStore.getState();
-  const isKept = (entry) => items.some((item) => item.accountId === entry.accountId && item.mailbox === entry.mailbox && item.uid === entry.uid);
+  const isKept = (entry) => items.some((item) => keepId(item) === keepId(entry));
   for (const row of [picked.other, ...[...picked.group].reverse()]) {
     const entry = entryOf(row);
     if (!isKept(entry)) toggle(entry);
