@@ -4743,5 +4743,11 @@
   "settings.behavior.afterDeleteUnreadHint": "その方向でいちばん近い未読メールがすぐに開き、既読になります。未読がなければ、いちばん近いメールが開きます。",
   "settings.behavior.afterDeleteSameAccount": "同じアカウント内にとどまる",
   "settings.behavior.afterDeleteSameAccountDesc": "すべての受信トレイなど複数アカウントのリストでは、削除したメールと同じアカウントのメールを優先します。",
-  "errors.syncRefreshFailed": "一部のアカウントを更新できませんでした"
+  "errors.syncRefreshFailed": "一部のアカウントを更新できませんでした",
+  "keep.add": "バブルに保持",
+  "keep.remove": "バブルから外す",
+  "keep.dock": "保持したメール",
+  "keep.move": "保持したメールを移動",
+  "keep.closeStack": "バブルを閉じる",
+  "keep.stack_other": "{{name}}、保持したメール {{count}} 件"
 }

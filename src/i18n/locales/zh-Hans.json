@@ -4743,5 +4743,11 @@
   "settings.behavior.afterDeleteUnreadHint": "该方向上最近的未读邮件会立即打开并标为已读。没有未读邮件时，打开最近的一封邮件。",
   "settings.behavior.afterDeleteSameAccount": "留在同一账户",
   "settings.behavior.afterDeleteSameAccountDesc": "在包含多个账户的列表（如所有收件箱）中，优先选择与已删除邮件同一账户的邮件。",
-  "errors.syncRefreshFailed": "部分账户未能刷新"
+  "errors.syncRefreshFailed": "部分账户未能刷新",
+  "keep.add": "保留在气泡中",
+  "keep.remove": "从气泡中移除",
+  "keep.dock": "已保留的邮件",
+  "keep.move": "移动已保留的邮件",
+  "keep.closeStack": "关闭气泡",
+  "keep.stack_other": "{{name}}，已保留 {{count}} 封邮件"
 }

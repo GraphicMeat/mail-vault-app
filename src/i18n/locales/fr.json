@@ -4743,5 +4743,12 @@
   "settings.behavior.afterDeleteUnreadHint": "L'e-mail non lu le plus proche dans ce sens s'ouvre aussitôt et est marqué comme lu. S'il n'en reste aucun, l'e-mail le plus proche s'ouvre.",
   "settings.behavior.afterDeleteSameAccount": "Rester dans le même compte",
   "settings.behavior.afterDeleteSameAccountDesc": "Dans une liste de plusieurs comptes, comme Toutes les boîtes, un e-mail du compte de celui que vous avez supprimé est préféré.",
-  "errors.syncRefreshFailed": "Certains comptes n'ont pas pu être actualisés"
+  "errors.syncRefreshFailed": "Certains comptes n'ont pas pu être actualisés",
+  "keep.add": "Garder dans la bulle",
+  "keep.remove": "Retirer de la bulle",
+  "keep.dock": "E-mails gardés",
+  "keep.move": "Déplacer les e-mails gardés",
+  "keep.closeStack": "Fermer la bulle",
+  "keep.stack_one": "{{name}}, {{count}} e-mail gardé",
+  "keep.stack_other": "{{name}}, {{count}} e-mails gardés"
 }

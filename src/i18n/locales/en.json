@@ -4743,5 +4743,12 @@
   "settings.behavior.afterDeleteUnreadHint": "The nearest unread email that way opens straight away and is marked as read. With no unread email left, the nearest email opens.",
   "settings.behavior.afterDeleteSameAccount": "Stay in the same account",
   "settings.behavior.afterDeleteSameAccountDesc": "In a list of several accounts, such as All Inboxes, prefer an email from the account of the one you deleted.",
-  "errors.syncRefreshFailed": "Some accounts could not be refreshed"
+  "errors.syncRefreshFailed": "Some accounts could not be refreshed",
+  "keep.add": "Keep in bubble",
+  "keep.remove": "Remove from bubble",
+  "keep.dock": "Kept emails",
+  "keep.move": "Move kept emails",
+  "keep.closeStack": "Close bubble",
+  "keep.stack_one": "{{name}}, {{count}} kept email",
+  "keep.stack_other": "{{name}}, {{count}} kept emails"
 }

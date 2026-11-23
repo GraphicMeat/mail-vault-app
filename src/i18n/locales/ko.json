@@ -4743,5 +4743,11 @@
   "settings.behavior.afterDeleteUnreadHint": "그 방향에서 가장 가까운 읽지 않은 메일이 바로 열리고 읽음으로 표시됩니다. 읽지 않은 메일이 없으면 가장 가까운 메일이 열립니다.",
   "settings.behavior.afterDeleteSameAccount": "같은 계정에 머무르기",
   "settings.behavior.afterDeleteSameAccountDesc": "모든 받은편지함처럼 여러 계정이 섞인 목록에서는 삭제한 메일과 같은 계정의 메일을 우선합니다.",
-  "errors.syncRefreshFailed": "일부 계정을 새로 고치지 못했습니다"
+  "errors.syncRefreshFailed": "일부 계정을 새로 고치지 못했습니다",
+  "keep.add": "버블에 보관",
+  "keep.remove": "버블에서 제거",
+  "keep.dock": "보관한 이메일",
+  "keep.move": "보관한 이메일 이동",
+  "keep.closeStack": "버블 닫기",
+  "keep.stack_other": "{{name}}, 보관한 이메일 {{count}}개"
 }

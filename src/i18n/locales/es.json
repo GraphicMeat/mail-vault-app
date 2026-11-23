@@ -4743,5 +4743,12 @@
   "settings.behavior.afterDeleteUnreadHint": "El correo no leído más cercano en esa dirección se abre enseguida y se marca como leído. Si no queda ninguno, se abre el correo más cercano.",
   "settings.behavior.afterDeleteSameAccount": "Permanecer en la misma cuenta",
   "settings.behavior.afterDeleteSameAccountDesc": "En una lista de varias cuentas, como Todas las bandejas, se prefiere un correo de la cuenta del que eliminaste.",
-  "errors.syncRefreshFailed": "No se pudieron actualizar algunas cuentas"
+  "errors.syncRefreshFailed": "No se pudieron actualizar algunas cuentas",
+  "keep.add": "Guardar en la burbuja",
+  "keep.remove": "Quitar de la burbuja",
+  "keep.dock": "Correos guardados",
+  "keep.move": "Mover correos guardados",
+  "keep.closeStack": "Cerrar burbuja",
+  "keep.stack_one": "{{name}}, {{count}} correo guardado",
+  "keep.stack_other": "{{name}}, {{count}} correos guardados"
 }

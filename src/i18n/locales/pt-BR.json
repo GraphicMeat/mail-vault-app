@@ -4743,5 +4743,12 @@
   "settings.behavior.afterDeleteUnreadHint": "O e-mail não lido mais próximo nessa direção abre na hora e é marcado como lido. Se não restar nenhum, abre o e-mail mais próximo.",
   "settings.behavior.afterDeleteSameAccount": "Ficar na mesma conta",
   "settings.behavior.afterDeleteSameAccountDesc": "Em uma lista com várias contas, como Todas as caixas, um e-mail da conta do que você excluiu tem preferência.",
-  "errors.syncRefreshFailed": "Não foi possível atualizar algumas contas"
+  "errors.syncRefreshFailed": "Não foi possível atualizar algumas contas",
+  "keep.add": "Manter na bolha",
+  "keep.remove": "Remover da bolha",
+  "keep.dock": "E-mails mantidos",
+  "keep.move": "Mover e-mails mantidos",
+  "keep.closeStack": "Fechar bolha",
+  "keep.stack_one": "{{name}}, {{count}} e-mail mantido",
+  "keep.stack_other": "{{name}}, {{count}} e-mails mantidos"
 }

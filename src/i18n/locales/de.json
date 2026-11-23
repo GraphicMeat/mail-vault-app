@@ -4743,5 +4743,12 @@
   "settings.behavior.afterDeleteUnreadHint": "Die nächstgelegene ungelesene E-Mail in dieser Richtung öffnet sich sofort und gilt als gelesen. Ist keine ungelesene mehr da, öffnet sich die nächstgelegene E-Mail.",
   "settings.behavior.afterDeleteSameAccount": "Im selben Konto bleiben",
   "settings.behavior.afterDeleteSameAccountDesc": "In einer Liste mit mehreren Konten, etwa Alle Posteingänge, wird eine E-Mail aus dem Konto der gelöschten bevorzugt.",
-  "errors.syncRefreshFailed": "Einige Konten konnten nicht aktualisiert werden"
+  "errors.syncRefreshFailed": "Einige Konten konnten nicht aktualisiert werden",
+  "keep.add": "Im Bubble behalten",
+  "keep.remove": "Aus dem Bubble entfernen",
+  "keep.dock": "Gemerkte E-Mails",
+  "keep.move": "Gemerkte E-Mails verschieben",
+  "keep.closeStack": "Bubble schließen",
+  "keep.stack_one": "{{name}}, {{count}} gemerkte E-Mail",
+  "keep.stack_other": "{{name}}, {{count}} gemerkte E-Mails"
 }

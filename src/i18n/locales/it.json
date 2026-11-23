@@ -4743,5 +4743,12 @@
   "settings.behavior.afterDeleteUnreadHint": "L'email non letta più vicina in quella direzione si apre subito e viene segnata come letta. Se non ne restano, si apre l'email più vicina.",
   "settings.behavior.afterDeleteSameAccount": "Resta nello stesso account",
   "settings.behavior.afterDeleteSameAccountDesc": "In un elenco di più account, come Tutte le caselle, viene preferita un'email dell'account di quella eliminata.",
-  "errors.syncRefreshFailed": "Non è stato possibile aggiornare alcuni account"
+  "errors.syncRefreshFailed": "Non è stato possibile aggiornare alcuni account",
+  "keep.add": "Tieni nella bolla",
+  "keep.remove": "Rimuovi dalla bolla",
+  "keep.dock": "Email conservate",
+  "keep.move": "Sposta le email conservate",
+  "keep.closeStack": "Chiudi la bolla",
+  "keep.stack_one": "{{name}}, {{count}} email conservata",
+  "keep.stack_other": "{{name}}, {{count}} email conservate"
 }

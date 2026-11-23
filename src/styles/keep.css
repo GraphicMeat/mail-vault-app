@@ -1,0 +1,119 @@
+/* The dock of kept emails (components/keep/KeepDockView.jsx), in both apps. One round bubble per
+   sender: the count (or the initial) is the bubble's only content, centred on both axes. */
+.keep-dock {
+  position: fixed;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.keep-dock[data-side='right'] { right: 12px; }
+.keep-dock[data-side='left'] { left: 12px; }
+
+.keep-grip {
+  width: 28px;
+  height: 14px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  cursor: grab;
+  display: grid;
+  place-items: center;
+  touch-action: none;
+}
+.keep-grip:active { cursor: grabbing; }
+.keep-grip-dots {
+  width: 16px;
+  height: 6px;
+  background-image: radial-gradient(circle, var(--mail-text-muted) 1.2px, transparent 1.5px);
+  background-size: 6px 6px;
+  background-position: center;
+}
+
+.keep-stack { position: relative; }
+
+.keep-bubble {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  line-height: 1;
+  text-align: center;
+  font-weight: 700;
+  font-size: 18px;
+  cursor: pointer;
+  color: var(--mail-accent-text);
+  background: var(--mail-accent-tint);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+.keep-bubble[data-group] { background: var(--mail-accent-fill); color: #fff; }
+.keep-count { font-variant-numeric: tabular-nums; }
+
+.keep-panel {
+  position: absolute;
+  top: 0;
+  width: max-content;
+  min-width: 200px;
+  max-width: min(280px, calc(100vw - 88px));
+  max-height: min(60vh, 320px);
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid var(--mail-border);
+  border-radius: 12px;
+  background: var(--mail-surface);
+  color: var(--mail-text);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+/* The panel opens toward the middle of the screen. */
+.keep-dock[data-side='right'] .keep-panel { right: calc(100% + 8px); }
+.keep-dock[data-side='left'] .keep-panel { left: calc(100% + 8px); }
+
+.keep-panel-head { display: flex; align-items: center; gap: 6px; padding: 2px 4px 6px; }
+.keep-panel-name { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.keep-panel-count { color: var(--mail-text-muted); font-variant-numeric: tabular-nums; }
+.keep-rows { margin: 0; padding: 0; list-style: none; }
+.keep-row-wrap { display: flex; align-items: center; gap: 2px; }
+.keep-row {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.keep-row:hover, .keep-row:focus-visible { background: var(--mail-accent-tint); }
+.keep-row-subject { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.keep-row-date { font-size: 11px; color: var(--mail-text-muted); }
+.keep-x {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--mail-text-muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.keep-x:hover, .keep-x:focus-visible { background: var(--mail-surface-hover, var(--mail-accent-tint)); color: var(--mail-text); }
+
+@media (pointer: coarse) {
+  .keep-bubble { width: 48px; height: 48px; font-size: 19px; }
+  .keep-grip { width: 44px; height: 24px; }
+  .keep-x { width: 44px; height: 44px; }
+  .keep-row { min-height: 44px; }
+}
