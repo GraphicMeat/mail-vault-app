@@ -41,8 +41,12 @@ export function stageKeepDemo({ list, placeOf, openRow, log }) {
       sender: { name: row.fromName || '', address: row.fromAddress || '' },
     };
   };
-  const { toggle } = useKeepStore.getState();
-  for (const row of [picked.other, ...[...picked.group].reverse()]) toggle(entryOf(row));
+  const { toggle, items } = useKeepStore.getState();
+  const isKept = (entry) => items.some((item) => item.accountId === entry.accountId && item.mailbox === entry.mailbox && item.uid === entry.uid);
+  for (const row of [picked.other, ...[...picked.group].reverse()]) {
+    const entry = entryOf(row);
+    if (!isKept(entry)) toggle(entry);
+  }
   openRow(picked.group[0]);
   setTimeout(() => log({ demo: 'keep', ...centreOffset() }), 1500);
 }

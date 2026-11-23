@@ -45,6 +45,61 @@ PY
       for theme in light dark; do test -s "$out/$shot-$theme.png"; done
     done
     exit 0 ;;
+  *,keep-*)
+    cd "$(dirname "$0")/.."
+    out=${HARNESS_SHOTS_OUT:-${1:-$PWD/.artifacts}}
+    case "$out" in /*) ;; *) echo 'Shot output must be an absolute directory' >&2; exit 1 ;; esac
+    export HARNESS_SHOTS_OUT="$out"
+    mkdir -p "$out"
+    [ -d node_modules ] || npm ci
+    desktop_shots="keep-reader-kept keep-dock-group-expanded keep-dock-single-hover keep-dock-reopened keep-dock-left keep-dock-narrow keep-thread-reader keep-notes-reader keep-insights-reader"
+    for shot in $desktop_shots keep-phone-viewer-group; do
+      rm -f "$out/$shot.reached" "$out/$shot-light.png" "$out/$shot-dark.png"
+    done
+    # Desktop: the window is sized from outside the webview (the spec uses WebDriver setWindowRect).
+    capture_conf=src-tauri/tauri.conf.json
+    capture_backup=$(mktemp)
+    cp "$capture_conf" "$capture_backup"
+    trap 'cp "$capture_backup" "$capture_conf"; rm -f "$capture_backup"' EXIT
+    python3 - "$capture_conf" <<'PY'
+import json, sys
+path = sys.argv[1]
+with open(path) as source:
+    config = json.load(source)
+window = config['app']['windows'][0]
+window.update(width=1280, height=1000, minWidth=375, center=True)
+with open(path, 'w') as target:
+    json.dump(config, target, indent=2)
+PY
+    npm run build:e2e
+    if ! npx wdio run wdio.conf.js --spec tests/e2e/capture-keep-dock.capture.js > "$out/keep-wdio.log" 2>&1; then
+      tail -100 "$out/keep-wdio.log" >&2
+      exit 1
+    fi
+    cp "$capture_backup" "$capture_conf"
+    for shot in $desktop_shots; do
+      test -s "$out/$shot.reached" || { echo "capture.sh: $shot not reached" >&2; exit 1; }
+      for theme in light dark; do test -s "$out/$shot-$theme.png" || { echo "capture.sh: $shot-$theme.png missing" >&2; exit 1; }; done
+    done
+    # Phone: the perf-gate build's ?ui=keep hook stages the dock and logs the count's offset from the bubble centre.
+    tmp=$(mktemp -d)
+    MV_MOBILE_SHOTS="$tmp" MV_MOBILE_UNTIL='^MV_MOBILE \{"demo":"keep"' \
+      bash scripts/mobile-run.sh ios --features perf-gate --url-query ui=keep | tee "$out/keep-phone.log"
+    node -e '
+      const fs = require("fs");
+      const line = fs.readFileSync(process.argv[1], "utf8").split("\n").filter(l => l.startsWith("MV_MOBILE {\"demo\":\"keep\"")).pop();
+      const demo = line && JSON.parse(line.slice("MV_MOBILE ".length));
+      if (!demo || typeof demo.dx !== "number") { console.error("capture.sh: keep-phone-viewer-group: no centre offsets logged"); process.exit(1); }
+      console.log("keep centre offset on the phone: dx=" + demo.dx + " dy=" + demo.dy);
+      if (Math.abs(demo.dx) > 1 || Math.abs(demo.dy) > 1) { console.error("capture.sh: keep-phone-viewer-group: count is off the bubble centre"); process.exit(1); }
+    ' "$out/keep-phone.log"
+    for theme in light dark; do
+      test -s "$tmp/ios-$theme.png" || { echo "capture.sh: ios-$theme.png missing" >&2; exit 1; }
+      cp "$tmp/ios-$theme.png" "$out/keep-phone-viewer-group-$theme.png"
+    done
+    printf '%s\n' '[data-mv-keep][aria-pressed="true"]' > "$out/keep-phone-viewer-group.reached"
+    rm -rf "$tmp"
+    exit 0 ;;
   *,reply-joined-reader,*)
     cd "$(dirname "$0")/.."
     out=${HARNESS_SHOTS_OUT:-${1:-$PWD/.artifacts}}
