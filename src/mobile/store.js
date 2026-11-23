@@ -60,14 +60,14 @@ const SEND_TOASTS = Object.freeze({
 });
 
 // localStorage can be missing or throw (private mode, a locked-down WebView): never fatal.
-function readStorage(key) {
+export function readStorage(key) {
   try {
     return globalThis.localStorage?.getItem(key) ?? null;
   } catch {
     return null;
   }
 }
-function writeStorage(key, value) {
+export function writeStorage(key, value) {
   try {
     if (value == null) globalThis.localStorage?.removeItem(key);
     else globalThis.localStorage?.setItem(key, value);
