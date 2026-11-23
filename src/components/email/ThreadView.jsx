@@ -40,7 +40,7 @@ import { TagChips } from '../TagChips';
 import { useExportStore } from '../../stores/exportStore';
 import { useViewBuilderStore } from '../../stores/viewBuilderStore';
 import { AttachmentItem, DownloadAllButton } from './AttachmentBar';
-import { CloseViewerButton } from './CloseViewerButton';
+import { ReaderHeaderTools } from './ReaderHeaderTools';
 import { DeleteConfirmModal } from '../DeleteConfirmModal';
 import { useDeleteConfirmation, READER_CONFIRMING_ACTIONS } from '../../hooks/useDeleteConfirmation';
 import { remoteAllowed, scanForFrame, scanHead, refusalHead, LINK_ALERT_STYLE } from '../../services/bodyScan';
@@ -960,7 +960,7 @@ export function ThreadView({ thread, onComposeReply, readOnly = false, emailThem
           </button>
         )}
 
-        <CloseViewerButton className="ml-2" />
+        <ReaderHeaderTools className="ml-2" />
         </>}
       </div>
 

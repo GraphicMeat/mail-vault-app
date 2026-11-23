@@ -15,7 +15,6 @@ import {
   FileText,
   AlertTriangle,
   RefreshCw,
-  ExternalLink,
 } from 'lucide-react';
 import { getRealAttachments, replaceCidUrls } from '../services/attachmentUtils';
 import * as db from '../services/db';
@@ -40,8 +39,7 @@ import { EmailActionBar } from './email/EmailActionBar';
 import { useExportStore } from '../stores/exportStore';
 import { useViewBuilderStore } from '../stores/viewBuilderStore';
 import { AttachmentItem, DownloadAllButton } from './email/AttachmentBar';
-import { CloseViewerButton } from './email/CloseViewerButton';
-import { Button } from './ui/Button';
+import { ReaderHeaderTools } from './email/ReaderHeaderTools';
 import { useEmailLinks } from '../hooks/useEmailLinks';
 import { LinkSafetyModal } from './LinkSafetyModal';
 import { LinkAlertIcon } from './LinkAlertIcon';
@@ -738,13 +736,7 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
           />
           <span className="min-w-0 break-words"><Private kind="text">{selectedEmail.subject}</Private></span>
         </h1>
-        <div className="flex items-center flex-shrink-0">
-          {showOpenInWindow && <Button variant="ghost" icon size="sm" data-testid="open-in-window" onClick={openInWindow}
-            aria-label={t('chat.bubble.openNewWindow')} title={t('chat.bubble.openNewWindow')}>
-            <ExternalLink size={16} />
-          </Button>}
-          <CloseViewerButton onClose={onClose} />
-        </div>
+        <ReaderHeaderTools onOpenInWindow={showOpenInWindow ? openInWindow : undefined} onClose={onClose} />
       </div>
 
       {/* Custody band — the reading pane opens under the claim about where this
