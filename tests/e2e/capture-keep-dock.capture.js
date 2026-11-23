@@ -136,6 +136,10 @@ const pointerOver = (selector, entering) => browser.execute((sel, enter) => {
   el.dispatchEvent(new PointerEvent(enter ? 'pointerover' : 'pointerout', { bubbles: true, pointerType: 'mouse', relatedTarget: enter ? null : document.body }));
 }, selector, entering);
 
+/** Escape from the focused control (the driver's key actions do not reach this webview's handlers). */
+const pressEscape = () => browser.execute(() => (document.activeElement || document.body)
+  .dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })));
+
 const bubble = label => `[data-testid="keep-bubble"][aria-label^="${label}"]`;
 const panelInsideViewport = () => browser.execute(() => {
   const r = document.querySelector('[data-testid="keep-panel"]').getBoundingClientRect();
@@ -194,7 +198,7 @@ describe('Keep in bubble capture', function () {
     await wait(() => browser.execute(() => document.querySelectorAll('[data-testid="keep-panel"] [data-testid="keep-row"]').length === 3), 'Group panel rows');
     assert.equal(await browser.execute(() => !!document.querySelector('[data-testid="keep-panel-close"]')), true);
     await shoot('keep-dock-group-expanded', '[data-testid="keep-panel"]');
-    await browser.keys('Escape');
+    await pressEscape();
     await wait(() => browser.execute(() => !document.querySelector('[data-testid="keep-panel"]')), 'Escape did not fold the group');
     assert.equal(await browser.execute(() => document.querySelectorAll('[data-testid="keep-stack"]').length), 2, 'Escape removes nothing');
 
@@ -229,7 +233,7 @@ describe('Keep in bubble capture', function () {
     await wait(() => browser.execute(() => !!document.querySelector('[data-testid="keep-panel-close"]')), 'Narrow panel');
     assert.equal(await panelInsideViewport(), true, 'panel fits the 375px window');
     await shoot('keep-dock-narrow', '[data-testid="keep-panel"]');
-    await browser.keys('Escape');
+    await pressEscape();
     await browser.setWindowRect(0, 0, 1280, 1000);
   });
 
