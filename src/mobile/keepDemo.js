@@ -38,6 +38,13 @@ export async function waitForCentreOffset({ timeout = 8000, interval = 100 } = {
   }
 }
 
+/** The shot shows the group open: tap its bubble once it is laid out, then log how centred its count is. */
+export async function openGroupAndReport(log) {
+  const offset = await waitForCentreOffset();
+  document.querySelector('.keep-bubble[data-group]')?.click();
+  log({ demo: 'keep', ...offset });
+}
+
 export function stageKeepDemo({ list, placeOf, openRow, log }) {
   const rows = Array.from({ length: Math.min(list.total, 50) }, (_, i) => list.rowAt(i)).filter(Boolean);
   const picked = pickKeepDemo(rows);
@@ -59,5 +66,5 @@ export function stageKeepDemo({ list, placeOf, openRow, log }) {
     if (!isKept(entry)) toggle(entry);
   }
   openRow(picked.group[0]);
-  waitForCentreOffset().then((offset) => log({ demo: 'keep', ...offset }));
+  openGroupAndReport(log);
 }

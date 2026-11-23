@@ -1,7 +1,7 @@
 // The phone's dock of kept emails: this device's keep store and account list in, the shared view
 // (components/keep/KeepDockView.jsx) out. `onOpen({ accountId, folder, uid })` goes through the
 // notification-tap path (App.jsx), so a kept message opens in its own account and folder.
-import React, { useCallback, useEffect, useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { useKeepStore } from './keep.js';
 import { useMobileStore } from './store.js';
 import { visibleAccounts } from './prefs.js';
@@ -12,7 +12,7 @@ import { KeepDockView } from '../components/keep/KeepDockView';
 import { useExpandedStack } from '../components/keep/useExpandedStack';
 import { SettingsViewProvider } from '../components/settings/views/viewContext';
 
-export default function KeepDock({ onOpen, autoExpand = false }) {
+export default function KeepDock({ onOpen }) {
   const t = useT();
   const items = useKeepStore((s) => s.items);
   const dock = useKeepStore((s) => s.dock);
@@ -22,11 +22,6 @@ export default function KeepDock({ onOpen, autoExpand = false }) {
   const [expandedKey, setExpandedKey] = useExpandedStack(stacks);
   const collapse = useCallback(() => setExpandedKey(null), []);
   useBackLayer(Boolean(expandedKey), collapse);
-  // Screenshot hook (?ui=keep): the first group (not a single bubble kept before it) opens by itself.
-  useEffect(() => {
-    const group = stacks.find((stack) => stack.items.length > 1);
-    if (autoExpand && group) setExpandedKey((key) => key ?? group.key);
-  }, [autoExpand, stacks, setExpandedKey]);
   const { remove, removeSender, moveDock } = useKeepStore.getState();
   return (
     <SettingsViewProvider t={t}>

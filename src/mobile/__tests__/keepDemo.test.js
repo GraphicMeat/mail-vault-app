@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { describe, it, expect, afterEach } from 'vitest';
-import { pickKeepDemo, waitForCentreOffset } from '../keepDemo.js';
+import { describe, it, expect, afterEach, vi } from 'vitest';
+import { pickKeepDemo, waitForCentreOffset, openGroupAndReport } from '../keepDemo.js';
 
 const row = (uid, fromAddress) => ({ uid, fromAddress, fromName: '' });
 
@@ -32,5 +32,19 @@ describe('waitForCentreOffset', () => {
 
   it('gives null when no group bubble ever shows', async () => {
     expect(await waitForCentreOffset({ timeout: 30, interval: 5 })).toBeNull();
+  });
+});
+
+describe('openGroupAndReport', () => {
+  afterEach(() => { document.body.innerHTML = ''; });
+
+  it('taps the group bubble open and logs the centre offset', async () => {
+    document.body.innerHTML = '<button class="keep-bubble" data-group><span class="keep-count">3</span></button>';
+    const tapped = vi.fn();
+    document.querySelector('.keep-bubble').addEventListener('click', tapped);
+    const log = vi.fn();
+    await openGroupAndReport(log);
+    expect(tapped).toHaveBeenCalledTimes(1);
+    expect(log).toHaveBeenCalledWith({ demo: 'keep', dx: 0, dy: 0 });
   });
 });

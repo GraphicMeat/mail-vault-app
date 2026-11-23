@@ -1021,7 +1021,7 @@ function App() {
           initialPicking={DEMO_MOVE}
         />
       )}
-      <KeepDock onOpen={setTap} autoExpand={DEMO_KEEP} />
+      <KeepDock onOpen={setTap} />
       {moving && (
         <MovePicker folders={moving.folders || []} current={moving.folder} onPick={onSwipeMove} onClose={closeMoving} />
       )}
