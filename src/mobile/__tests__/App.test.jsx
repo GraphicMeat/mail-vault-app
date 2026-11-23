@@ -6,7 +6,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import React from 'react';
 import { render, cleanup, act, waitFor, screen, fireEvent } from '@testing-library/react';
 
-const engine = vi.hoisted(() => ({ handlers: new Map(), calls: [], taps: [], refused: false }));
+const engine = vi.hoisted(() => ({ handlers: new Map(), calls: [], taps: [], refused: false, prefs: {} }));
 
 vi.mock('../transport.js', () => ({
   daemonCall: vi.fn(async (method, params = {}) => {
@@ -21,6 +21,8 @@ vi.mock('../transport.js', () => ({
             { id: 'a2', email: 'a2@example.test', displayName: 'B' },
           ],
         };
+      case 'mobile.prefs.get':
+        return { ...engine.prefs };
       case 'mobile.accounts.retrySignIn':
         return { queued: true };
       case 'mobile.settings.get':
@@ -43,8 +45,13 @@ vi.mock('../transport.js', () => ({
           listGen: 1,
         };
       }
+      case 'mobile.messages.thread':
+        // Only uid 77 is listed: it sits below the first page of its folder.
+        return params.uid === 77
+          ? { rows: [{ uid: 77, dateMs: 500, subject: 'Deep', fromName: 'Ada', fromAddress: 'ada@example.test', snippet: '', seen: true }], threadId: null }
+          : { rows: [], threadId: null };
       case 'mobile.message.body':
-        return params.uid === 1 ? { html: null, text: 'Body text', attachments: [], remoteImages: 0, trackers: 0 } : { gone: true };
+        return params.uid === 1 || params.uid === 77 ? { html: null, text: 'Body text', attachments: [], remoteImages: 0, trackers: 0 } : { gone: true };
       case 'mobile.actions.apply':
         return { queued: 1, skipped: [] };
       default:
@@ -81,6 +88,7 @@ const count = (method) => engine.calls.filter(([m]) => m === method).length;
 afterEach(() => {
   cleanup();
   engine.refused = false;
+  engine.prefs = {};
   engine.calls.length = 0;
   engine.taps.length = 0;
   engine.handlers.clear();
@@ -138,6 +146,17 @@ describe('App', () => {
     expect(store.getState().activeFolder).toBe('INBOX');
     expect(document.querySelector('.mv-viewer__subject')).toBeNull();
     expect(bodyCalls()).toEqual([]);
+  });
+
+  it('a tap on a message below the first page opens it in the flat list', async () => {
+    engine.prefs = { threadMode: 'flat' };
+    const { App: Fresh } = await fresh();
+    render(<Fresh />);
+    await waitFor(() => expect(screen.getByText('a1@example.test')).toBeTruthy());
+    engine.taps.push({ accountId: 'a1', folder: 'INBOX', uid: 77 });
+    await act(async () => { emit('mobile.notification.open', { accountId: 'a1', folder: 'INBOX', uid: 77 }); });
+    await waitFor(() => expect(document.querySelector('.mv-viewer__subject')?.textContent).toBe('Deep'));
+    expect(screen.queryByText('This message is no longer on the server.')).toBeNull();
   });
 
   it('a cold-launch tap is picked up by mobile_notification_take on mount', async () => {

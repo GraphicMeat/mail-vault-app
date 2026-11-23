@@ -10,7 +10,7 @@
   align-items: center;
   gap: 8px;
 }
-.keep-dock[data-side='right'] { right: 12px; }
+.keep-dock[data-side='right'] { right: 12px; flex-wrap: wrap-reverse; } /* extra columns grow toward the screen, not off it */
 .keep-dock[data-side='left'] { left: 12px; }
 
 .keep-grip {

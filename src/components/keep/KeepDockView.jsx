@@ -9,7 +9,7 @@
 // Nothing here removes by clicking a bubble: only the panel's X buttons remove.
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useT, useViewEnv } from '../settings/views/viewContext';
-import { bubbleLabel, keepId, nudgeDock, snapDock } from '../../shared/keep';
+import { BOTTOM_CLEARANCE, bubbleLabel, keepId, nudgeDock, snapDock } from '../../shared/keep';
 import '../../styles/keep.css';
 
 const isTouch = pointerType => pointerType === 'touch';
@@ -92,8 +92,6 @@ function Row({ item, onOpen, onRemove }) {
   );
 }
 
-// Room the panel keeps clear at the screen's foot: the phone toolbar (shared/keep BOTTOM_CLEARANCE).
-const FOOT = 72;
 
 function Panel({ stack, onOpen, onRemove, onClose }) {
   const t = useT();
@@ -105,7 +103,7 @@ function Panel({ stack, onOpen, onRemove, onClose }) {
     // The panel's parent is its stack (a child's layout effect runs before the stack's ref is set).
     const bubble = panelRef.current.parentElement.getBoundingClientRect();
     const { height } = panelRef.current.getBoundingClientRect();
-    setFlip(bubble.top + height > window.innerHeight - FOOT && bubble.bottom - height >= 0);
+    setFlip(bubble.top + height > window.innerHeight - BOTTOM_CLEARANCE && bubble.bottom - height >= 0);
   }, [stack.items.length]);
   return (
     <div ref={panelRef} className="keep-panel" data-testid="keep-panel" data-flip={flip ? '' : undefined}>
@@ -159,7 +157,7 @@ function Stack({ stack, expanded, hushed, onExpand, onOpen, onRemove, onCloseSta
         className="keep-bubble"
         data-testid="keep-bubble"
         data-group={count > 1 ? '' : undefined}
-        aria-expanded={expanded}
+        aria-expanded={count > 1 || expanded ? expanded : undefined}
         aria-label={t('keep.stack', { name, count })}
         onPointerDown={event => { pointerType.current = event.pointerType; pressed.current = true; }}
         onClick={() => {
@@ -188,7 +186,7 @@ export function KeepDockView({ stacks, dock, expandedKey, onExpand, onOpen, onRe
       role="region"
       aria-label={t('keep.dock')}
       // The dock never runs below the screen: past this height its bubbles wrap into another column.
-      style={{ top: `${dock.top * 100}vh`, maxHeight: `calc(${(1 - dock.top) * 100}vh - ${FOOT}px)` }}
+      style={{ top: `${dock.top * 100}vh`, maxHeight: `calc(${(1 - dock.top) * 100}vh - ${BOTTOM_CLEARANCE}px)` }}
     >
       <Grip dock={dock} rootRef={rootRef} onMove={onMove} />
       {stacks.map(stack => (

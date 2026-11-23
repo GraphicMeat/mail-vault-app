@@ -8,7 +8,7 @@ const MIN_TOP = 0.04;
 const MAX_NUDGE_TOP = 0.85;
 const NUDGE = 0.05;
 // Clears the phone's bottom toolbar.
-const BOTTOM_CLEARANCE = 72;
+export const BOTTOM_CLEARANCE = 72;
 const MAX_SUBJECT = 512;
 
 const isText = value => typeof value === 'string' && value.length > 0;

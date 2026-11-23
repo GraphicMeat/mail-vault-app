@@ -545,9 +545,10 @@ function App() {
       }
       let row = index >= 0 ? list.rowAt(index) : undefined;
       let found = Boolean(row && row.uid === tap.uid);
-      if (!found && list.threads) {
-        // In the list of conversations a message whose conversation has a newer one is no row of
-        // its own: it opens from its conversation.
+      if (!found) {
+        // A message off the held page (a long folder, flat or not) or, in the list of
+        // conversations, one whose conversation has a newer message is no row of its own: the
+        // engine finds it by uid.
         try {
           const reply = await daemonCall('mobile.messages.thread', { accountId: tap.accountId, folder: tap.folder, uid: tap.uid });
           row = reply?.rows?.find((r) => r.uid === tap.uid);

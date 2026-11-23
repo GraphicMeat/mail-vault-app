@@ -52,6 +52,12 @@ describe('KeepDockView', () => {
     expect(samBubble().getAttribute('aria-label')).toBe('Sam Rivera, 3 kept emails');
   });
 
+  it('only a bubble that expands says whether it is expanded', () => {
+    setup();
+    expect(samBubble().getAttribute('aria-expanded')).toBe('false');
+    expect(lenaBubble().hasAttribute('aria-expanded')).toBe(false);
+  });
+
   it("the count is the bubble's centred content", () => {
     const style = document.createElement('style');
     style.textContent = readFileSync(resolve(process.cwd(), 'src/styles/keep.css'), 'utf8');
