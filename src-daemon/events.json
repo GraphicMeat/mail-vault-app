@@ -90,6 +90,7 @@
   ],
   "builtin": [
     "sparkle://did-abort-with-error",
+    "sparkle://did-finish-update-cycle",
     "tauri://destroyed",
     "tauri://drag-drop",
     "tauri://drag-enter",
