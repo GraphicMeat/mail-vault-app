@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, within, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, within, fireEvent, cleanup, act } from '@testing-library/react';
 
 vi.mock('../../stores/safeStorage', () => ({ safeStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} } }));
 const { KeepDock } = await import('../KeepDock');
@@ -50,5 +50,25 @@ describe('desktop KeepDock', () => {
     useKeepStore.setState({ items: [kept('a1', 1, 10), kept('a1', 2, 20), kept('gone', 9, 90)] });
     render(<KeepDock onOpen={vi.fn()} />);
     expect(screen.getByTestId('keep-count').textContent).toBe('2');
+  });
+
+  it('a group whose emails are all removed does not come back open', () => {
+    render(<KeepDock onOpen={vi.fn()} />);
+    fireEvent.click(samBubble());
+    expect(screen.getByTestId('keep-panel')).toBeTruthy();
+    act(() => { useKeepStore.setState({ items: [kept('a1', 3, 30, { name: 'Lena', address: 'lena@x' })] }); });
+    act(() => { useKeepStore.setState({ items: [kept('a1', 1, 10), kept('a1', 3, 30, { name: 'Lena', address: 'lena@x' })] }); });
+    expect(screen.queryByTestId('keep-panel')).toBeNull();
+  });
+
+  it('a failed open is logged, not left as an unhandled rejection', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const onOpen = vi.fn().mockRejectedValue(new Error('gone'));
+    render(<KeepDock onOpen={onOpen} />);
+    fireEvent.click(screen.getByLabelText(/Lena/));
+    await act(async () => {});
+    expect(onOpen).toHaveBeenCalled();
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
   });
 });

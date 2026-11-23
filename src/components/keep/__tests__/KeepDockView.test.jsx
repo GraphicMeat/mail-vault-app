@@ -165,6 +165,78 @@ describe('KeepDockView', () => {
     expect(onCloseStack).not.toHaveBeenCalled();
   });
 
+  it("Escape that folds an open group does not reach the app's own Escape shortcut", () => {
+    const appEscape = vi.fn();
+    window.addEventListener('keydown', appEscape);
+    setup({ expandedKey: 'sam@x' });
+    const notCancelled = fireEvent.keyDown(document.body, { key: 'Escape' });
+    window.removeEventListener('keydown', appEscape);
+    expect(notCancelled).toBe(false);
+    expect(appEscape).not.toHaveBeenCalled();
+  });
+
+  it("Escape that puts away a focus peek does not reach the app's own Escape shortcut", () => {
+    const appEscape = vi.fn();
+    window.addEventListener('keydown', appEscape);
+    setup();
+    fireEvent.focus(samBubble());
+    const notCancelled = fireEvent.keyDown(samBubble(), { key: 'Escape' });
+    window.removeEventListener('keydown', appEscape);
+    expect(notCancelled).toBe(false);
+    expect(appEscape).not.toHaveBeenCalled();
+  });
+
+  it('Escape with no panel showing is left to the app', () => {
+    const appEscape = vi.fn();
+    window.addEventListener('keydown', appEscape);
+    setup();
+    const notCancelled = fireEvent.keyDown(samBubble(), { key: 'Escape' });
+    window.removeEventListener('keydown', appEscape);
+    expect(notCancelled).toBe(true);
+    expect(appEscape).toHaveBeenCalledTimes(1);
+  });
+
+  it('the panel stays while the pointer crosses from the bubble onto it', () => {
+    setup();
+    fireEvent.pointerEnter(lenaBubble(), { pointerType: 'mouse' });
+    const panel = screen.getByTestId('keep-panel');
+    fireEvent.pointerLeave(lenaBubble(), { pointerType: 'mouse', relatedTarget: panel });
+    fireEvent.pointerEnter(panel, { pointerType: 'mouse' });
+    expect(screen.getByTestId('keep-panel')).toBeTruthy();
+  });
+
+  it("the gap between a bubble and its panel counts as the panel, and only the rows scroll", () => {
+    const css = readFileSync(resolve(process.cwd(), 'src/styles/keep.css'), 'utf8');
+    expect(css).toMatch(/\.keep-panel::before\s*\{[^}]*position:\s*absolute/);
+    const panelRule = css.match(/\n\.keep-panel\s*\{[^}]*\}/)[0];
+    expect(panelRule).not.toMatch(/overflow/);
+    expect(css.match(/\n\.keep-rows\s*\{[^}]*\}/)[0]).toMatch(/overflow-y:\s*auto/);
+  });
+
+  it('a hover does not open a second panel over an expanded group', () => {
+    setup({ expandedKey: 'sam@x' });
+    fireEvent.pointerEnter(lenaBubble(), { pointerType: 'mouse' });
+    expect(screen.getAllByTestId('keep-panel')).toHaveLength(1);
+  });
+
+  it('the dock is bounded to the screen below it and wraps into columns', () => {
+    setup({ dock: { side: 'right', top: 0.4 } });
+    expect(screen.getByTestId('keep-dock').style.maxHeight).toContain('60vh');
+    const css = readFileSync(resolve(process.cwd(), 'src/styles/keep.css'), 'utf8');
+    expect(css.match(/\n\.keep-dock\s*\{[^}]*\}/)[0]).toMatch(/flex-wrap:\s*wrap/);
+  });
+
+  it('a panel with no room below its bubble opens upward', () => {
+    const rects = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function rect() {
+      if (this.classList.contains('keep-panel')) return { top: 600, bottom: 900, height: 300, left: 0, right: 200, width: 200 };
+      if (this.classList.contains('keep-stack')) return { top: 600, bottom: 644, height: 44, left: 0, right: 44, width: 44 };
+      return { top: 0, bottom: 0, height: 0, left: 0, right: 0, width: 0 };
+    });
+    setup({ expandedKey: 'lena@x' });
+    expect(screen.getByTestId('keep-panel').hasAttribute('data-flip')).toBe(true);
+    rects.mockRestore();
+  });
+
   it('the grip moves the dock with arrow keys', () => {
     const { onMove } = setup();
     const grip = screen.getByTestId('keep-dock-grip');

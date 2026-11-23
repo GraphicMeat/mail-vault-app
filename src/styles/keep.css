@@ -5,6 +5,8 @@
   z-index: 40;
   display: flex;
   flex-direction: column;
+  flex-wrap: wrap;
+  align-content: flex-start;
   align-items: center;
   gap: 8px;
 }
@@ -60,8 +62,6 @@
   width: max-content;
   min-width: 200px;
   max-width: min(280px, calc(100vw - 88px));
-  max-height: min(60vh, 320px);
-  overflow-y: auto;
   padding: 6px;
   border: 1px solid var(--mail-border);
   border-radius: 12px;
@@ -69,6 +69,11 @@
   color: var(--mail-text);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
 }
+/* The gap between a bubble and its panel counts as the panel, so a pointer crossing it keeps the hover. */
+.keep-panel::before { content: ''; position: absolute; top: 0; bottom: 0; width: 8px; }
+.keep-dock[data-side='right'] .keep-panel::before { right: -9px; }
+.keep-dock[data-side='left'] .keep-panel::before { left: -9px; }
+.keep-panel[data-flip] { top: auto; bottom: 0; }
 /* The panel opens toward the middle of the screen. */
 .keep-dock[data-side='right'] .keep-panel { right: calc(100% + 8px); }
 .keep-dock[data-side='left'] .keep-panel { left: calc(100% + 8px); }
@@ -76,7 +81,7 @@
 .keep-panel-head { display: flex; align-items: center; gap: 6px; padding: 2px 4px 6px; }
 .keep-panel-name { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .keep-panel-count { color: var(--mail-text-muted); font-variant-numeric: tabular-nums; }
-.keep-rows { margin: 0; padding: 0; list-style: none; }
+.keep-rows { margin: 0; padding: 0; list-style: none; max-height: min(52vh, 270px); overflow-y: auto; }
 .keep-row-wrap { display: flex; align-items: center; gap: 2px; }
 .keep-row {
   flex: 1;

@@ -7,7 +7,7 @@
 //   Mouse hover and keyboard focus peek the same panel without asking the app.
 // - `onOpen(item)`, `onRemove(id)` (one email), `onCloseStack(key)` (the whole bubble), `onMove(dock)`.
 // Nothing here removes by clicking a bubble: only the panel's X buttons remove.
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useT, useViewEnv } from '../settings/views/viewContext';
 import { bubbleLabel, keepId, nudgeDock, snapDock } from '../../shared/keep';
 import '../../styles/keep.css';
@@ -18,7 +18,13 @@ const isTouch = pointerType => pointerType === 'touch';
 function useCollapseOnDismiss(rootRef, expandedKey, onExpand) {
   useEffect(() => {
     if (!expandedKey) return undefined;
-    const onKey = event => { if (event.key === 'Escape') onExpand(null); };
+    const onKey = event => {
+      if (event.key !== 'Escape') return;
+      // The fold is this Escape's whole job: the app's own Escape (close a reader, leave a page) must not also run.
+      event.preventDefault();
+      event.stopPropagation();
+      onExpand(null);
+    };
     const onPress = event => { if (!rootRef.current?.contains(event.target)) onExpand(null); };
     // Capture phase: the app's own Escape and press handlers may stop the event before it bubbles here.
     document.addEventListener('keydown', onKey, true);
@@ -86,11 +92,23 @@ function Row({ item, onOpen, onRemove }) {
   );
 }
 
+// Room the panel keeps clear at the screen's foot: the phone toolbar (shared/keep BOTTOM_CLEARANCE).
+const FOOT = 72;
+
 function Panel({ stack, onOpen, onRemove, onClose }) {
   const t = useT();
   const { Private } = useViewEnv();
+  const panelRef = useRef(null);
+  const [flip, setFlip] = useState(false);
+  // A panel that would run under the foot opens upward instead, when there is room above the bubble.
+  useLayoutEffect(() => {
+    // The panel's parent is its stack (a child's layout effect runs before the stack's ref is set).
+    const bubble = panelRef.current.parentElement.getBoundingClientRect();
+    const { height } = panelRef.current.getBoundingClientRect();
+    setFlip(bubble.top + height > window.innerHeight - FOOT && bubble.bottom - height >= 0);
+  }, [stack.items.length]);
   return (
-    <div className="keep-panel" data-testid="keep-panel">
+    <div ref={panelRef} className="keep-panel" data-testid="keep-panel" data-flip={flip ? '' : undefined}>
       <div className="keep-panel-head">
         <span className="keep-panel-name"><Private kind="name">{stack.sender.name || stack.sender.address}</Private></span>
         <span className="keep-panel-count">{stack.items.length}</span>
@@ -104,14 +122,15 @@ function Panel({ stack, onOpen, onRemove, onClose }) {
   );
 }
 
-function Stack({ stack, expanded, onExpand, onOpen, onRemove, onCloseStack }) {
+function Stack({ stack, expanded, hushed, onExpand, onOpen, onRemove, onCloseStack }) {
   const t = useT();
   const [peeking, setPeeking] = useState(false);
   const pointerType = useRef('mouse');
   // A press focuses the bubble too; only keyboard focus peeks, or a tap that folds the panel would reopen it.
   const pressed = useRef(false);
   const count = stack.items.length;
-  const showPanel = expanded || peeking;
+  // Another group held open keeps its panel alone: a hover over a neighbour does not stack a second one on it.
+  const showPanel = expanded || (peeking && !hushed);
   const name = stack.sender.name || stack.sender.address || '';
   const open = item => { setPeeking(false); onExpand(null); onOpen(item); };
   const close = () => { setPeeking(false); onCloseStack(stack.key); onExpand(null); };
@@ -121,7 +140,13 @@ function Stack({ stack, expanded, onExpand, onOpen, onRemove, onCloseStack }) {
       data-testid="keep-stack"
       onPointerEnter={event => { if (!isTouch(event.pointerType)) setPeeking(true); }}
       onPointerLeave={() => setPeeking(false)}
-      onKeyDown={event => { if (event.key === 'Escape') setPeeking(false); }}
+      onKeyDown={event => {
+        if (event.key !== 'Escape' || !showPanel) return;
+        // Only an Escape that put a panel away is ours; else the app's own Escape still runs.
+        event.preventDefault();
+        event.stopPropagation();
+        setPeeking(false);
+      }}
       onFocus={() => { if (!pressed.current) setPeeking(true); }}
       onBlur={event => {
         if (event.currentTarget.contains(event.relatedTarget)) return;
@@ -162,11 +187,13 @@ export function KeepDockView({ stacks, dock, expandedKey, onExpand, onOpen, onRe
       data-side={dock.side}
       role="region"
       aria-label={t('keep.dock')}
-      style={{ top: `${dock.top * 100}vh` }}
+      // The dock never runs below the screen: past this height its bubbles wrap into another column.
+      style={{ top: `${dock.top * 100}vh`, maxHeight: `calc(${(1 - dock.top) * 100}vh - ${FOOT}px)` }}
     >
       <Grip dock={dock} rootRef={rootRef} onMove={onMove} />
       {stacks.map(stack => (
         <Stack key={stack.key} stack={stack} expanded={stack.key === expandedKey}
+          hushed={Boolean(expandedKey) && stack.key !== expandedKey}
           onExpand={onExpand} onOpen={onOpen} onRemove={onRemove} onCloseStack={onCloseStack} />
       ))}
     </div>

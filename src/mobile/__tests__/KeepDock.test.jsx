@@ -67,4 +67,19 @@ describe('phone KeepDock', () => {
     expect(bubbles[0].children).toHaveLength(1);
     expect(within(bubbles[0]).getByTestId('keep-count').textContent).toBe('3');
   });
+
+  it('Back skips a bubble that is gone and closes the next layer', async () => {
+    const { pushLayer } = await import('../backStack.js');
+    const below = vi.fn();
+    const release = pushLayer(below);
+    useKeepStore.setState({ items: [kept('a1', 1, 10)] });
+    render(<KeepDock onOpen={vi.fn()} />);
+    fireEvent.pointerDown(adaBubble(), { pointerType: 'touch' });
+    fireEvent.click(adaBubble());
+    fireEvent.click(screen.getByTestId('keep-row-remove'));
+    expect(screen.queryByTestId('keep-dock')).toBeNull();
+    await popstate();
+    expect(below).toHaveBeenCalledTimes(1);
+    release();
+  });
 });
