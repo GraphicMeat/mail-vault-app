@@ -47,6 +47,13 @@ describe('phone KeepDock', () => {
     expect(useKeepStore.getState().items).toHaveLength(3);
   });
 
+  it('the screenshot hook opens the group, not a single bubble kept before it', () => {
+    const SAM = { name: 'Sam', address: 'sam@x' };
+    useKeepStore.setState({ items: [kept('a1', 1, 10), kept('a1', 2, 20), kept('a1', 3, 30), kept('a1', 9, 40, SAM)] });
+    render(<KeepDock onOpen={vi.fn()} autoExpand />);
+    expect(within(screen.getByTestId('keep-panel')).getAllByTestId('keep-row')).toHaveLength(3);
+  });
+
   it('drops kept email after account removal on the phone', () => {
     useKeepStore.setState({ items: [kept('gone', 1, 10)] });
     render(<KeepDock onOpen={vi.fn()} />);

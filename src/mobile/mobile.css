@@ -1565,6 +1565,6 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 .mv-drafts.mv-view { z-index: 8; }
 
 /* The dock of kept emails sits above the viewer (10) and thread (9), below drafts and settings (12). */
-.mv-app .keep-dock { z-index: 11; }
+.mv-app .keep-dock { z-index: 11; --keep-top-inset: var(--mv-safe-top); }
 .mv-app .keep-dock[data-side='right'] { right: calc(var(--mv-safe-right) + 8px); }
 .mv-app .keep-dock[data-side='left'] { left: calc(var(--mv-safe-left) + 8px); }

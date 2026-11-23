@@ -22,9 +22,10 @@ export default function KeepDock({ onOpen, autoExpand = false }) {
   const [expandedKey, setExpandedKey] = useExpandedStack(stacks);
   const collapse = useCallback(() => setExpandedKey(null), []);
   useBackLayer(Boolean(expandedKey), collapse);
-  // Screenshot hook (?ui=keep): the first group opens by itself.
+  // Screenshot hook (?ui=keep): the first group (not a single bubble kept before it) opens by itself.
   useEffect(() => {
-    if (autoExpand && stacks[0]) setExpandedKey((key) => key ?? stacks[0].key);
+    const group = stacks.find((stack) => stack.items.length > 1);
+    if (autoExpand && group) setExpandedKey((key) => key ?? group.key);
   }, [autoExpand, stacks, setExpandedKey]);
   const { remove, removeSender, moveDock } = useKeepStore.getState();
   return (

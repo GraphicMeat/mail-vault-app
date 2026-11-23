@@ -192,6 +192,24 @@ describe('KeepDockView', () => {
     expect(appEscape).not.toHaveBeenCalled();
   });
 
+  it('Escape puts away a hover peek that sits on an expanded group', () => {
+    const { onExpand, rerender, props } = setup({ expandedKey: 'sam@x' });
+    fireEvent.pointerEnter(samBubble(), { pointerType: 'mouse' });
+    fireEvent.keyDown(samBubble(), { key: 'Escape' });
+    expect(onExpand).toHaveBeenCalledWith(null);
+    rerender(<KeepDockView {...props} expandedKey={null} />);
+    expect(screen.queryByTestId('keep-panel')).toBeNull();
+  });
+
+  it("Escape in another layer's field is left to that layer", () => {
+    const { onExpand } = setup({ expandedKey: 'sam@x' });
+    const field = document.body.appendChild(document.createElement('input'));
+    const notCancelled = fireEvent.keyDown(field, { key: 'Escape' });
+    field.remove();
+    expect(notCancelled).toBe(true);
+    expect(onExpand).not.toHaveBeenCalled();
+  });
+
   it('Escape with no panel showing is left to the app', () => {
     const appEscape = vi.fn();
     window.addEventListener('keydown', appEscape);
@@ -243,6 +261,30 @@ describe('KeepDockView', () => {
     setup({ expandedKey: 'lena@x' });
     expect(screen.getByTestId('keep-panel').hasAttribute('data-flip')).toBe(true);
     rects.mockRestore();
+  });
+
+  it('the panel is measured again when the dock moves', () => {
+    let stackTop = 100;
+    const rects = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function rect() {
+      if (this.classList.contains('keep-panel')) return { top: 0, bottom: 300, height: 300, left: 0, right: 200, width: 200 };
+      if (this.classList.contains('keep-stack')) return { top: stackTop, bottom: stackTop + 44, height: 44, left: 0, right: 44, width: 44 };
+      return { top: 0, bottom: 0, height: 0, left: 0, right: 0, width: 0 };
+    });
+    const { rerender, props } = setup({ expandedKey: 'lena@x' });
+    expect(screen.getByTestId('keep-panel').hasAttribute('data-flip')).toBe(false);
+    stackTop = 600;
+    rerender(<KeepDockView {...props} dock={{ side: 'right', top: 0.8 }} />);
+    expect(screen.getByTestId('keep-panel').hasAttribute('data-flip')).toBe(true);
+    rects.mockRestore();
+  });
+
+  it('the dock top stays below the phone status bar through a CSS inset', () => {
+    setup();
+    expect(screen.getByTestId('keep-dock').style.getPropertyValue('--keep-top')).toBe('40vh');
+    const css = readFileSync(resolve(process.cwd(), 'src/styles/keep.css'), 'utf8');
+    expect(css.match(/\n\.keep-dock\s*\{[^}]*\}/)[0]).toMatch(/top:\s*max\(var\(--keep-top\),\s*var\(--keep-top-inset,\s*0px\)\)/);
+    const phone = readFileSync(resolve(process.cwd(), 'src/mobile/mobile.css'), 'utf8');
+    expect(phone).toMatch(/\.mv-app \.keep-dock\s*\{[^}]*--keep-top-inset:\s*var\(--mv-safe-top\)/);
   });
 
   it('the grip moves the dock with arrow keys', () => {

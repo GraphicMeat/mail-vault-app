@@ -28,6 +28,16 @@ function centreOffset() {
   return { dx: b.left + b.width / 2 - (a.left + a.width / 2), dy: b.top + b.height / 2 - (a.top + a.height / 2) };
 }
 
+/** The offset once the group bubble is laid out; null when none shows within `timeout` ms. */
+export async function waitForCentreOffset({ timeout = 8000, interval = 100 } = {}) {
+  const deadline = Date.now() + timeout;
+  for (;;) {
+    const offset = centreOffset();
+    if (offset || Date.now() >= deadline) return offset;
+    await new Promise((resolve) => setTimeout(resolve, interval));
+  }
+}
+
 export function stageKeepDemo({ list, placeOf, openRow, log }) {
   const rows = Array.from({ length: Math.min(list.total, 50) }, (_, i) => list.rowAt(i)).filter(Boolean);
   const picked = pickKeepDemo(rows);
@@ -49,5 +59,5 @@ export function stageKeepDemo({ list, placeOf, openRow, log }) {
     if (!isKept(entry)) toggle(entry);
   }
   openRow(picked.group[0]);
-  setTimeout(() => log({ demo: 'keep', ...centreOffset() }), 1500);
+  waitForCentreOffset().then((offset) => log({ demo: 'keep', ...offset }));
 }

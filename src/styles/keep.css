@@ -2,6 +2,7 @@
    sender: the count (or the initial) is the bubble's only content, centred on both axes. */
 .keep-dock {
   position: fixed;
+  top: max(var(--keep-top), var(--keep-top-inset, 0px));
   z-index: 40;
   display: flex;
   flex-direction: column;
