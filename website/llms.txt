@@ -62,6 +62,12 @@
 ## Email guides and research
 
 - [Does Archiving Gmail Free Up Space?](https://mailvaultapp.com/blog/does-archiving-gmail-free-up-space.html): No. Archived Gmail messages still count toward your Google storage. To free space, save a copy elsewhere, check that it opens, then delete the server copy.
+- [Do Archived Emails Count Towards Storage?](https://mailvaultapp.com/blog/do-archived-emails-count-towards-storage.html): Yes, in Gmail, Outlook.com, Yahoo Mail and iCloud Mail. Only deleting mail, or moving it to a local archive and then deleting it, frees space.
+- [How to Archive Mail in Gmail](https://mailvaultapp.com/blog/how-to-archive-mail-in-gmail.html): Archive on a computer or phone, in bulk and with filters, find archived mail in All Mail, and archive Gmail to your own computer.
+- [How to Delete Large Emails](https://mailvaultapp.com/blog/how-to-delete-large-emails.html): Find large emails by size in Gmail, Outlook.com, Yahoo Mail and Apple Mail, keep the attachments you need, delete and empty Trash.
+- [I Have Thousands of Emails. How Do I Delete Them?](https://mailvaultapp.com/blog/i-have-thousands-of-emails-how-do-i-delete-them.html): Delete by year with select-all in webmail, or archive years to your computer in MailVault and remove them from the server.
+- [How to Clear Old Emails Automatically](https://mailvaultapp.com/blog/clear-old-emails-automatically.html): A one-time clear-out, then rules: Gmail filters, Outlook Sweep and MailVault Premium Auto-Cleanup.
+- [How to Get Rid of Old Emails](https://mailvaultapp.com/blog/how-to-get-rid-of-old-emails.html): Delete, archive or export: what each option does to your inbox, your storage and your mail.
 - [Which Personal Emails Should You Keep?](https://mailvaultapp.com/blog/which-personal-emails-should-you-keep.html): Decide which personal emails are worth keeping, from meaningful conversations to useful attachments, and start a small archive you can find your way around.
 - [IMAP Works for Outlook.com and Hotmail Again, and It Is Now the Default](https://mailvaultapp.com/blog/imap-works-for-outlook-and-hotmail.html): MailVault connects Outlook.com and Hotmail over IMAP with Microsoft sign-in by default; accounts on Microsoft Graph get a one-click switch
 - [MailVault 2.24: Choose What Opens After You Delete](https://mailvaultapp.com/blog/mailvault-2-24-choose-what-opens-after-delete.html): choose the next or previous email, or the next or previous unread one, to open after a delete; it started as a Discord feature request
