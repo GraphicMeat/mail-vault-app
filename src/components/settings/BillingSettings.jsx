@@ -7,6 +7,7 @@ import {
   createPortalSession, fetchSubscriptionStatus, fetchPricing,
   unregisterBillingClient, getClientInfo, openInBrowser,
   isBillingRateLimited, getBillingRateLimitedUntil, BillingRateLimitError,
+  signinStart, signinVerify,
 } from '../../services/billingApi';
 import { notify } from '../../stores/focusStore';
 import { startCheckout } from '../../services/checkout';
@@ -35,7 +36,7 @@ import {
   Monitor,
   LogOut,
 } from 'lucide-react';
-import { t as tr, t, useT   } from '../../i18n/index.js';
+import { t as tr, t, useT, getLocale } from '../../i18n/index.js';
 import { usePrivateAttr } from '../../hooks/usePrivacy';
 import { Private } from '../privacy/Private';
 import { SettingsPageLayout } from '../ui/SettingsForm';
@@ -189,6 +190,11 @@ export function BillingSettings({ onNavigate, onReportBug }) {
   const [pricingLoading, setPricingLoading] = useState(false);
   const [pricingError, setPricingError] = useState(null);
   const [signInNotice, setSignInNotice] = useState(null); // why the last sign-in granted nothing
+  // Email-code sign-in: the address the code went to (null = no code asked for yet).
+  const [codeFor, setCodeFor] = useState(null);
+  const [code, setCode] = useState('');
+  const [codeBusy, setCodeBusy] = useState(false);
+  const [codeError, setCodeError] = useState(null);
 
   const inflightRef = useRef(false);
   const refreshPromiseRef = useRef(null);
@@ -320,10 +326,11 @@ export function BillingSettings({ onNavigate, onReportBug }) {
     return promise;
   }, [setBillingProfile, setBillingEmail]);
 
-  // Sign in: email-only lookup, NO customerId — prevents stale identity reuse
-  const signInWithEmail = useCallback(async (email) => {
+  // Sign in: the customer id the mailed code proved, never the address alone (anyone can type
+  // an address).
+  const signInWithEmail = useCallback(async (email, customerId) => {
     setSignInNotice(null);
-    const result = await billingRequest({ email, customerId: undefined, manual: true });
+    const result = await billingRequest({ email, customerId, manual: true });
     if (!result) return; // network/rate-limit paths surface via syncError / rateLimitMsg
 
     setBillingProfile(result);
@@ -347,7 +354,7 @@ export function BillingSettings({ onNavigate, onReportBug }) {
   const refreshSignedIn = useCallback(async ({ manual = false } = {}) => {
     const cid = billingProfile?.customerId;
     const email = billingEmail;
-    if (!cid && !email) return;
+    if (!cid) return;
 
     const previous = billingProfile;
     const result = await billingRequest({ email, customerId: cid, manual });
@@ -400,10 +407,39 @@ export function BillingSettings({ onNavigate, onReportBug }) {
     return () => obs.disconnect();
   }, []);
 
-  const handleSignIn = () => {
+  const handleSignIn = async () => {
     const email = (selectedEmail || '').trim().toLowerCase();
-    if (!email) return;
-    signInWithEmail(email);
+    if (!email || codeBusy) return;
+    setCodeBusy(true);
+    setCodeError(null);
+    setSignInNotice(null);
+    try {
+      await signinStart(email, getLocale());
+      setCodeFor(email);
+      setCode('');
+    } catch (e) {
+      setCodeError(e.message || t('errors.billingUnreachable'));
+    } finally {
+      setCodeBusy(false);
+    }
+  };
+
+  const handleVerifyCode = async () => {
+    if (!codeFor || codeBusy) return;
+    setCodeBusy(true);
+    setCodeError(null);
+    try {
+      const cid = await signinVerify(codeFor, code.trim());
+      setCodeFor(null);
+      setCode('');
+      await signInWithEmail(codeFor, cid);
+    } catch (e) {
+      setCodeError(e.code === 'code_expired' ? t('settings.billing.codeExpired')
+        : e.code === 'code_wrong' ? t('settings.billing.codeWrong')
+        : (e.message || t('errors.billingUnreachable')));
+    } finally {
+      setCodeBusy(false);
+    }
   };
 
   const handleCheckout = async (planId) => {
@@ -543,13 +579,37 @@ export function BillingSettings({ onNavigate, onReportBug }) {
                   </optgroup>
                 ))}
             </select>
-            <button onClick={handleSignIn} disabled={signInDisabled}
+            <button onClick={handleSignIn} disabled={signInDisabled || codeBusy || !!codeFor}
               className="min-w-[140px] px-4 py-2 text-sm font-medium bg-mail-accent-fill text-white rounded-lg hover:bg-mail-accent/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
-              {syncing ? <Loader size={14} className="animate-spin" /> : <CreditCard size={14} />}
+              {syncing || (codeBusy && !codeFor) ? <Loader size={14} className="animate-spin" /> : <CreditCard size={14} />}
               <span>{signInLabel}</span>
             </button>
           </div>
         )}
+        {codeFor && !isSignedIn && (
+          <form className="mt-3 space-y-2" data-testid="billing-code-form"
+            onSubmit={e => { e.preventDefault(); handleVerifyCode(); }}>
+            <p className="text-xs text-mail-text-muted">{t('settings.billing.codeSent', { email: pa(codeFor, 'email') })}</p>
+            <div className="flex gap-2">
+              <input type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={12}
+                aria-label={t('settings.billing.code')} placeholder={t('settings.billing.code')}
+                value={code} onChange={e => setCode(e.target.value)} autoFocus
+                className="flex-1 min-w-0 px-3 py-2 text-sm bg-mail-bg border border-mail-border rounded-lg text-mail-text focus:outline-none focus:ring-1 focus:ring-mail-accent" />
+              <button type="submit" disabled={codeBusy || !code.trim()}
+                className="min-w-[140px] px-4 py-2 text-sm font-medium bg-mail-accent-fill text-white rounded-lg hover:bg-mail-accent/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
+                {codeBusy ? <Loader size={14} className="animate-spin" /> : null}
+                <span>{t('settings.billing.verifyCode')}</span>
+              </button>
+            </div>
+            <div className="flex gap-3">
+              <button type="button" disabled={codeBusy} onClick={() => { setCodeFor(null); handleSignIn(); }}
+                className="text-xs text-mail-accent hover:underline disabled:opacity-50">{t('settings.billing.newCode')}</button>
+              <button type="button" disabled={codeBusy} onClick={() => { setCodeFor(null); setCode(''); setCodeError(null); }}
+                className="text-xs text-mail-text-muted hover:underline disabled:opacity-50">{t('common.cancel')}</button>
+            </div>
+          </form>
+        )}
+        {codeError && !isSignedIn && <p className="text-xs text-mail-danger mt-2" role="alert">{codeError}</p>}
         {signInNotice && !isSignedIn && (
           <div className="mt-3 p-3 rounded-lg bg-mail-warning-tint border border-mail-warning/20">
             <p className="text-xs font-medium text-mail-warning">{signInNotice}</p>

@@ -86,7 +86,7 @@ export function storeActions() {
     addAccount: (accountData) => _addAccount(accountData),
     updateAccount: (accountId, patch) => _updateAccount(accountId, patch),
     changeServer: (accountId, patch) => _changeServer(accountId, patch),
-    removeAccount: (accountId) => _removeAccount(accountId),
+    removeAccount: (accountId, options) => _removeAccount(accountId, options),
     setActiveAccount: (accountId) => _setActiveAccount(accountId),
     activateAccount: (accountId, mailbox, opts) => _activateAccount(accountId, mailbox, opts),
     loadSubtree: (accountId, rootPath, opts) => _loadSubtree(accountId, rootPath, opts),

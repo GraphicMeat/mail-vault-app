@@ -170,6 +170,7 @@
   "settings.behavior.minutes3",
   "settings.behavior.minutes4",
   "settings.behavior.minutes5",
+  "settings.billing.code",
   "settings.billing.premium",
   "settings.billing.trialIssuesNo",
   "settings.cleanup.date",

@@ -84,6 +84,7 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onSetupPhon
   const [transportSwitching, setTransportSwitching] = useState(false);
   const [transportError, setTransportError] = useState(null);
   const [showRemoveConfirm, setShowRemoveConfirm] = useState(null);
+  const [revokeGoogle, setRevokeGoogle] = useState(false);
   const [removingAccount, setRemovingAccount] = useState(false);
   const [removeError, setRemoveError] = useState(null);
   const [billingWarning, setBillingWarning] = useState(null);
@@ -575,13 +576,15 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onSetupPhon
   };
 
   const lastPremiumAccount = accounts.length === 1 && hasPremiumAccess(useSettingsStore.getState().billingProfile);
+  // Only a grant of MailVault's own Google client can be revoked: Thunderbird's is shared.
+  const canRevokeGoogle = isGoogleOAuth && googleClientFromStamp(selectedAccount?.oauth2ClientId, googleClients) === GOOGLE_CLIENT_MAILVAULT;
   const handleRemove = async () => {
     if (removingAccount) return;
     setRemovingAccount(true);
     setRemoveError(null);
     try {
       const isLast = accounts.length === 1;
-      const result = await removeAccount(selectedAccountId);
+      const result = await removeAccount(selectedAccountId, { revokeGoogle: revokeGoogle && canRevokeGoogle });
       setShowRemoveConfirm(false);
       if (!isLast) {
         const nextAccount = accounts.find(a => a.id !== selectedAccountId);
@@ -669,7 +672,7 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onSetupPhon
       hidden={isAccountHidden(selectedAccountId)} onHidden={handleHidden} onEyeClick={handleEyeClick}
       remove={{
         confirming: showRemoveConfirm === selectedAccountId,
-        onAsk: () => { setRemoveError(null); setShowRemoveConfirm(selectedAccountId); },
+        onAsk: () => { setRemoveError(null); setRevokeGoogle(false); setShowRemoveConfirm(selectedAccountId); },
         onCancel: () => setShowRemoveConfirm(false),
         onConfirm: handleRemove,
         removing: removingAccount,
@@ -677,6 +680,7 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onSetupPhon
         question: t('settings.accounts.sureRemoveAccount', { email: pa(selectedAccount.email, 'email') }),
         warning: lastPremiumAccount ? t('settings.accounts.lastAccountRemovingWillAlso') : null,
         confirmLabel: lastPremiumAccount ? t('settings.accounts.removeSignOut') : t('common.remove'),
+        revoke: canRevokeGoogle ? { checked: revokeGoogle, onChange: setRevokeGoogle } : null,
       }} />
   );
 

@@ -36,13 +36,14 @@ describe('startCheckout', () => {
     expect(useSettingsStore.getState().billingEmail).toBe('first@example.com');
   });
 
-  it('keeps the profile it had and adds the new customer id and address', async () => {
+  // A typed address proves nothing, so checkout never yields a customer id: the app gets one
+  // only from the emailed sign-in code or the activation token. Even an older server that
+  // still answers with one leaves the profile as it was.
+  it('never takes a customer id from checkout', async () => {
     useSettingsStore.setState({ billingProfile: { status: 'canceled', hasSubscription: true } });
     createCheckoutSession.mockResolvedValue({ url: 'https://checkout.example/s1', customerId: 'cus_1' });
     await startCheckout({ email: 'first@example.com', planId: 'yearly' });
-    expect(useSettingsStore.getState().billingProfile).toMatchObject({
-      status: 'canceled', hasSubscription: true, customerId: 'cus_1', customerEmail: 'first@example.com',
-    });
+    expect(useSettingsStore.getState().billingProfile).toEqual({ status: 'canceled', hasSubscription: true });
   });
 
   it('notes when the checkout was opened, so a left checkout can be followed up', async () => {
@@ -83,6 +84,5 @@ describe('startCheckout', () => {
     openInBrowser.mockRejectedValue(new Error('cannot open'));
     const result = await startCheckout({ email: 'first@example.com', planId: 'yearly' });
     expect(result).toEqual({ ok: false, error: 'cannot open' });
-    expect(useSettingsStore.getState().billingProfile?.customerId).toBe('cus_1');
   });
 });

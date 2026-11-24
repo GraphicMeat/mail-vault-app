@@ -10,11 +10,11 @@ import { invalidateRestoreDescriptors as _invalidateRestore, clearGraphIdMap as 
 
 // ── removeAccount workflow ──
 
-export async function removeAccount(accountId) {
+export async function removeAccount(accountId, { revokeGoogle = false } = {}) {
   const { useMailStore } = await import('./boundStore');
   const get = () => useMailStore.getState();
 
-  const removal = await db.deleteAccount(accountId);
+  const removal = await db.deleteAccount(accountId, { revokeGoogle });
   if (!removal || removal.outcome !== 'complete' || removal.accountId !== accountId
     || Object.keys(removal).length !== 2) {
     const error = new Error('errors.accountRemovalIncomplete');

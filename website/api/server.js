@@ -31,6 +31,7 @@ try { stripe = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STR
 const path = require('path');
 const analytics = require('meatlytics');
 const { getPool, initDatabase } = require('./database');
+const { findCustomer, adminAuthorized, CUSTOMER_ID_REQUIRED } = require('./billing-identity');
 const {
   ActivationError, computePremiumAccess, webSessionParams, ensureBillingCustomer, upsertSubscription,
   applyCheckoutCompleted, mintActivationToken, redeemActivationToken,
@@ -1038,7 +1039,9 @@ app.post('/api/billing/checkout-session', checkoutLimiter, requireBilling, async
     }
 
     bumpMetric('checkout_created');
-    res.json({ url: session.url, customerId, trialApplied });
+    // Never the customer id: the address alone named it, and the id is what proves who a
+    // billing user is. The app gets it from the emailed sign-in code or the activation token.
+    res.json({ url: session.url, trialApplied });
   } catch (error) {
     console.error('[billing/checkout-session]', error.message);
     if (isFormPost(req)) return res.redirect(303, '/pricing.html?checkout=failed');
@@ -1077,17 +1080,11 @@ app.post('/api/billing/activate', mutationLimiter, requireBilling, async (req, r
 // POST /api/billing/portal-session
 app.post('/api/billing/portal-session', checkoutLimiter, requireBilling, async (req, res) => {
   try {
-    const { customerId, email } = req.body;
-    let stripeCustomerId = customerId;
-
-    // Fallback: look up by email if customerId not provided
-    if (!stripeCustomerId && email) {
-      const db = getPool();
-      const [rows] = await db.execute('SELECT stripe_customer_id FROM billing_customers WHERE email = ?', [email.toLowerCase()]);
-      if (rows.length > 0) stripeCustomerId = rows[0].stripe_customer_id;
-    }
-
-    if (!stripeCustomerId) return res.status(404).json({ error: 'No billing customer found.' });
+    const { customerId } = req.body;
+    if (!customerId) return res.status(400).json(CUSTOMER_ID_REQUIRED);
+    const customer = await findCustomer(getPool(), customerId);
+    if (!customer) return res.status(404).json({ error: 'No billing customer found.' });
+    const stripeCustomerId = customer.stripe_customer_id;
 
     const session = await stripe.billingPortal.sessions.create({
       customer: stripeCustomerId,
@@ -1125,11 +1122,11 @@ const CLIENT_LIMIT = 5;
 // status check + client registration in one round trip.
 app.get('/api/billing/subscription-status', statusLimiter, async (req, res) => {
   try {
-    const { customerId, email, clientId, register, clientName, platform, appVersion, osVersion } = req.query;
-    if (!customerId && !email) return res.status(400).json({ error: 'customerId or email required.' });
+    const { customerId, clientId, register, clientName, platform, appVersion, osVersion } = req.query;
+    if (!customerId) return res.status(400).json(CUSTOMER_ID_REQUIRED);
 
     // Check in-memory cache (same customer+client pair within TTL → return cached)
-    const cacheKey = `${customerId || ''}:${(email || '').toLowerCase()}:${clientId || ''}`;
+    const cacheKey = `${customerId}::${clientId || ''}`;
     if (!register) {
       const cached = getCachedBilling(cacheKey);
       if (cached) return res.json(cached);
@@ -1138,18 +1135,11 @@ app.get('/api/billing/subscription-status', statusLimiter, async (req, res) => {
     const db = getPool();
     let customerRow;
 
-    if (customerId) {
-      const [rows] = await db.execute('SELECT * FROM billing_customers WHERE stripe_customer_id = ?', [customerId]);
-      customerRow = rows[0];
-    }
-    if (!customerRow && email) {
-      const [rows] = await db.execute('SELECT * FROM billing_customers WHERE email = ?', [email.toLowerCase()]);
-      customerRow = rows[0];
-    }
+    customerRow = await findCustomer(db, customerId);
 
     const noSubBase = {
       customerId: customerRow?.stripe_customer_id || null,
-      customerEmail: customerRow?.email || email || null,
+      customerEmail: customerRow?.email || null,
       hasSubscription: false, status: null, priceId: null, interval: null,
       currentPeriodEnd: null, cancelAtPeriodEnd: false, premiumAccess: false,
       clientLimit: CLIENT_LIMIT, activeClientCount: 0, activeClients: [],
@@ -1248,21 +1238,14 @@ app.get('/api/billing/subscription-status', statusLimiter, async (req, res) => {
 // POST /api/billing/register-client
 app.post('/api/billing/register-client', mutationLimiter, requireBilling, async (req, res) => {
   try {
-    const { customerId, email, clientId, clientName, platform, appVersion, osVersion } = req.body;
+    const { customerId, clientId, clientName, platform, appVersion, osVersion } = req.body;
     if (!clientId) return res.status(400).json({ error: 'clientId is required.' });
-    if (!customerId && !email) return res.status(400).json({ error: 'customerId or email required.' });
+    if (!customerId) return res.status(400).json(CUSTOMER_ID_REQUIRED);
 
     const db = getPool();
     let customerRow;
 
-    if (customerId) {
-      const [rows] = await db.execute('SELECT * FROM billing_customers WHERE stripe_customer_id = ?', [customerId]);
-      customerRow = rows[0];
-    }
-    if (!customerRow && email) {
-      const [rows] = await db.execute('SELECT * FROM billing_customers WHERE email = ?', [email.toLowerCase()]);
-      customerRow = rows[0];
-    }
+    customerRow = await findCustomer(db, customerId);
 
     if (!customerRow) return res.status(404).json({ error: 'customer_not_found', message: 'No billing customer found.' });
 
@@ -1351,21 +1334,14 @@ app.post('/api/billing/register-client', mutationLimiter, requireBilling, async 
 // POST /api/billing/unregister-client
 app.post('/api/billing/unregister-client', mutationLimiter, requireBilling, async (req, res) => {
   try {
-    const { customerId, email, clientId } = req.body;
+    const { customerId, clientId } = req.body;
     if (!clientId) return res.status(400).json({ error: 'clientId is required.' });
-    if (!customerId && !email) return res.status(400).json({ error: 'customerId or email required.' });
+    if (!customerId) return res.status(400).json(CUSTOMER_ID_REQUIRED);
 
     const db = getPool();
     let customerRow;
 
-    if (customerId) {
-      const [rows] = await db.execute('SELECT * FROM billing_customers WHERE stripe_customer_id = ?', [customerId]);
-      customerRow = rows[0];
-    }
-    if (!customerRow && email) {
-      const [rows] = await db.execute('SELECT * FROM billing_customers WHERE email = ?', [email.toLowerCase()]);
-      customerRow = rows[0];
-    }
+    customerRow = await findCustomer(db, customerId);
 
     if (!customerRow) return res.status(404).json({ error: 'customer_not_found', message: 'No billing customer found.' });
 
@@ -1496,8 +1472,7 @@ app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), asyn
 // ===========================================
 
 app.get('/api/admin/subscribers', async (req, res) => {
-  const adminKey = req.headers['x-admin-key'];
-  if (adminKey !== process.env.ADMIN_KEY) {
+  if (!adminAuthorized(req.headers['x-admin-key'], process.env.ADMIN_KEY)) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
@@ -1512,8 +1487,7 @@ app.get('/api/admin/subscribers', async (req, res) => {
 });
 
 app.get('/api/admin/contacts', async (req, res) => {
-  const adminKey = req.headers['x-admin-key'];
-  if (adminKey !== process.env.ADMIN_KEY) {
+  if (!adminAuthorized(req.headers['x-admin-key'], process.env.ADMIN_KEY)) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 

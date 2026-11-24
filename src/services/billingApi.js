@@ -93,6 +93,24 @@ export async function redeemActivation(token) {
   });
 }
 
+/** Mail a 6-digit sign-in code to `email` (only when it is a billing customer's; the answer is
+ * the same either way). */
+export async function signinStart(email, lang) {
+  return billingFetch('/api/billing/signin/start', {
+    method: 'POST',
+    body: JSON.stringify(lang ? { email, lang } : { email }),
+  });
+}
+
+/** Trade the mailed code for the customer id. Throws with `code` 'code_wrong' or 'code_expired'. */
+export async function signinVerify(email, code) {
+  const { customerId } = await billingFetch('/api/billing/signin/verify', {
+    method: 'POST',
+    body: JSON.stringify({ email, code }),
+  });
+  return customerId;
+}
+
 /** Create a Stripe Customer Portal session and return the URL. */
 export async function createPortalSession(customerId, email) {
   return billingFetch('/api/billing/portal-session', {

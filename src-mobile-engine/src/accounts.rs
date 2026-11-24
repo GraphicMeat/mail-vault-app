@@ -571,6 +571,10 @@ pub(crate) fn is_unique_violation(db_error: &str) -> bool {
 #[serde(rename_all = "camelCase")]
 struct RemoveParams {
     account_id: String,
+    /// The user also asked to end MailVault's grant with Google (never by default: a transfer
+    /// shares the refresh token with another device).
+    #[serde(default)]
+    revoke_google: bool,
 }
 
 pub(crate) fn remove(engine: &Engine, params: Value) -> Result<Value, RpcError> {
@@ -616,13 +620,43 @@ pub(crate) fn remove(engine: &Engine, params: Value) -> Result<Value, RpcError> 
     engine.live().stop_account(&p.account_id);
     // Rows first: a failure here leaves a secret for an account that is gone, and repeating the
     // call (which still reaches this line) removes it.
+    // Read before the delete: when asked, a grant of our own Google client is revoked after it.
+    let revoke = if p.revoke_google {
+        engine.secrets().get(&p.account_id).ok().flatten().and_then(|raw| revocation_token(&raw))
+    } else {
+        None
+    };
     engine.secrets().delete(&p.account_id).map_err(internal)?;
+    if let Some(token) = revoke {
+        // Best effort, off the RPC thread: offline or already revoked must not fail a removal.
+        std::thread::spawn(move || {
+            if let Err(e) = crate::net::block_on(mailvault_core::oauth2::revoke_google_token(&token)) {
+                eprintln!("[accounts] google revoke failed: {e}");
+            }
+        });
+    }
     Ok(json!({ "removed": existed }))
+}
+
+/// The token to revoke with Google for a stored secret, per core's `google_revocation_token`.
+fn revocation_token(raw: &str) -> Option<String> {
+    let cred = crate::secrets::Credential::parse(raw);
+    mailvault_core::oauth2::google_revocation_token(cred.client_id.as_deref(), cred.refresh.as_deref(), cred.access.as_deref())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A password, a Thunderbird-client grant or a bare (Plan 2) password revokes nothing; only
+    /// core's own-client rule picks a token.
+    #[test]
+    fn removal_revokes_only_our_own_google_grants() {
+        assert_eq!(revocation_token(r#"{"v":1,"password":"p"}"#), None);
+        assert_eq!(revocation_token("bare-password"), None);
+        let tb = format!(r#"{{"v":1,"refresh":"r","access":"a","clientId":"{}"}}"#, mailvault_core::oauth2::GOOGLE_THUNDERBIRD_CLIENT_ID);
+        assert_eq!(revocation_token(&tb), None);
+    }
 
     #[test]
     fn auth_failed() {

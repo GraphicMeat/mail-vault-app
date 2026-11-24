@@ -985,8 +985,101 @@ async fn handle_callback(stream: &mut tokio::net::TcpStream, senders: &SenderMap
     };
 }
 
+// ── Revocation on account removal ─────────────────────────────
+
+const GOOGLE_REVOKE_ENDPOINT: &str = "https://oauth2.googleapis.com/revoke";
+
+/// The token to revoke with Google when an account is removed, or `None`.
+///
+/// Only a grant issued to MailVault's own Google client is revoked. Google
+/// revokes the whole grant (user + client), so revoking a token issued to
+/// Thunderbird's shared public client would also sign the user out of their
+/// own Thunderbird. Those grants are left for the user to remove at
+/// myaccount.google.com/permissions. The refresh token is preferred: revoking
+/// it ends every access token derived from it.
+pub fn google_revocation_token(client_id: Option<&str>, refresh: Option<&str>, access: Option<&str>) -> Option<String> {
+    revocation_token_for(own_google_client_id(), client_id, refresh, access)
+}
+
+fn revocation_token_for(own: Option<&str>, client_id: Option<&str>, refresh: Option<&str>, access: Option<&str>) -> Option<String> {
+    let own = own.filter(|id| !id.is_empty())?;
+    if client_id.map(str::trim) != Some(own) {
+        return None;
+    }
+    [refresh, access].into_iter().flatten().map(str::trim).find(|t| !t.is_empty()).map(str::to_owned)
+}
+
+/// Revokes `token` with Google (RFC 7009). Best effort: the caller has
+/// already deleted the token locally, so a failure (offline, already revoked)
+/// is logged, never surfaced. The token never enters a log line.
+pub async fn revoke_google_token(token: &str) -> Result<(), String> {
+    revoke_at(GOOGLE_REVOKE_ENDPOINT, token).await
+}
+
+async fn revoke_at(endpoint: &str, token: &str) -> Result<(), String> {
+    let client = crate::net_activity::http_client("sign-in", Some(Duration::from_secs(15)));
+    let resp = client
+        .send(client.post(endpoint).form(&[("token", token)]))
+        .await
+        .map_err(|e| format!("Revoke request failed: {}", crate::net_activity::error_chain(&e)))?;
+    let status = resp.status();
+    // 400 invalid_token: already revoked or expired, which is the goal.
+    if status.is_success() || status.as_u16() == 400 {
+        info!("[OAuth2] Google grant revoked ({})", status.as_u16());
+        Ok(())
+    } else {
+        Err(format!("Revoke refused: HTTP {}", status.as_u16()))
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn only_grants_of_our_own_google_client_are_revoked() {
+        use super::revocation_token_for as pick;
+        let own = Some("own.apps.googleusercontent.com");
+        // Our client: refresh preferred, access as fallback.
+        assert_eq!(pick(own, own, Some("r"), Some("a")).as_deref(), Some("r"));
+        assert_eq!(pick(own, own, None, Some("a")).as_deref(), Some("a"));
+        assert_eq!(pick(own, own, Some(" "), Some("a")).as_deref(), Some("a"));
+        assert_eq!(pick(own, own, None, None), None);
+        // Thunderbird's shared client, a missing stamp, Microsoft: never.
+        assert_eq!(pick(own, Some(super::GOOGLE_THUNDERBIRD_CLIENT_ID), Some("r"), None), None);
+        assert_eq!(pick(own, None, Some("r"), None), None);
+        assert_eq!(pick(own, Some(super::MS_MAILVAULT_CLIENT_ID), Some("r"), None), None);
+        // A build without our client revokes nothing.
+        assert_eq!(pick(None, own, Some("r"), None), None);
+        assert_eq!(pick(Some(""), Some(""), Some("r"), None), None);
+    }
+
+    /// The revoke call posts the token as a form field (RFC 7009) and treats
+    /// 200 and 400 (already revoked) as done, anything else as a failure.
+    #[tokio::test]
+    async fn revoke_posts_the_token_and_accepts_already_revoked() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        for (status, ok) in [("200 OK", true), ("400 Bad Request", true), ("503 Service Unavailable", false)] {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let url = format!("http://{}/revoke", listener.local_addr().unwrap());
+            let server = tokio::spawn(async move {
+                let (mut s, _) = listener.accept().await.unwrap();
+                let mut buf = vec![0u8; 4096];
+                let mut got = String::new();
+                while !got.contains("token=") {
+                    let n = s.read(&mut buf).await.unwrap();
+                    if n == 0 { break; }
+                    got.push_str(&String::from_utf8_lossy(&buf[..n]));
+                }
+                s.write_all(format!("HTTP/1.1 {status}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").as_bytes()).await.unwrap();
+                got
+            });
+            let result = super::revoke_at(&url, "tok-123").await;
+            let request = server.await.unwrap();
+            assert!(request.starts_with("POST /revoke"), "{request}");
+            assert!(request.contains("token=tok-123"), "{request}");
+            assert_eq!(result.is_ok(), ok, "{status}: {result:?}");
+        }
+    }
+
     #[test]
     fn refresh_failures_are_classified_once() {
         use super::*;

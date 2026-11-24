@@ -21,6 +21,8 @@ const PRICING = {
 
 vi.mock('../../../services/billingApi', () => ({
   fetchSubscriptionStatus: vi.fn(),
+  signinStart: vi.fn(),
+  signinVerify: vi.fn(),
   fetchPricing: vi.fn(),
   createPortalSession: vi.fn(),
   unregisterBillingClient: vi.fn(),
@@ -32,7 +34,7 @@ vi.mock('../../../services/billingApi', () => ({
 }));
 vi.mock('../../../services/checkout', () => ({ startCheckout: vi.fn() }));
 
-const { fetchPricing, fetchSubscriptionStatus } = await import('../../../services/billingApi');
+const { fetchPricing, fetchSubscriptionStatus, signinStart, signinVerify } = await import('../../../services/billingApi');
 const { startCheckout } = await import('../../../services/checkout');
 const { useSettingsStore } = await import('../../../stores/settingsStore');
 const { useMailStore } = await import('../../../stores/mailStore');
@@ -55,6 +57,10 @@ beforeEach(async () => {
   fetchPricing.mockResolvedValue(PRICING);
   fetchSubscriptionStatus.mockReset();
   fetchSubscriptionStatus.mockResolvedValue({ hasSubscription: false, premiumAccess: false });
+  signinStart.mockReset();
+  signinStart.mockResolvedValue({ ok: true });
+  signinVerify.mockReset();
+  signinVerify.mockResolvedValue('cus_alias');
   startCheckout.mockReset();
   startCheckout.mockResolvedValue({ ok: true });
 });
@@ -91,18 +97,46 @@ describe('Billing address selector', () => {
     expect(selector().value).toBe(ALIAS);
   });
 
+  /** Mails the code to `address`, types it and signs in. */
+  async function signInWithCode(address) {
+    fireEvent.change(selector(), { target: { value: address } });
+    fireEvent.click(screen.getByRole('button', { name: t('settings.billing.signPremium') }));
+    const field = await screen.findByRole('textbox', { name: t('settings.billing.code') });
+    fireEvent.change(field, { target: { value: '123456' } });
+    fireEvent.click(screen.getByRole('button', { name: t('settings.billing.verifyCode') }));
+  }
+
   it('signs in with the chosen alias', async () => {
     render(<BillingSettings />);
-    fireEvent.change(selector(), { target: { value: ALIAS } });
-    fireEvent.click(screen.getByRole('button', { name: t('settings.billing.signPremium') }));
+    await signInWithCode(ALIAS);
     await waitFor(() => expect(fetchSubscriptionStatus).toHaveBeenCalled());
-    expect(fetchSubscriptionStatus.mock.calls[0][0].email).toBe(ALIAS.toLowerCase());
+    expect(signinStart.mock.calls[0][0]).toBe(ALIAS.toLowerCase());
+    expect(signinVerify).toHaveBeenCalledWith(ALIAS.toLowerCase(), '123456');
+    expect(fetchSubscriptionStatus.mock.calls[0][0]).toMatchObject({ email: ALIAS.toLowerCase(), customerId: 'cus_alias' });
+  });
+
+  // Anyone can type an address: the billing server is asked only with the customer id the
+  // mailed code proved, never by the address alone.
+  it('never asks the billing server by address alone', async () => {
+    render(<BillingSettings />);
+    fireEvent.click(screen.getByRole('button', { name: t('settings.billing.signPremium') }));
+    await screen.findByRole('textbox', { name: t('settings.billing.code') });
+    expect(signinStart).toHaveBeenCalledWith(LOGIN, 'en');
+    expect(fetchSubscriptionStatus).not.toHaveBeenCalled();
+  });
+
+  it('says so when the code is wrong and stays signed out', async () => {
+    const wrong = Object.assign(new Error('code_wrong'), { code: 'code_wrong' });
+    signinVerify.mockRejectedValueOnce(wrong);
+    render(<BillingSettings />);
+    await signInWithCode(LOGIN);
+    await screen.findByText(t('settings.billing.codeWrong'));
+    expect(fetchSubscriptionStatus).not.toHaveBeenCalled();
   });
 
   it('keeps a mixed-case alias selected after a sign-in that found nothing', async () => {
     render(<BillingSettings />);
-    fireEvent.change(selector(), { target: { value: ALIAS } });
-    fireEvent.click(screen.getByRole('button', { name: t('settings.billing.signPremium') }));
+    await signInWithCode(ALIAS);
     await screen.findByText(t('settings.billing.noSubscriptionFoundEmailPick'));
     expect(selector().value).toBe(ALIAS);
   });

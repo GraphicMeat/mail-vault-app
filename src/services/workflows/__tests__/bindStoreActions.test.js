@@ -70,7 +70,7 @@ const FORWARDS = [
   ['addAccount', 'addAccount', [{ email: 'a@x.test' }], SAME],
   ['updateAccount', 'updateAccount', ['a1', { name: 'n' }], SAME],
   ['changeServer', 'changeServer', ['a1', { imapHost: 'h' }], SAME],
-  ['removeAccount', 'removeAccount', ['a1'], SAME],
+  ['removeAccount', 'removeAccount', ['a1', { revokeGoogle: true }], SAME],
   ['setActiveAccount', 'setActiveAccount', ['a1'], SAME],
   ['activateAccount', 'activateAccount', ['a1', 'Archive', { silent: true }], SAME],
   ['loadSubtree', 'loadSubtree', ['a1', 'Projects', { force: true }], SAME],

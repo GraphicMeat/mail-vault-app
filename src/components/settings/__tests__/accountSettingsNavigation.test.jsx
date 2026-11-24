@@ -198,7 +198,7 @@ it('keeps removal confirmation and selected account visible when native removal 
     fireEvent.click(screen.getByRole('button', { name: t('settings.accounts.removeAccount2') }));
     fireEvent.click(screen.getByRole('button', { name: t('common.remove'), exact: true }));
     await waitFor(() => expect(screen.getByRole('alert').textContent).toBe(t('settings.accounts.removeBusy')));
-    expect(removeAccount).toHaveBeenCalledWith('studio');
+    expect(removeAccount).toHaveBeenCalledWith('studio', { revokeGoogle: false });
     expect(screen.getByText(t('settings.accounts.sureRemoveAccount', { email: 'studio@example.test' }))).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Studio' })).toBeTruthy();
   } finally {

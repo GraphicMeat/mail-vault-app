@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Added: removing a Gmail account signed in with MailVault's own Google sign-in offers "Also end MailVault's access in your Google account". Ticked, MailVault asks Google to revoke its access as well as deleting the tokens from this computer; MailVault on your other devices with that account then has to sign in again, so it is off unless you tick it. Accounts signed in with Thunderbird's shared Google sign-in do not offer it, since revoking would sign you out of Thunderbird too.
+- Security: signing in to Premium on the computer now emails a 6-digit code to the address, as on the phone. Before, typing a subscriber's address was enough to turn Premium on and take one of their device seats. Older MailVault versions must update to sign in to Premium; devices already signed in stay signed in.
+- Security: updated third-party libraries with published security fixes, among them the SMTP library (STARTTLS reply injection, dot-stuffing), the bundled SQLite, HTTP/2 and the root certificate list.
 - Added: Keep in bubble, on desktop and phone. The bookmark button on an email keeps it in a floating bubble; click the bubble to reopen it, hover to see its subject. Emails from one sender share one bubble with their count in its centre; tap it to list them, each opens with a tap, and the list's X closes the bubble. Drag the bubble by its handle to either side. Kept emails stay after a restart.
 - Fixed: tapping a notification for a message below the first page of a flat list now opens it instead of saying it is gone.
 - Fixed: every account and All Inboxes now show Find folder, not only accounts with ten or more folders, and the All Inboxes folders use the same role colours as an account's folders.

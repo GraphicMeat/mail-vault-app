@@ -577,7 +577,8 @@ export function AccountServerFormView({ values, onChange, onSave, onCancel, busy
  * Advanced: the avatar colour (`colors`, `color`, `onColor`, `onResetColor` while a colour of its
  * own is set), `downloadMode` (desktop's per-account download mode), visible or hidden (`hidden`,
  * `onHidden(bool)`, `onEyeClick`), and Remove (`remove`: `{ confirming, onAsk, onCancel,
- * onConfirm, removing, error, question, warning, confirmLabel }`).
+ * onConfirm, removing, error, question, warning, confirmLabel, revoke }`; `revoke` is
+ * `{ checked, onChange(bool) }` for an account whose Google grant can be revoked, else null).
  */
 export function AccountAdvancedView({ colors, color, onColor, onResetColor, downloadMode = null, hidden, onHidden, onEyeClick, remove, copy = {} }) {
   const t = useT();
@@ -700,6 +701,17 @@ export function AccountAdvancedView({ colors, color, onColor, onResetColor, down
                   <p className="text-sm text-mail-warning mb-2">
                     {remove.warning}
                   </p>
+                )}
+                {remove.revoke && (
+                  <label className="flex items-start gap-2 mt-2 text-sm text-mail-text cursor-pointer">
+                    <input type="checkbox" className="mt-0.5" checked={remove.revoke.checked}
+                      disabled={remove.removing}
+                      onChange={e => remove.revoke.onChange(e.target.checked)} />
+                    <span>
+                      {t('settings.accounts.revokeGoogle')}
+                      <span className="block text-xs text-mail-text-muted mt-0.5">{t('settings.accounts.revokeGoogleHint')}</span>
+                    </span>
+                  </label>
                 )}
                 <div className="flex items-center gap-2 mt-3">
                   <button

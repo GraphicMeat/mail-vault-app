@@ -569,16 +569,17 @@ impl PoolContext {
 }
 
 pub(crate) async fn route(state: &Arc<DaemonState>, params: &Value, id: Value) -> RpcResponse {
-    let Some(account_id) = params.as_object().filter(|p| p.len() == 1)
-        .and_then(|p| p.get("accountId")).and_then(Value::as_str)
-        .filter(|id| valid_id(id)) else {
+    // `revokeGoogle` (optional, default false): the user also asked to end MailVault's grant
+    // with Google. Never by default: a transfer copies the same refresh token to the new
+    // device, and Google ends the grant for every MailVault install of that address.
+    let Some((account_id, revoke_google)) = removal_params(params) else {
         return RpcResponse::error(id, ipc::INVALID_PARAMS, "errors.accountsInvalid");
     };
     let account_id = account_id.to_owned();
     let deadline = Instant::now() + OVERALL;
     let progress = Arc::new(Mutex::new(Control { stage: Stage::Pre, waiter_alive: true }));
     let _waiter = Waiter(Arc::clone(&progress));
-    let mut task = tokio::spawn(remove_owned(Arc::clone(state), account_id.clone(), deadline, Arc::clone(&progress)));
+    let mut task = tokio::spawn(remove_owned(Arc::clone(state), account_id.clone(), revoke_google, deadline, Arc::clone(&progress)));
     match tokio::time::timeout_at(deadline, &mut task).await {
         Ok(Ok(Ok(result))) => RpcResponse::success(id, result),
         Ok(Ok(Err(error))) => RpcResponse::error(id, ipc::INTERNAL_ERROR, error),
@@ -594,7 +595,24 @@ pub(crate) async fn route(state: &Arc<DaemonState>, params: &Value, id: Value) -
     }
 }
 
-async fn remove_owned(state: Arc<DaemonState>, id: String, deadline: Instant,
+/// `{accountId, revokeGoogle?}`: anything else, or a non-bool `revokeGoogle`, is refused.
+fn removal_params(params: &Value) -> Option<(&str, bool)> {
+    let p = params.as_object().filter(|p| p.keys().all(|k| k == "accountId" || k == "revokeGoogle"))?;
+    let revoke = match p.get("revokeGoogle") { None => false, Some(v) => v.as_bool()? };
+    Some((p.get("accountId")?.as_str().filter(|id| valid_id(id))?, revoke))
+}
+
+/// The token to revoke with Google for the account `id` in the credential
+/// blob, per [`mailvault_core::oauth2::google_revocation_token`].
+fn google_revocation(snapshot: &credentials::BlobSnapshot, id: &str) -> Option<String> {
+    let row: Value = serde_json::from_str(snapshot.records.get(id)?).ok()?;
+    if row.get("authType").and_then(Value::as_str) != Some("oauth2") { return None; }
+    let text = |key: &str| row.get(key).and_then(Value::as_str);
+    mailvault_core::oauth2::google_revocation_token(
+        text("oauth2ClientId"), text("oauth2RefreshToken"), text("oauth2AccessToken"))
+}
+
+async fn remove_owned(state: Arc<DaemonState>, id: String, revoke_google: bool, deadline: Instant,
     progress: Progress) -> Result<Value, String> {
     #[cfg(test)]
     let _done = OWNED_DONE.take(&state.app_dir).map(credentials::TestTaskDone);
@@ -613,6 +631,7 @@ async fn remove_owned(state: Arc<DaemonState>, id: String, deadline: Instant,
         .await.map_err(|_| "errors.keychainUnavailable".to_owned())?
         .map_err(|e| e.catalog_key().to_owned())?;
     let pool_context = PoolContext::capture(&id, &listed, &snapshot);
+    let revoke = if revoke_google { google_revocation(&snapshot, &id) } else { None };
     let (projected, custody_ids) = account_bound_cache_projection(&state, &id)?;
     let mut other_ids: BTreeSet<String> = listed.accounts.iter()
         .filter_map(|row| row.get("id").and_then(Value::as_str)).map(str::to_owned).collect();
@@ -733,6 +752,15 @@ async fn remove_owned(state: Arc<DaemonState>, id: String, deadline: Instant,
             credentials::RemovalCredError::Unknown =>
                 incomplete(&id, Stage::Credentials, "unknown", "explicit", residuals),
             credentials::RemovalCredError::Failed => failed(&id, Stage::Credentials, residuals),
+        });
+    }
+    // The token is gone locally; the user asked Google to end the grant too. Best
+    // effort, off the removal path: offline or already revoked must not fail a removal.
+    if let Some(token) = revoke {
+        tokio::spawn(async move {
+            if let Err(e) = mailvault_core::oauth2::revoke_google_token(&token).await {
+                tracing::warn!("[remove] Google revoke failed: {e}");
+            }
         });
     }
     if !advance(&progress, Stage::Local, deadline) {
@@ -950,6 +978,36 @@ fn cleanup_sidecars(root: &Path, id: &str, local: &LocalProof,
 mod tests {
     use super::*;
     use mailvault_core::app_db::compose_receipts as receipts;
+
+    /// Removal revokes only a grant of MailVault's own Google client
+    /// (core decides); a password account, a Thunderbird-client grant, an
+    /// unreadable record or a missing one revokes nothing.
+    #[test]
+    fn removal_revokes_only_our_own_google_grants() {
+        let records: std::collections::HashMap<String, String> = [
+            ("pw", json!({"id":"pw","authType":"password","password":"x"}).to_string()),
+            ("tb", json!({"id":"tb","authType":"oauth2","oauth2Provider":"google",
+                "oauth2ClientId": mailvault_core::oauth2::GOOGLE_THUNDERBIRD_CLIENT_ID,
+                "oauth2RefreshToken":"r"}).to_string()),
+            ("bad", "{".to_string()),
+        ].into_iter().map(|(k, v)| (k.to_string(), v)).collect();
+        let snapshot = credentials::BlobSnapshot { records, generation: 0 };
+        for id in ["pw", "tb", "bad", "absent"] {
+            assert_eq!(google_revocation(&snapshot, id), None, "{id}");
+        }
+    }
+
+    /// Revocation is opt-in per removal: absent means no.
+    #[test]
+    fn removal_params_take_an_optional_revoke_flag() {
+        let id = "acct-1";
+        assert_eq!(removal_params(&json!({"accountId": id})), Some((id, false)));
+        assert_eq!(removal_params(&json!({"accountId": id, "revokeGoogle": true})), Some((id, true)));
+        assert_eq!(removal_params(&json!({"accountId": id, "revokeGoogle": false})), Some((id, false)));
+        assert_eq!(removal_params(&json!({"accountId": id, "revokeGoogle": "yes"})), None);
+        assert_eq!(removal_params(&json!({"accountId": id, "other": 1})), None);
+        assert_eq!(removal_params(&json!({"revokeGoogle": true})), None);
+    }
 
     struct ImapPlaintextRestore(Option<std::ffi::OsString>);
     impl ImapPlaintextRestore {

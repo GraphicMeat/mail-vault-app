@@ -194,6 +194,12 @@ describe('the account list goes through the daemon', () => {
     expect(JSON.parse(file)).toEqual([]);
   });
 
+  // Ending the Google grant is the user's explicit pick in the remove dialog, never a default.
+  it('deleteAccount asks the daemon to revoke Google access only when told to', async () => {
+    await accounts.deleteAccount('old', { revokeGoogle: true });
+    expect(sent('accounts.remove_local')[0][1]).toEqual({ accountId: 'old', revokeGoogle: true });
+  });
+
   // Personal Outlook.com IMAP over OAuth works again, so IMAP on a personal
   // domain is a choice the user made, not a broken record to rewrite to Graph.
   it('a personal Microsoft account stored over IMAP stays IMAP, and nothing is written', async () => {

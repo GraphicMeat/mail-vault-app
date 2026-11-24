@@ -535,8 +535,11 @@ export async function getAccount(id) {
   return accounts.find(a => a.id === id);
 }
 
-export async function deleteAccount(id) {
-  const result = await accountsCall('accounts.remove_local', { accountId: id });
+// `revokeGoogle`: the user also asked Google to end MailVault's grant (opt-in; the daemon
+// revokes only a grant of MailVault's own Google client).
+export async function deleteAccount(id, { revokeGoogle = false } = {}) {
+  const result = await accountsCall('accounts.remove_local',
+    revokeGoogle ? { accountId: id, revokeGoogle: true } : { accountId: id });
   if (result.outcome === 'complete') {
     invalidateCredentialsCache();
     return result;

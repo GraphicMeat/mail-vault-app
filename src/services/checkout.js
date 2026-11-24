@@ -15,13 +15,10 @@ import { t } from '../i18n/index.js';
 export async function startCheckout({ email, planId }) {
   const address = String(email || '').trim().toLowerCase();
   if (!address) return { ok: false, error: t('svc.checkout.noEmail') };
-  const { setBillingEmail, setBillingProfile } = useSettingsStore.getState();
+  const { setBillingEmail } = useSettingsStore.getState();
   try {
     setBillingEmail(address);
-    const { url, customerId } = await createCheckoutSession(address, { planId });
-    if (customerId) {
-      setBillingProfile({ ...useSettingsStore.getState().billingProfile, customerId, customerEmail: address });
-    }
+    const { url } = await createCheckoutSession(address, { planId });
     await openInBrowser(url);
     useSettingsStore.getState().noteCheckoutOpened();
     return { ok: true };
