@@ -900,7 +900,9 @@ export function createMobileStore() {
         return { ok: true };
       },
 
-      async removeAccount(id) {
+      // `revokeGoogle`: also end the account's grant with Google (only a grant of our own client
+      // is revoked; Settings offers it when `mobile.accounts.revocable` says so).
+      async removeAccount(id, { revokeGoogle = false } = {}) {
         // A deferred action of the account being removed is dropped unsent: nothing can apply it.
         const dropped = deferred?.accountId === id ? deferred : null;
         if (dropped) {
@@ -909,7 +911,7 @@ export function createMobileStore() {
           deferred = null;
         }
         try {
-          await daemonCall('mobile.accounts.remove', { accountId: id });
+          await daemonCall('mobile.accounts.remove', revokeGoogle ? { accountId: id, revokeGoogle: true } : { accountId: id });
         } catch (err) {
           // The account stays: its dropped action's rows come back, and the switcher keeps asking.
           dropped?.list?.unhide(keysIn(dropped.list, dropped.accountId, dropped.uids));

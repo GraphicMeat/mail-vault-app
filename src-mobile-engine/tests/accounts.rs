@@ -506,3 +506,23 @@ fn a_lost_secret_parks_the_account() {
     std::thread::sleep(std::time::Duration::from_millis(300));
     assert_eq!(server.connection_count(), before, "a parked account is never dialled");
 }
+
+/// Settings offers to end the Google grant only for a grant of MailVault's own client: a password,
+/// a Thunderbird-client grant (shared with Thunderbird) or no secret at all answers false.
+#[test]
+fn revocable_is_true_only_for_a_grant_of_our_own_google_client() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (e, secrets) = engine(tmp.path());
+    let revocable = |id: &str| e.rpc("mobile.accounts.revocable", json!({ "accountId": id })).unwrap()["revocable"].clone();
+    secrets.set("pw", &Credential::from_password(PW).to_secret()).unwrap();
+    let tb = mailvault_core::oauth2::GOOGLE_THUNDERBIRD_CLIENT_ID;
+    secrets.set("tb", &format!(r#"{{"v":1,"refresh":"r","access":"a","clientId":"{tb}"}}"#)).unwrap();
+    assert_eq!(revocable("pw"), json!(false));
+    assert_eq!(revocable("tb"), json!(false));
+    assert_eq!(revocable("none"), json!(false));
+    if let Some(own) = mailvault_core::oauth2::own_google_client_id() {
+        secrets.set("own", &format!(r#"{{"v":1,"refresh":"r","access":"a","clientId":"{own}"}}"#)).unwrap();
+        assert_eq!(revocable("own"), json!(true));
+    }
+    assert_eq!(e.rpc("mobile.accounts.revocable", json!({})).unwrap_err().code(), "INVALID");
+}

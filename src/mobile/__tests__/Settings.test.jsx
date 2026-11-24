@@ -6,7 +6,7 @@ import React from 'react';
 import { render, screen, cleanup, fireEvent, waitFor, act, within } from '@testing-library/react';
 import { t } from '../i18n.js';
 
-const engine = vi.hoisted(() => ({ calls: [], settings: null, granted: true, failRemove: false, permissionAsked: 0, osAllows: true, statusAsked: 0, notify: {} }));
+const engine = vi.hoisted(() => ({ calls: [], settings: null, granted: true, failRemove: false, revocable: [], permissionAsked: 0, osAllows: true, statusAsked: 0, notify: {} }));
 
 vi.mock('../transport.js', () => ({
   daemonCall: vi.fn(async (method, params = {}) => {
@@ -26,6 +26,8 @@ vi.mock('../transport.js', () => ({
         return { folders: [] };
       case 'mobile.tracking.stats':
         return { messages: 2, pixels: 3, top: [['Mailchimp', 2]], patterns: 1234 };
+      case 'mobile.accounts.revocable':
+        return { revocable: engine.revocable.includes(params.accountId) };
       case 'mobile.accounts.remove':
         if (engine.failRemove) throw Object.assign(new Error('no'), { code: 'INTERNAL' });
         return { removed: true };
@@ -56,6 +58,7 @@ beforeEach(() => {
   engine.settings = { notifications: 'off', notificationPreview: true };
   engine.granted = true;
   engine.failRemove = false;
+  engine.revocable = [];
   engine.permissionAsked = 0;
   engine.osAllows = true;
   engine.statusAsked = 0;
@@ -145,6 +148,33 @@ describe('Settings', () => {
     await waitFor(() => expect(engine.calls.filter(([m]) => m === 'mobile.accounts.remove')).toEqual([['mobile.accounts.remove', { accountId: 'a1' }]]));
     await waitFor(() => expect(screen.queryByText(A1.email)).toBeNull());
     expect(screen.getAllByText(A2.email).length).toBeGreaterThan(0);
+  });
+
+  it('offers to end the Google grant only when the engine says it is ours, off by default', async () => {
+    const G = { id: 'g1', email: 'gee@gmail.test', displayName: 'Gee', needsAuth: false, oauth: true, provider: 'google' };
+    const T = { id: 'g2', email: 'tee@gmail.test', displayName: 'Tee', needsAuth: false, oauth: true, provider: 'google' };
+    engine.revocable = ['g1'];
+    useMobileStore.setState({ accounts: [G, T, A1], activeAccountId: 'a1' });
+    render(<Settings page="accounts" onClose={() => {}} />);
+    const box = () => screen.queryByRole('checkbox', { name: new RegExp(t('settings.accounts.revokeGoogle')) });
+
+    // A password account never asks; a Thunderbird-client grant asks and gets no.
+    await openRemove(A1);
+    expect(engine.calls.some(([m]) => m === 'mobile.accounts.revocable')).toBe(false);
+    expect(box()).toBeNull();
+    fireEvent.click(within(screen.getByTestId('account-remove-confirm')).getByRole('button', { name: t('common.cancel') }));
+    await openRemove(T);
+    await waitFor(() => expect(engine.calls).toContainEqual(['mobile.accounts.revocable', { accountId: 'g2' }]));
+    expect(box()).toBeNull();
+    fireEvent.click(within(screen.getByTestId('account-remove-confirm')).getByRole('button', { name: t('common.cancel') }));
+
+    await openRemove(G);
+    await waitFor(() => expect(box()).toBeTruthy());
+    expect(box().checked).toBe(false);
+    fireEvent.click(box());
+    fireEvent.click(screen.getByRole('button', { name: t('common.remove') }));
+    await waitFor(() => expect(engine.calls.filter(([m]) => m === 'mobile.accounts.remove'))
+      .toEqual([['mobile.accounts.remove', { accountId: 'g1', revokeGoogle: true }]]));
   });
 
   it('keeps the account and its question when the removal fails', async () => {

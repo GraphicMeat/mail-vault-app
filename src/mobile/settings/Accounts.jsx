@@ -19,7 +19,8 @@
 //   The Sent folder (IMAP only: Graph and JMAP servers file the Sent copy themselves): found
 //   automatically, or one of the account's folders (`mobile.folders.list`).
 // - Advanced: the avatar colour (desktop's palette, or automatic), hidden (out of the switcher, the
-//   drawer and All Inboxes, still listed here), and Remove after desktop's question.
+//   drawer and All Inboxes, still listed here), and Remove after desktop's question (with its
+//   opt-in "end MailVault's access with Google" for a grant of our own Google client).
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AccountListView, AccountDetailView, AccountProfileView, AccountConnectionView, AccountAdvancedView,
@@ -291,12 +292,25 @@ function Advanced({ account, settings, write, onRemoved }) {
   const [confirming, setConfirming] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [error, setError] = useState(null);
+  // Ending the Google grant is offered only for a grant of MailVault's own client (the engine
+  // reads the stored secret); off by default, since a transfer shares the grant with another device.
+  const [revocable, setRevocable] = useState(false);
+  const [revokeGoogle, setRevokeGoogle] = useState(false);
+  const google = account.oauth === true && account.provider === 'google';
+  useEffect(() => {
+    if (!confirming || !google) return undefined;
+    let live = true;
+    daemonCall('mobile.accounts.revocable', { accountId: account.id })
+      .then((r) => { if (live) setRevocable(r?.revocable === true); })
+      .catch(() => { if (live) setRevocable(false); });
+    return () => { live = false; };
+  }, [confirming, google, account.id]);
   const own = typeof settings.color === 'string' ? settings.color : null;
   const remove = async () => {
     setRemoving(true);
     setError(null);
     try {
-      await useMobileStore.getState().removeAccount(account.id);
+      await useMobileStore.getState().removeAccount(account.id, { revokeGoogle: revocable && revokeGoogle });
       onRemoved();
     } catch {
       // Refused: the question stays for another try.
@@ -317,6 +331,7 @@ function Advanced({ account, settings, write, onRemoved }) {
         onConfirm: remove,
         question: t('settings.accounts.sureRemoveAccount', { email: account.email }),
         confirmLabel: t('common.remove'),
+        revoke: revocable ? { checked: revokeGoogle, onChange: setRevokeGoogle } : null,
       }} />
   );
 }

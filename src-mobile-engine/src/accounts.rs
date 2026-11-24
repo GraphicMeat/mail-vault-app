@@ -638,6 +638,21 @@ pub(crate) fn remove(engine: &Engine, params: Value) -> Result<Value, RpcError> 
     Ok(json!({ "removed": existed }))
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RevocableParams {
+    account_id: String,
+}
+
+/// `mobile.accounts.revocable {accountId}` -> `{revocable}`: whether removing the account can also
+/// end its grant with Google (a grant of MailVault's own Google client; Thunderbird's is shared).
+/// Settings asks before it offers the choice.
+pub(crate) fn revocable(engine: &Engine, params: Value) -> Result<Value, RpcError> {
+    let p: RevocableParams = parse(params)?;
+    let raw = engine.secrets().get(&p.account_id).map_err(internal)?;
+    Ok(json!({ "revocable": raw.as_deref().and_then(revocation_token).is_some() }))
+}
+
 /// The token to revoke with Google for a stored secret, per core's `google_revocation_token`.
 fn revocation_token(raw: &str) -> Option<String> {
     let cred = crate::secrets::Credential::parse(raw);
