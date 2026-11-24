@@ -239,10 +239,9 @@ fn read_message(reader: &mut BufReader<TcpStream>) -> std::io::Result<Vec<u8>> {
         }
         let content = strip_crlf(&line);
         if content == b"." {
-            // The last line's CRLF belongs to the terminator, not the message.
-            if message.ends_with(b"\r\n") {
-                message.truncate(message.len() - 2);
-            }
+            // RFC 5321 §4.1.1.4: the CRLF before the dot ends the message's own
+            // last line, so it stays. (lettre before 0.11.24 sent an extra CRLF
+            // there, which an older version of this reader trimmed.)
             return Ok(message);
         }
         // RFC 5321 §4.5.2: a leading period the client doubled.
@@ -301,6 +300,21 @@ mod tests {
         assert!(refuses(&config, "bounce@refused.TEST"));
         assert!(!refuses(&config, "partner@example.com"));
         assert!(!refuses(&SmtpScenario::default(), "bounce@refused.test"));
+    }
+
+    #[test]
+    fn data_keeps_the_last_lines_crlf_and_undoes_dot_stuffing() {
+        use std::io::Write;
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let client = std::thread::spawn(move || {
+            let mut s = TcpStream::connect(addr).unwrap();
+            s.write_all(b"Subject: x\r\n\r\n..dot\r\nend\r\n.\r\n").unwrap();
+        });
+        let (server, _) = listener.accept().unwrap();
+        let got = read_message(&mut BufReader::new(server)).unwrap();
+        client.join().unwrap();
+        assert_eq!(got, b"Subject: x\r\n\r\n.dot\r\nend\r\n");
     }
 
     #[test]

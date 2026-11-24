@@ -86,7 +86,10 @@ fn frozen_bytes_go_out_once_as_they_are() {
     let mail = email("bob@example.test", "frozen body");
     let raw = staged(&acc, &mail);
     rt().block_on(smtp::send_raw_phased(&acc, &envelope("bob@example.test"), raw.clone())).expect("sent");
-    assert_eq!(server.sent_messages(), vec![raw]);
+    // DATA's closing CRLF is the message's last line ending (RFC 5321 §4.1.1.4).
+    let mut stored = raw.clone();
+    if !stored.ends_with(b"\r\n") { stored.extend_from_slice(b"\r\n"); }
+    assert_eq!(server.sent_messages(), vec![stored]);
 }
 
 #[test]

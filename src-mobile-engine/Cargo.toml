@@ -15,7 +15,7 @@ perf-gate = []
 # rustls by cfg inside core).
 mailvault-core = { path = "../src-core" }
 # Same requirement as core, so both resolve to one libsqlite3-sys.
-rusqlite = { version = "0.40", features = ["bundled"] }
+rusqlite = { version = "0.41", features = ["bundled"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 # Core's futures run on async-std; some of core's timeouts are tokio timers, which need a runtime

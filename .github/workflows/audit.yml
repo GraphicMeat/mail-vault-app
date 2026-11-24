@@ -1,0 +1,56 @@
+name: Dependency audit
+
+# Known-vulnerability scan of every third-party component: Rust crates
+# (RustSec advisory database via cargo-audit) and npm packages shipped in the
+# app and the website API (npm audit). Runs on any lockfile change, weekly
+# (new advisories land against unchanged lockfiles), and on demand. Fails on
+# a vulnerability; unmaintained/unsound warnings are reported, not fatal.
+# Ignored advisories, each with its reason, live in .cargo/audit.toml.
+
+on:
+  schedule:
+    - cron: '41 6 * * 1'
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'Cargo.lock'
+      - '**/Cargo.toml'
+      - 'package-lock.json'
+      - 'website/api/package-lock.json'
+      - '.cargo/audit.toml'
+      - '.github/workflows/audit.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'Cargo.lock'
+      - 'package-lock.json'
+      - 'website/api/package-lock.json'
+      - '.cargo/audit.toml'
+
+permissions:
+  contents: read
+
+jobs:
+  cargo:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+      - name: cargo audit
+        run: cargo audit
+
+  npm:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: npm audit (app)
+        run: npm audit --omit=dev --audit-level=low
+      - name: npm audit (website API)
+        working-directory: website/api
+        run: npm audit --omit=dev --audit-level=low

@@ -871,7 +871,10 @@ pub(crate) mod tests {
 
         let sent = server.sent_messages();
         assert_eq!(sent.len(), 1, "commands: {:?}", server.smtp_commands());
-        assert_eq!(sent[0], staged);
+        // DATA's closing CRLF is the message's last line ending (RFC 5321 §4.1.1.4).
+        let mut stored = staged.clone();
+        if !stored.ends_with(b"\r\n") { stored.extend_from_slice(b"\r\n"); }
+        assert_eq!(sent[0], stored);
     }
 
     #[tokio::test]

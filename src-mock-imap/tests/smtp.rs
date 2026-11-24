@@ -74,8 +74,8 @@ fn ehlo_advertises_auth_and_the_message_is_recorded() {
     let raw = String::from_utf8(sent[0].clone()).unwrap();
     assert!(raw.contains("Subject: Hello"), "{}", raw);
     assert!(raw.contains("Body text."), "{}", raw);
-    // The terminating dot is protocol, not message.
-    assert!(!raw.ends_with(".\r\n"), "{:?}", raw);
+    // The terminating dot is protocol, not message; the CRLF before it ends the last line.
+    assert!(raw.ends_with("Body text.\r\n") && !raw.ends_with("\r\n.\r\n"), "{:?}", raw);
 }
 
 #[test]

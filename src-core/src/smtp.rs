@@ -2279,6 +2279,17 @@ mod tests {
         use super::{account, outgoing};
         use mock_imap::{MockImap, Scenario};
 
+        /// What a server stores for `bytes`: DATA ends with `CRLF.CRLF`, and the
+        /// CRLF is the message's last line ending, so a message without one gets
+        /// one (RFC 5321 §4.1.1.4). The wire cannot tell the two apart.
+        fn on_the_wire(bytes: &[u8]) -> Vec<u8> {
+            let mut v = bytes.to_vec();
+            if !v.ends_with(b"\r\n") {
+                v.extend_from_slice(b"\r\n");
+            }
+            v
+        }
+
         /// The hatch is a process-wide env var and cargo runs these in parallel.
         static ENV: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
@@ -2376,7 +2387,7 @@ mod tests {
             let raw = String::from_utf8_lossy(&sent[0]).to_string();
             assert!(raw.contains("Message-ID: <staged.7@mock.test>\r\n"), "{raw}");
             // And the bytes handed back for the Sent APPEND are those same bytes.
-            assert_eq!(result.raw_rfc2822, sent[0]);
+            assert_eq!(on_the_wire(&result.raw_rfc2822), sent[0]);
         }
 
         /// SMTP carries Bcc on the envelope only. The Graph path puts a Bcc
@@ -2435,7 +2446,7 @@ mod tests {
 
             let sent = server.sent_messages();
             assert_eq!(sent.len(), 2);
-            assert_eq!(sent[0], built.raw_rfc2822, "the staged bytes, not a rebuild");
+            assert_eq!(sent[0], on_the_wire(&built.raw_rfc2822), "the staged bytes, not a rebuild");
             assert_eq!(result.raw_rfc2822, built.raw_rfc2822);
             let log = server.smtp_commands();
             let rcpts = |who: &str| log.iter().filter(|l| l.starts_with(&format!("RCPT TO:<{who}>"))).count();
@@ -2486,7 +2497,7 @@ mod tests {
 
             let sent = server.sent_messages();
             assert_eq!(sent.len(), 1);
-            assert_eq!(sent[0], frozen, "the server must receive the exact frozen bytes, not a re-serialization");
+            assert_eq!(sent[0], on_the_wire(&frozen), "the server must receive the exact frozen bytes, not a re-serialization");
         }
 
         #[tokio::test]

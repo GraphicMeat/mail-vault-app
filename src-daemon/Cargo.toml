@@ -13,7 +13,7 @@ path = "src/main.rs"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 mailparse = "0.15"
-rusqlite = { version = "0.40", features = ["bundled"] }
+rusqlite = { version = "0.41", features = ["bundled"] }
 tokio = { version = "1", features = ["sync", "net", "io-util", "time", "rt", "rt-multi-thread", "macros", "signal", "process"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
@@ -26,9 +26,9 @@ flate2 = "1"
 mailvault-core = { path = "../src-core" }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 futures = "0.3"
-candle-core = "0.8"
-candle-nn = "0.8"
-candle-transformers = "0.8"
+candle-core = "0.11"
+candle-nn = "0.11"
+candle-transformers = "0.11"
 tokenizers = "0.21"
 hf-hub = "0.4"
 uuid = { version = "1", features = ["v4"] }
@@ -65,7 +65,7 @@ pgp = "0.20"
 rand08 = { package = "rand", version = "0.8" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-candle-core = { version = "0.8", features = ["metal"] }
+candle-core = { version = "0.11", features = ["metal"] }
 embed_plist = "1.2.2"
 objc2 = "0.6"
 objc2-foundation = "0.3"

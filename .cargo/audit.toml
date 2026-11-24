@@ -1,0 +1,15 @@
+# cargo audit configuration (CI: .github/workflows/audit.yml).
+# Every ignored advisory names why it does not apply and what lifts it.
+[advisories]
+ignore = [
+  # rsa 0.9 Marvin attack (timing side channel on RSA decryption). Comes only
+  # through pgp (OpenPGP decrypt of mail the user opens, with their own key, on
+  # their own device). The attack needs an attacker to time many decryptions;
+  # nothing returns decryption timing or success to a sender. No fix: pgp
+  # 0.21.x (latest) still requires rsa ^0.9. Lift when pgp moves to rsa 0.10.
+  "RUSTSEC-2023-0071",
+  # crypto-bigint 0.5 timing variability. Comes only through pgp (cx448) and
+  # elliptic-curve 0.13, same local-only use as above. No fix: pgp 0.21.x still
+  # requires elliptic-curve ^0.13. Lift when pgp moves to crypto-bigint >=0.7.6.
+  "RUSTSEC-2026-0387",
+]
