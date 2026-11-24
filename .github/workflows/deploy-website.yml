@@ -465,6 +465,11 @@ jobs:
               "mysql -N -e \"$1\""
           }
 
+          # A run that died mid-probe left its minted customer behind: drop it first.
+          leftover=$(run_sql "SELECT stripe_customer_id FROM mailvault_website.billing_customers WHERE email='$HEAL_EMAIL'")
+          if [ -n "$leftover" ] && [ "$leftover" != "$POISON" ]; then
+            curl -sS -X DELETE "https://api.stripe.com/v1/customers/$leftover" -u "$STRIPE_SECRET_KEY:" > /dev/null
+          fi
           run_sql "DELETE FROM mailvault_website.billing_customers WHERE email='$HEAL_EMAIL'"
           run_sql "INSERT INTO mailvault_website.billing_customers (email, stripe_customer_id) VALUES ('$HEAL_EMAIL', '$POISON')"
 
@@ -472,19 +477,15 @@ jobs:
             -H 'Content-Type: application/json' \
             -d "{\"email\":\"$HEAL_EMAIL\",\"planId\":\"monthly\"}")
           url=$(echo "$body" | jq -r '.url // empty')
-          healed=$(echo "$body" | jq -r '.customerId // empty')
           case "$url" in
             https://checkout.stripe.com/*) : ;;
             *) echo "::error::heal probe: checkout did not recover from a poisoned customer row: $(echo "$body" | jq -c '{error, code}')"; exit 1 ;;
           esac
+          # Checkout never answers with the customer id (a typed address proves
+          # nothing), so read the repointed id from the row itself.
+          healed=$(run_sql "SELECT stripe_customer_id FROM mailvault_website.billing_customers WHERE email='$HEAL_EMAIL'")
           if [ -z "$healed" ] || [ "$healed" = "$POISON" ]; then
-            echo "::error::heal probe: customer row was not repointed (customerId=$healed)"
-            exit 1
-          fi
-
-          row=$(run_sql "SELECT stripe_customer_id FROM mailvault_website.billing_customers WHERE email='$HEAL_EMAIL'")
-          if [ "$row" != "$healed" ]; then
-            echo "::error::heal probe: DB row ($row) does not match healed customer ($healed)"
+            echo "::error::heal probe: customer row was not repointed (row=$healed)"
             exit 1
           fi
           echo "heal probe: $POISON -> $healed"
