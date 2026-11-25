@@ -2544,6 +2544,7 @@
   "settings.billing.signing": "サインイン中…",
   "settings.billing.codeSent": "6桁のコードを{{email}}に送信しました。届くまで1分ほどかかることがあります。",
   "settings.billing.code": "コード",
+  "settings.billing.codeSignInNeeded": "このコンピュータでPremiumを使い続けるには、メールでお送りするコードでもう一度サインインしてください。",
   "settings.billing.verifyCode": "サインイン",
   "settings.billing.newCode": "新しいコードを送信",
   "settings.billing.codeWrong": "コードが正しくありません。確認して、もう一度お試しください。",

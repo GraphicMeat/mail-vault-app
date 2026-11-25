@@ -752,15 +752,6 @@ async function fetchLatestVersion() {
   return _versionCache;
 }
 
-/** The latest published release's version, the stale one on a GitHub blip, or null. */
-async function latestPublishedVersion() {
-  try {
-    return (await fetchLatestVersion()).version;
-  } catch {
-    return _versionCache?.version || null;
-  }
-}
-
 app.get('/api/latest-version', statusLimiter, async (req, res) => {
   try {
     const { version, tag, publishedAt } = await fetchLatestVersion();
@@ -1141,8 +1132,7 @@ app.get('/api/billing/subscription-status', statusLimiter, async (req, res) => {
 
     if (!customerId) {
       // 2.25.0 and older sign in by address; see LAST_EMAIL_SIGNIN_VERSION.
-      const latestVersion = await latestPublishedVersion();
-      if (!legacyEmailSignInOpen({ appVersion, latestVersion, register })) return res.status(400).json(CUSTOMER_ID_REQUIRED);
+      if (!legacyEmailSignInOpen({ appVersion, register, now: Date.now() })) return res.status(400).json(CUSTOMER_ID_REQUIRED);
       legacy = true;
       customerRow = await findCustomerByLegacyEmail(db, req.query.email);
       customerId = customerRow?.stripe_customer_id || '';

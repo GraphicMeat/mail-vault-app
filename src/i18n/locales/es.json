@@ -2544,6 +2544,7 @@
   "settings.billing.signing": "Iniciando sesión…",
   "settings.billing.codeSent": "Enviamos un código de 6 dígitos a {{email}}. Puede tardar un minuto en llegar.",
   "settings.billing.code": "Código",
+  "settings.billing.codeSignInNeeded": "Para mantener Premium en este ordenador, vuelve a iniciar sesión con el código que te enviamos por correo.",
   "settings.billing.verifyCode": "Iniciar sesión",
   "settings.billing.newCode": "Enviar un código nuevo",
   "settings.billing.codeWrong": "Ese código no es correcto. Revísalo e inténtalo de nuevo.",

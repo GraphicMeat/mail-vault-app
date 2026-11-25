@@ -189,7 +189,10 @@ export function BillingSettings({ onNavigate, onReportBug }) {
   const [pricing, setPricing] = useState(null); // { currency, currencySource, plans: [...] }
   const [pricingLoading, setPricingLoading] = useState(false);
   const [pricingError, setPricingError] = useState(null);
-  const [signInNotice, setSignInNotice] = useState(null); // why the last sign-in granted nothing
+  // Why the last sign-in granted nothing; on open, that a 2.25.0 address sign-in needs the code.
+  const [signInNotice, setSignInNotice] = useState(() => (
+    useSettingsStore.getState().billingCodeSignInNeeded ? t('settings.billing.codeSignInNeeded') : null
+  ));
   // Email-code sign-in: the address the code went to (null = no code asked for yet).
   const [codeFor, setCodeFor] = useState(null);
   const [code, setCode] = useState('');

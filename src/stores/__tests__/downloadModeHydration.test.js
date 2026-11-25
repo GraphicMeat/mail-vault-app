@@ -21,7 +21,7 @@ vi.mock('../../services/daemonClient', () => ({
   daemonCall: async (method) => { h.calls.push(method); return { ok: true }; },
 }));
 
-const PREMIUM = { hasSubscription: true, status: 'active', premiumAccess: true };
+const PREMIUM = { customerId: 'cus_1', hasSubscription: true, status: 'active', premiumAccess: true };
 const settle = () => new Promise(resolve => setTimeout(resolve, 0));
 
 async function launch(state, version = 12) {

@@ -725,8 +725,14 @@ export const useSettingsStore = create(
       billingProfile: null,   // cached { customerId, hasSubscription, status, priceId, interval, currentPeriodEnd, cancelAtPeriodEnd, premiumAccess, clientLimit, activeClientCount, activeClients, currentClientId, clientAccessGranted }
       billingLastChecked: null,
       setBillingEmail: (email) => set({ billingEmail: email }),
-      setBillingProfile: (profile) => set({ billingProfile: profile, billingLastChecked: Date.now() }),
-      clearBillingProfile: () => set({ billingProfile: null, billingLastChecked: null, billingEmail: '' }),
+      // True after a 2.25.0 address sign-in was dropped (see addressOnlyProfilePatch):
+      // Billing asks for the emailed code until a profile with a customer id arrives.
+      billingCodeSignInNeeded: false,
+      setBillingProfile: (profile) => set({
+        billingProfile: profile, billingLastChecked: Date.now(),
+        ...(profile?.customerId ? { billingCodeSignInNeeded: false } : {}),
+      }),
+      clearBillingProfile: () => set({ billingProfile: null, billingLastChecked: null, billingEmail: '', billingCodeSignInNeeded: false }),
 
       // Lifecycle messages: the notes MailVault writes into the inbox about
       // Premium (trial ending, a checkout left, a plan ended). Switched on
@@ -1795,6 +1801,8 @@ export const useSettingsStore = create(
       merge: _mergePersistedSettings,
       // Migrate existing users from old defaults (5GB or 512MB) down to 128MB
       onRehydrateStorage: () => (state) => {
+        const addressOnly = addressOnlyProfilePatch(state);
+        if (addressOnly) setTimeout(() => useSettingsStore.setState(addressOnly), 0);
         if (state && state.cacheLimitMB >= 512) {
           setTimeout(() => useSettingsStore.setState({ cacheLimitMB: 128 }), 0);
         }
@@ -1903,6 +1911,18 @@ export function isTrackerBlockingActive(state) {
 export function refusesMailFontDownloads(state) {
   const s = state || useSettingsStore.getState();
   return isTrackerBlockingActive(s) || !!s?.holdExternalContent;
+}
+
+/**
+ * A saved Premium profile with no Stripe customer id came from a 2.25.0 address sign-in
+ * (the server answers those without the id). It can never refresh, so it would keep
+ * Premium after the plan ended: drop it and have Billing ask for the emailed code.
+ * The billing email stays, so the address is already picked. Null when nothing to do.
+ */
+export function addressOnlyProfilePatch(state) {
+  const p = state?.billingProfile;
+  if (!p?.hasSubscription || p.customerId) return null;
+  return { billingProfile: null, billingCodeSignInNeeded: true };
 }
 
 export function hasPremiumAccess(billingProfile) {

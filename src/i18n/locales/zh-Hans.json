@@ -2544,6 +2544,7 @@
   "settings.billing.signing": "正在登录…",
   "settings.billing.codeSent": "我们已向 {{email}} 发送了 6 位验证码，可能需要一分钟才能收到。",
   "settings.billing.code": "验证码",
+  "settings.billing.codeSignInNeeded": "要在这台电脑上继续使用 Premium，请用我们通过邮件发送的验证码重新登录。",
   "settings.billing.verifyCode": "登录",
   "settings.billing.newCode": "发送新验证码",
   "settings.billing.codeWrong": "验证码不正确。请检查后重试。",

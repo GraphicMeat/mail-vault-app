@@ -21,12 +21,12 @@ async function findCustomer(db, customerId) {
 }
 
 // Temporary exception. The server required the customer id (11-24) before any desktop
-// release had the code sign-in screen: 2.25.0 signs in by address alone and has nothing to
-// update to, so a new payer could never turn Premium on. Address sign-in stays open for
-// apps at or below this version while the latest PUBLISHED release is still at or below
-// it; publishing the next release closes it with no deploy. Delete this and its call in
-// the subscription-status route once that release is out.
+// release had the code sign-in screen: 2.25.0 signs in by address alone. Address sign-in
+// stays open for apps at or below this version through the end of spring 2027 (31 May,
+// UTC); from 2.26.0 the app signs in with the code. Delete this and its call in the
+// subscription-status route after LEGACY_EMAIL_SIGNIN_UNTIL.
 const LAST_EMAIL_SIGNIN_VERSION = '2.25.0';
+const LEGACY_EMAIL_SIGNIN_UNTIL = Date.UTC(2027, 5, 1);
 
 function parseVersion(v) {
   const m = typeof v === 'string' ? /^(\d+)\.(\d+)\.(\d+)/.exec(v) : null;
@@ -40,11 +40,10 @@ function atOrBelowLast(v) {
 }
 
 /** Whether a status call may name its customer by address (see LAST_EMAIL_SIGNIN_VERSION). */
-function legacyEmailSignInOpen({ appVersion, latestVersion, register }) {
-  if (register !== '1') return false;
+function legacyEmailSignInOpen({ appVersion, register, now }) {
+  if (register !== '1' || !(now < LEGACY_EMAIL_SIGNIN_UNTIL)) return false;
   const app = parseVersion(appVersion);
-  const latest = parseVersion(latestVersion);
-  return !!(app && latest && atOrBelowLast(app) && atOrBelowLast(latest));
+  return !!(app && atOrBelowLast(app));
 }
 
 /** The customer row for an address, only behind legacyEmailSignInOpen. */
@@ -73,6 +72,6 @@ function adminAuthorized(provided, expected) {
 }
 
 module.exports = {
-  findCustomer, findCustomerByLegacyEmail, legacyEmailSignInOpen, legacyView, LAST_EMAIL_SIGNIN_VERSION,
+  findCustomer, findCustomerByLegacyEmail, legacyEmailSignInOpen, legacyView, LAST_EMAIL_SIGNIN_VERSION, LEGACY_EMAIL_SIGNIN_UNTIL,
   adminAuthorized, CUSTOMER_ID_REQUIRED,
 };

@@ -2544,6 +2544,7 @@
   "settings.billing.signing": "Connexion…",
   "settings.billing.codeSent": "Nous avons envoyé un code à 6 chiffres à {{email}}. Il peut mettre une minute à arriver.",
   "settings.billing.code": "Code",
+  "settings.billing.codeSignInNeeded": "Pour garder Premium sur cet ordinateur, reconnectez-vous avec le code que nous vous envoyons par e-mail.",
   "settings.billing.verifyCode": "Se connecter",
   "settings.billing.newCode": "Envoyer un nouveau code",
   "settings.billing.codeWrong": "Ce code n'est pas correct. Vérifiez-le et réessayez.",

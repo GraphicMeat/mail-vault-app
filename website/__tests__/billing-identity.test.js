@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 const require = createRequire(import.meta.url);
 const {
-  findCustomer, findCustomerByLegacyEmail, legacyEmailSignInOpen, legacyView, LAST_EMAIL_SIGNIN_VERSION,
+  findCustomer, findCustomerByLegacyEmail, legacyEmailSignInOpen, legacyView, LAST_EMAIL_SIGNIN_VERSION, LEGACY_EMAIL_SIGNIN_UNTIL,
   adminAuthorized, CUSTOMER_ID_REQUIRED,
 } = require('../api/billing-identity.js');
 
@@ -22,43 +22,42 @@ function fakeDb(byId, byEmail = {}) {
 }
 
 // Server deployed code sign-in (11-24) before any app release had the code screen: 2.25.0
-// signs in by address alone and has nothing to update to, so a new payer could never turn
-// Premium on. Address sign-in stays open for those apps only until a newer release is
-// published, then closes by itself.
-describe('legacy address sign-in, until the code sign-in app is released', () => {
-  const open = (appVersion, latestVersion, register = '1') => legacyEmailSignInOpen({ appVersion, latestVersion, register });
+// signs in by address alone. Address sign-in stays open for 2.25.0 and older until the end
+// of spring 2027 (through 31 May, UTC); from 2.26.0 the app must sign in with the code.
+describe('legacy address sign-in for 2.25.0 and older, until the end of spring 2027', () => {
+  const SPRING = Date.UTC(2027, 4, 31, 23, 59, 59);
+  const open = (appVersion, now = Date.UTC(2026, 10, 25)) => legacyEmailSignInOpen({ appVersion, register: '1', now });
 
-  it('names 2.25.0 as the last app that signs in by address', () => {
+  it('names 2.25.0 as the last app that signs in by address, and 1 June 2027 as the end', () => {
     expect(LAST_EMAIL_SIGNIN_VERSION).toBe('2.25.0');
+    expect(LEGACY_EMAIL_SIGNIN_UNTIL).toBe(Date.UTC(2027, 5, 1));
   });
 
-  it('opens for 2.25.0 and older while no newer release is published', () => {
-    expect(open('2.25.0', '2.25.0')).toBe(true);
-    expect(open('2.24.3', '2.25.0')).toBe(true);
-    expect(open('1.9.0', '2.25.0')).toBe(true);
+  it('opens for 2.25.0 and older through 31 May 2027', () => {
+    expect(open('2.25.0')).toBe(true);
+    expect(open('2.24.3')).toBe(true);
+    expect(open('1.9.0')).toBe(true);
+    expect(open('2.25.0', SPRING)).toBe(true);
   });
 
-  it('closes by itself once a newer release is published (patch or minor)', () => {
-    expect(open('2.25.0', '2.25.1')).toBe(false);
-    expect(open('2.25.0', '2.26.0')).toBe(false);
-    expect(open('2.25.0', '3.0.0')).toBe(false);
+  it('closes from 1 June 2027', () => {
+    expect(open('2.25.0', Date.UTC(2027, 5, 1))).toBe(false);
+    expect(open('2.25.0', Date.UTC(2028, 0, 1))).toBe(false);
   });
 
-  it('stays closed for an app that has code sign-in', () => {
-    expect(open('2.25.1', '2.25.0')).toBe(false);
-    expect(open('2.26.0', '2.25.0')).toBe(false);
+  it('stays closed for 2.25.1, 2.26.0 and later, which have code sign-in', () => {
+    expect(open('2.25.1')).toBe(false);
+    expect(open('2.26.0')).toBe(false);
+    expect(open('3.0.0')).toBe(false);
   });
 
-  it('stays closed when either version is unknown or malformed', () => {
-    for (const [a, l] of [[undefined, '2.25.0'], ['', '2.25.0'], ['x', '2.25.0'], [['2.25.0'], '2.25.0'],
-      ['2.25.0', null], ['2.25.0', undefined], ['2.25.0', 'v-next']]) {
-      expect(open(a, l), `${a} / ${l}`).toBe(false);
-    }
+  it('stays closed when the app version is unknown or malformed', () => {
+    for (const a of [undefined, '', 'x', ['2.25.0'], 'v2.25.0']) expect(open(a), String(a)).toBe(false);
   });
 
   it('only for the sign-in call that registers this device (what 2.25.0 sends)', () => {
-    expect(legacyEmailSignInOpen({ appVersion: '2.25.0', latestVersion: '2.25.0' })).toBe(false);
-    expect(open('2.25.0', '2.25.0', '0')).toBe(false);
+    expect(legacyEmailSignInOpen({ appVersion: '2.25.0', now: Date.UTC(2026, 10, 25) })).toBe(false);
+    expect(legacyEmailSignInOpen({ appVersion: '2.25.0', register: '0', now: Date.UTC(2026, 10, 25) })).toBe(false);
   });
 
   it('finds the customer by lower-cased address, and nobody for a non-address', async () => {
@@ -79,8 +78,7 @@ describe('legacy address sign-in, until the code sign-in app is released', () =>
     const lookup = body.indexOf('findCustomerByLegacyEmail(');
     expect(gate).toBeGreaterThan(0);
     expect(lookup).toBeGreaterThan(gate);
-    // The gate reads the latest PUBLISHED release, so publishing closes it with no deploy.
-    expect(body).toMatch(/latestPublishedVersion\(/);
+    expect(body).toMatch(/legacyEmailSignInOpen\(\{ appVersion, register, now: Date\.now\(\) \}\)/);
   });
 
   // The Stripe id is the key to the billing portal (cancel, invoices, card) and to removing

@@ -2544,6 +2544,7 @@
   "settings.billing.signing": "Wird angemeldet …",
   "settings.billing.codeSent": "Wir haben einen 6-stelligen Code an {{email}} gesendet. Es kann eine Minute dauern, bis er ankommt.",
   "settings.billing.code": "Code",
+  "settings.billing.codeSignInNeeded": "Um Premium auf diesem Computer zu behalten, melde dich erneut mit dem Code an, den wir dir per E-Mail senden.",
   "settings.billing.verifyCode": "Anmelden",
   "settings.billing.newCode": "Neuen Code senden",
   "settings.billing.codeWrong": "Der Code stimmt nicht. Prüfe ihn und versuche es erneut.",
