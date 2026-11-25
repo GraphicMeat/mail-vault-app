@@ -110,6 +110,21 @@ describe('legacy address sign-in for 2.25.0 and older, until the end of spring 2
     expect(body.match(/res\.json\(/g).length).toBeLessThanOrEqual(4); // 400, legacy, reply, 500
   });
 
+  // At the device limit a code sign-in replaces the oldest device. An address alone must
+  // never do that: anyone could keep signing the owner's Macs out of Premium.
+  it('an address sign-in never revokes a device; at the limit it gets no seat', () => {
+    const src = readFileSync(new URL('../api/server.js', import.meta.url), 'utf8');
+    const start = src.indexOf("'/api/billing/subscription-status'");
+    const body = src.slice(start, src.indexOf('\napp.', start + 1));
+    const guard = body.indexOf('if (full && legacy)');
+    const revoke = body.indexOf('SET revoked_at = NOW()');
+    const insert = body.indexOf('INSERT INTO billing_clients');
+    expect(guard).toBeGreaterThan(0);
+    expect(revoke).toBeGreaterThan(guard);
+    expect(insert).toBeGreaterThan(guard);
+    expect(body.match(/SET revoked_at = NOW\(\)/g)).toHaveLength(1);
+  });
+
   it('no other billing route takes an address', () => {
     const src = readFileSync(new URL('../api/server.js', import.meta.url), 'utf8');
     for (const route of ['/api/billing/register-client', '/api/billing/unregister-client', '/api/billing/portal-session']) {

@@ -1201,19 +1201,24 @@ app.get('/api/billing/subscription-status', statusLimiter, async (req, res) => {
         } else {
           // New client — check limit and insert
           const currentActive = await getActiveClients(db, customerRow.id);
-          if (currentActive.length >= CLIENT_LIMIT) {
-            const oldest = currentActive[currentActive.length - 1];
+          const full = currentActive.length >= CLIENT_LIMIT;
+          if (full && legacy) {
+            // An address sign-in never takes a seat from a signed-in device: no seat for it.
+          } else {
+            if (full) {
+              const oldest = currentActive[currentActive.length - 1];
+              await db.execute(
+                `UPDATE billing_clients SET revoked_at = NOW() WHERE billing_customer_id = ? AND client_id = ?`,
+                [customerRow.id, oldest.client_id]
+              );
+              replacedClient = { clientId: oldest.client_id, clientName: oldest.client_name, platform: oldest.platform, lastSeenAt: oldest.last_seen_at };
+            }
             await db.execute(
-              `UPDATE billing_clients SET revoked_at = NOW() WHERE billing_customer_id = ? AND client_id = ?`,
-              [customerRow.id, oldest.client_id]
+              `INSERT INTO billing_clients (billing_customer_id, client_id, client_name, platform, app_version, os_version)
+               VALUES (?, ?, ?, ?, ?, ?)`,
+              [customerRow.id, clientId, clientName || null, platform || null, appVersion || null, osVersion || null]
             );
-            replacedClient = { clientId: oldest.client_id, clientName: oldest.client_name, platform: oldest.platform, lastSeenAt: oldest.last_seen_at };
           }
-          await db.execute(
-            `INSERT INTO billing_clients (billing_customer_id, client_id, client_name, platform, app_version, os_version)
-             VALUES (?, ?, ?, ?, ?, ?)`,
-            [customerRow.id, clientId, clientName || null, platform || null, appVersion || null, osVersion || null]
-          );
         }
       }
     }
