@@ -71,6 +71,41 @@ describe('LifecycleMessageView', () => {
     expect(useLifecycleStore.getState().openId).toBeNull();
   });
 
+  it('the free note tells the Premium story in illustrated scenes, then what stays free', () => {
+    useLifecycleStore.setState({ rows: [row('free-nudge', 'free-nudge')], openId: 'free-nudge' });
+    render(<LifecycleMessageView onOpenBilling={() => {}} />);
+    const scenes = screen.getAllByTestId('lifecycle-scene');
+    expect(scenes.map((li) => li.dataset.scene)).toEqual(['backups', 'cleanup', 'privacy']);
+    for (const li of scenes) {
+      const id = li.dataset.scene;
+      expect(li.textContent).toContain(t(`lifecycle.freeNudge.scene.${id}.title`));
+      expect(li.textContent).toContain(t(`lifecycle.freeNudge.scene.${id}.blurb`));
+      expect(li.querySelector('img')?.getAttribute('src')).toBeTruthy();
+    }
+    const free = screen.getByTestId('lifecycle-free-feature');
+    expect(free.textContent).toContain(t('lifecycle.freeNudge.freeTitle'));
+    expect(free.textContent).toContain(t('lifecycle.freeBadge'));
+    expect(screen.getByTestId('lifecycle-message-outro').textContent).toBe(t('lifecycle.freeNudge.outro'));
+    expect(screen.getByTestId('lifecycle-open-billing').textContent).toBe(t('lifecycle.freeNudge.cta'));
+    const star = screen.getByTestId('lifecycle-star');
+    expect(star.textContent).toContain(t('lifecycle.freeNudge.star.title'));
+    expect(star.textContent).toContain(t('lifecycle.freeNudge.star.blurb'));
+    const link = screen.getByTestId('lifecycle-star-link');
+    expect(link.getAttribute('href')).toBe('https://github.com/GraphicMeat/mail-vault-app');
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.textContent).toBe(t('lifecycle.freeNudge.star.link'));
+  });
+
+  it('other notes carry no feature list', () => {
+    useLifecycleStore.setState({ rows: [row('plan-ended:1', 'plan-ended')], openId: 'plan-ended:1' });
+    render(<LifecycleMessageView onOpenBilling={() => {}} />);
+    expect(screen.queryAllByTestId('lifecycle-scene')).toHaveLength(0);
+    expect(screen.queryByTestId('lifecycle-star')).toBeNull();
+    expect(screen.getByTestId('lifecycle-open-billing').textContent).toBe(t('lifecycle.cta'));
+    expect(screen.queryByTestId('lifecycle-message-outro')).toBeNull();
+    expect(screen.queryByTestId('lifecycle-free-feature')).toBeNull();
+  });
+
   it('renders nothing for a kind this version does not know', () => {
     useLifecycleStore.setState({ rows: [row('x', 'from-the-future')], openId: 'x' });
     const { container } = render(<LifecycleMessageView onOpenBilling={() => {}} />);

@@ -11,14 +11,17 @@ import {
 import { IS_APPSTORE_BUILD, IAP_PRODUCT_BACKUPS } from '../../utils/buildFlags';
 import MailStorageLocation from './MailStorageLocation';
 import BackupLocationPicker from './BackupLocationPicker';
-import { useBackupsEntitled } from '../../hooks/useBackupsEntitled';
+import { useBackupsEntitled, useDrivePremiumLocked } from '../../hooks/useBackupsEntitled';
+import { usePremiumPriceBlurb } from '../../hooks/usePremiumPricing.js';
 import { t as tr, useT  } from '../../i18n/index.js';
 import { T } from '../../i18n/T.jsx';
 
 const selectClass = 'w-full px-4 py-2 text-sm bg-mail-surface border border-mail-border rounded-lg text-mail-text focus:outline-none focus:ring-1 focus:ring-mail-accent';
 
-export default function BackupConfig() {
+export default function BackupConfig({ onUpgrade }) {
   const t = useT();
+  const driveLocked = useDrivePremiumLocked();
+  const priceBlurb = usePremiumPriceBlurb();
   const backupScope = useSettingsStore(s => s.backupScope);
   const setBackupScope = useSettingsStore(s => s.setBackupScope);
   const setBackupCustomPath = useSettingsStore(s => s.setBackupCustomPath);
@@ -42,6 +45,16 @@ export default function BackupConfig() {
       }).catch(() => {});
     }
   }, []);
+
+  // Forgetting the drive is always allowed, Premium or not.
+  const handleRemoveDrive = async () => {
+    try {
+      const inv = window.__TAURI__?.core?.invoke;
+      if (inv) await inv('backup_clear_external_location');
+      setExternalBackupLocation(null);
+      setBackupCustomPath(null);
+    } catch { /* ignore */ }
+  };
 
   const handlePurchase = async () => {
     setIapBusy('purchase');
@@ -180,9 +193,16 @@ export default function BackupConfig() {
                parts={[(s) => <strong>{s}</strong>]} />
           </p>
           <p className="text-xs text-mail-text-muted mb-2">{t('settings.backup.config.storageHint')}</p>
-          <BackupLocationPicker />
+          {driveLocked ? (
+            <DrivePremiumPanel
+              location={externalBackupLocation}
+              priceBlurb={priceBlurb}
+              onUpgrade={onUpgrade}
+              onRemove={handleRemoveDrive}
+            />
+          ) : <BackupLocationPicker />}
 
-          {externalBackupLocation?.status === 'ready' ? (
+          {driveLocked ? null : externalBackupLocation?.status === 'ready' ? (
             <div className="mt-2 space-y-1">
               <p className="text-xs text-mail-success">
                 {t('settings.backup.config.secondCopyActivePlainEml')}
@@ -204,6 +224,49 @@ export default function BackupConfig() {
           ) : null}
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Backup to another drive without Premium (direct build). With no drive set it
+ * is the Premium upsell; with one set the drive stays visible, says copies are
+ * paused and everything on it is kept, and can still be removed.
+ */
+function DrivePremiumPanel({ location, priceBlurb, onUpgrade, onRemove }) {
+  const t = useT();
+  const upsell = (
+    <>
+      {priceBlurb && <p className="text-xs text-mail-text-muted">{priceBlurb}</p>}
+      {onUpgrade && (
+        <Button variant="primary" size="sm" pill className="text-xs font-semibold" onClick={onUpgrade}>
+          {t('common.upgrade')}
+        </Button>
+      )}
+    </>
+  );
+  if (location) {
+    return (
+      <div data-testid="backup-drive-paused" className="space-y-2 bg-mail-bg border border-mail-border rounded-lg p-3">
+        <div className="flex items-center gap-2">
+          <div className="flex-1 text-xs text-mail-text font-mono truncate">{location.displayPath}</div>
+          <Button variant="ghost" size="xs" className="text-xs py-1" onClick={onRemove}>
+            {t('settings.backup.config.removeExternalBackupLocation')}
+          </Button>
+        </div>
+        <p className="text-xs text-mail-text-muted">{t('settings.backup.config.externalPausedFree')}</p>
+        {upsell}
+      </div>
+    );
+  }
+  return (
+    <div data-testid="backup-drive-locked" className="space-y-2 bg-mail-bg border border-mail-border rounded-lg p-3">
+      <p className="text-sm font-semibold text-mail-text flex items-center gap-2">
+        <Lock size={14} className="text-mail-accent-text" />
+        {t('common.premiumFeature')}
+      </p>
+      <p className="text-xs text-mail-text-muted">{t('premium.externalBackup.blurb')}</p>
+      {upsell}
     </div>
   );
 }

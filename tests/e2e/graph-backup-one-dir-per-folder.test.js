@@ -11,6 +11,7 @@ import { join } from 'node:path';
 import { waitForApp, waitForEmails, switchToFolder, runBackupAndWait } from './helpers.js';
 import { appDataDir } from './mockImap.js';
 import { GRAPH_EMAIL } from './mockGraph.js';
+import { usePremiumPlan } from './premiumPlan.js';
 
 /** `browser.execute` does not await a Promise; `executeAsync` does. */
 function invoke(cmd, args) {
@@ -36,6 +37,7 @@ describe('Graph backup: one directory per folder on each side', function () {
     await switchToFolder(GRAPH_EMAIL, 'Sent');
     await waitForEmails();
     backupRoot = mkdtempSync(join(tmpdir(), 'mv-graph-backup-'));
+    await usePremiumPlan(); // the drive is Premium (premiumPlan.js)
     const loc = await invoke('backup_save_external_location', { path: backupRoot });
     if (loc?.__error) throw new Error(`backup_save_external_location: ${loc.__error}`);
   });

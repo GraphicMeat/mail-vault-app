@@ -40,6 +40,7 @@ mod account_removal;
 mod account_workflows;
 #[cfg(test)]
 mod draft_contract_tests;
+mod drive_gate;
 mod events;
 mod export_fetch;
 mod follow_up_worker;

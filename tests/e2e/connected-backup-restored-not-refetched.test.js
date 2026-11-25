@@ -26,6 +26,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { waitForApp, waitForEmails, runBackupAndWait } from './helpers.js';
 import { appDataDir, INFO_SEP } from './mockImap.js';
+import { usePremiumPlan } from './premiumPlan.js';
 
 const VADER = 'vader@mock.test';
 const FOLDER = 'Matrix';
@@ -107,6 +108,7 @@ describe('Backup pre-sync: a uid restored from the mirror is not fetched again',
     mkdirSync(mirror, { recursive: true });
     for (const uid of RESTORED) writeFileSync(join(mirror, `${uid}.eml`), eml(uid));
 
+    await usePremiumPlan(); // the drive is Premium (premiumPlan.js)
     const loc = await invoke('backup_save_external_location', { path: backupRoot });
     if (loc?.__error) throw new Error(`backup_save_external_location: ${loc.__error}`);
   });

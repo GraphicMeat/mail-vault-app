@@ -322,8 +322,14 @@ fn jmap_refusal_log_line(method: &str, resp: &RpcResponse) -> Option<String> {
 /// a router that declines a method the registry gave it, falls back to the
 /// linear chain (`route_chain`) and logs once, so a wrong table row can never
 /// turn a working method into `METHOD_NOT_FOUND`.
-async fn route_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcResponse {
+async fn route_request(state: &Arc<DaemonState>, mut req: RpcRequest) -> RpcResponse {
     let id = req.id.clone().unwrap_or(Value::Null);
+
+    // The backup drive is Premium (direct build): a drive writer never gets a
+    // root the plan may not use (`drive_gate`).
+    if let Err(key) = crate::drive_gate::gate_params(state, &req.method, &mut req.params).await {
+        return RpcResponse::error(id, ipc::INVALID_PARAMS, key);
+    }
 
     if crate::search_index::is_foreground_method(&req.method) {
         crate::search_index::note_foreground(&state.search_index);

@@ -30,6 +30,7 @@ import {
 } from './helpers.js';
 import { openTab } from './mockBilling.js';
 import { appDataDir, INFO_SEP } from './mockImap.js';
+import { usePremiumPlan } from './premiumPlan.js';
 
 const LUKE = 'luke@mock.test';
 const IMPORT_UID_BASE = 0xC000_0000;
@@ -265,6 +266,7 @@ describe('MBOX import as a separate folder: a folder kept on this computer', fun
 
   it('is mirrored into the backup location, into a folder of its own', async function () {
     expect(folder).toBeTruthy();
+    await usePremiumPlan(); // the drive is Premium (premiumPlan.js)
     const loc = await invoke('backup_save_external_location', { path: backupRoot });
     if (loc?.__error) throw new Error(`backup_save_external_location: ${loc.__error}`);
 

@@ -33,6 +33,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { waitForApp, waitForEmails, runBackupAndWait } from './helpers.js';
 import { appDataDir, INFO_PREFIX, INFO_SEP } from './mockImap.js';
+import { usePremiumPlan } from './premiumPlan.js';
 
 const LUKE = 'luke@mock.test';
 
@@ -112,6 +113,7 @@ describe('Backup pre-sync — orphaned messages stay orphaned', function () {
     // ...alongside one the repair never touched, which must still come home.
     writeFileSync(join(mirror, `${RESTORABLE_UID}${INFO_PREFIX}S.eml`), eml(RESTORABLE_ID, 'Only copy left'));
 
+    await usePremiumPlan(); // the drive is Premium (premiumPlan.js)
     const loc = await invoke('backup_save_external_location', { path: backupRoot });
     console.log('[backup-orphan] backup_save_external_location ->', JSON.stringify(loc));
 

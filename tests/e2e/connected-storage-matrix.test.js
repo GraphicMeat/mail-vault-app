@@ -85,6 +85,7 @@ import {
 import { appDataDir, INFO_SEP } from './mockImap.js';
 import { DatabaseSync } from 'node:sqlite';
 import { clickSelectionAction, confirmSelectionDialog } from './selectionBar.js';
+import { usePremiumPlan } from './premiumPlan.js';
 
 describe('Storage matrix diagnostics', function () {
   this.timeout(600_000);
@@ -548,6 +549,7 @@ describe('Storage matrix diagnostics', function () {
 
   describe('storage matrix combinations', function () {
     before(async function () {
+      await usePremiumPlan(); // the drive is Premium (premiumPlan.js)
       const loc = await invoke('backup_save_external_location', { path: backupRoot });
       console.log('[storage-matrix] backup_save_external_location ->', JSON.stringify(loc));
 

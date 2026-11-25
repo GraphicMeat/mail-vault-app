@@ -1119,6 +1119,20 @@ async fn admission_facts(state: &Arc<DaemonState>) -> Result<(Value, Vec<String>
     .await
     .map_err(|_| "pending_settings".to_string())?
 }
+/// The backup drive for this run. Without Premium (direct build) there is
+/// none, and native access is not even asked for: a configured drive must not
+/// hold a free run in `pending_access` for a drive nothing is written to
+/// (`drive_gate`).
+async fn drive_root(
+    state: &Arc<DaemonState>,
+    intent: &Intent,
+    settings: &Value,
+) -> Result<Option<String>, Option<mailvault_core::backup_access::Attempt>> {
+    if !crate::drive_gate::allowed_by(state, settings) {
+        return Ok(None);
+    }
+    access::root(state, intent).await
+}
 async fn run_intent(state: &Arc<DaemonState>, intent: &Intent, services: Services) -> RunExit {
     let (settings, ids, _absent) = match admission_facts(state).await {
         Ok(f) => f,
@@ -1130,7 +1144,7 @@ async fn run_intent(state: &Arc<DaemonState>, intent: &Intent, services: Service
     if !intent.manual && !automatic_ready(state) {
         return RunExit::Pending("pending_policy".into());
     }
-    if let Err(observed) = access::root(state, intent).await {
+    if let Err(observed) = drive_root(state, intent, &settings).await {
         return RunExit::PendingAccess { observed };
     }
     let now = state.clock.now_ms();
@@ -1173,7 +1187,7 @@ async fn run_intent(state: &Arc<DaemonState>, intent: &Intent, services: Service
                 return match admission_facts(state).await {
                     Err(stage) => RunExit::Pending(stage),
                     Ok((_, ids, _)) if !ids.contains(&intent.account_id) => RunExit::Missing,
-                    Ok(_) => match access::root(state, intent).await {
+                    Ok((settings, _, _)) => match drive_root(state, intent, &settings).await {
                         Err(observed) => RunExit::PendingAccess { observed },
                         Ok(_) => RunExit::Credentials(error),
                     },
@@ -1202,7 +1216,7 @@ async fn run_intent(state: &Arc<DaemonState>, intent: &Intent, services: Service
     if !intent.manual && !automatic_ready(state) {
         return RunExit::Pending("pending_policy".into());
     }
-    let mirror_root = match access::root(state, intent).await {
+    let mirror_root = match drive_root(state, intent, &fresh).await {
         Ok(root) => root,
         Err(observed) => return RunExit::PendingAccess { observed },
     };

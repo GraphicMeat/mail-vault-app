@@ -30,6 +30,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { waitForApp, waitForEmails, runBackupAndWait } from './helpers.js';
 import { appDataDir, INFO_SEP } from './mockImap.js';
+import { usePremiumPlan } from './premiumPlan.js';
 
 const YODA = 'yoda@mock.test';
 const FOLDER = 'Bokelmu&Awg-hle';   // the wire name — what SELECT and the mirror use
@@ -77,6 +78,7 @@ describe('Backup — a message the server refuses is a partial run, not a failed
     // would test that spec's teardown instead of this one's subject.
     backupRoot = mkdtempSync(join(tmpdir(), 'mv-partial-mirror-'));
     mirror = join(backupRoot, YODA, FOLDER, 'cur');
+    await usePremiumPlan(); // the drive is Premium (premiumPlan.js)
     await invoke('backup_save_external_location', { path: backupRoot });
 
     // Fire-and-forget since the runners moved to the daemon: the outcome comes

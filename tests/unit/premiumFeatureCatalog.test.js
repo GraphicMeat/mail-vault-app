@@ -10,7 +10,7 @@ const TAB_IDS = [...settingsSource.matchAll(/\{\s*id:\s*'([a-z-]+)'/g)].map(m =>
 describe('premium feature catalog', () => {
   it('covers every premium feature the product sells', () => {
     expect(PREMIUM_FEATURES.map(f => f.id)).toEqual([
-      'backup-schedule', 'backup-health', 'cleanup', 'time-capsule',
+      'backup-schedule', 'backup-health', 'external-backup', 'cleanup', 'time-capsule',
       'tracker-blocking', 'auto-cleanup', 'migration', 'server-change',
       'export-image', 'focus-session', 'scheduled-send', 'follow-up-reminder', 'attachment-reminder',
       'devices', 'attachment-search',

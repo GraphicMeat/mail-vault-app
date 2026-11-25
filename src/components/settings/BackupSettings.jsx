@@ -29,7 +29,7 @@ export default function BackupSettings({ initialAccountId = null, initialSubTab 
     <SettingsTabs tabs={backupSubTabs()} value={activeSubTab} onChange={value => { setActiveSubTab(value); onSubTabChange?.(value); }}
       label={t('settings.tab.backup')}>
         {activeSubTab === 'restore' && <BackupRestore />}
-        {activeSubTab === 'config' && <BackupConfig />}
+        {activeSubTab === 'config' && <BackupConfig onUpgrade={onUpgrade} />}
         {activeSubTab === 'schedule' && (
           <BackupSchedule initialAccountId={initialAccountId} onUpgrade={onUpgrade} />
         )}

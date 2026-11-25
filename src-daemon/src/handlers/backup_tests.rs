@@ -127,6 +127,8 @@ fn backup_purge_uids_waits_off_runtime_and_finishes_before_reply() {
     std::fs::write(&target, b"legacy queued copy").unwrap();
     std::fs::write(&untouched, b"keep").unwrap();
     let root = MirrorRoot::resolve(mirror.path()).unwrap();
+    // Deleting from the drive needs the drive, which is Premium (`drive_gate`).
+    crate::test_support::premium_plan_for_test(&state);
     let params = json!({"email":"me@test", "mailbox":"Projects/Sub", "uids":[7], "mirrorRoot":mirror.path(), "externalStatus":"available"});
     let (control_tx, control_rx) = mpsc::channel();
     let (reply_tx, reply_rx) = mpsc::channel();
@@ -653,4 +655,285 @@ async fn backup_real_mirror_drain_retains_claim_after_cancel_ack() {
     })
     .await
     .unwrap();
+}
+
+// ── Backup to another drive is Premium (direct build, 2026-11-25) ──────────
+//
+// Every RPC that carries a drive root goes through the daemon's dispatcher,
+// and the dispatcher is where a free or lapsed plan loses the drive: these
+// drive the real dispatch, never the handler function directly.
+mod drive_premium {
+    use super::*;
+
+    const NOW: i64 = 1_792_929_600_000; // 2026-10-25T12:00:00Z
+
+    fn with_plan(s: &Arc<DaemonState>, state: Value) {
+        s.clock.set(NOW);
+        std::fs::write(
+            s.app_dir.join("frontend-settings.json"),
+            json!({"mailvault-settings": {"state": state}}).to_string(),
+        )
+        .unwrap();
+    }
+    fn free() -> Value { json!({"language": "en"}) }
+    fn premium() -> Value { json!({"billingProfile": {"hasSubscription": true, "status": "active"}}) }
+    fn lapsed() -> Value {
+        json!({"billingProfile": {"hasSubscription": true, "status": "canceled", "currentPeriodEnd": "2026-10-01T00:00:00Z"}})
+    }
+    fn drive_files(mirror: &std::path::Path, email: &str, mailbox: &str) -> Vec<String> {
+        let mut names: Vec<String> = std::fs::read_dir(mirror.join(email).join(mailbox).join("cur"))
+            .map(|d| d.flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect())
+            .unwrap_or_default();
+        names.sort();
+        names
+    }
+
+    #[tokio::test]
+    async fn free_copy_to_the_drive_writes_nothing_there() {
+        let (v, s) = st();
+        with_plan(&s, free());
+        let mirror = tempfile::tempdir().unwrap();
+        seed_archived(v.path(), "acct1", "INBOX", 7, "a@x");
+        let resp = handle_request_for_test(
+            &s,
+            "backup_copy_uids",
+            json!({"accountId": "acct1", "email": "me@x.test", "mailbox": "INBOX", "uids": [7],
+                   "mirrorRoot": mirror.path().to_string_lossy()}),
+        )
+        .await;
+        assert!(!mirror.path().join("me@x.test").exists(), "a free plan wrote to the drive: {:?}", resp.result);
+        // No copy means the caller keeps the mail on the server.
+        assert!(resp.error.is_some(), "a refused copy must not read as a copy: {:?}", resp.result);
+    }
+
+    #[tokio::test]
+    async fn premium_copy_to_the_drive_still_writes_it() {
+        let (v, s) = st();
+        with_plan(&s, premium());
+        let mirror = tempfile::tempdir().unwrap();
+        seed_archived(v.path(), "acct1", "INBOX", 7, "a@x");
+        let resp = handle_request_for_test(
+            &s,
+            "backup_copy_uids",
+            json!({"accountId": "acct1", "email": "me@x.test", "mailbox": "INBOX", "uids": [7],
+                   "mirrorRoot": mirror.path().to_string_lossy()}),
+        )
+        .await;
+        assert!(resp.error.is_none(), "{:?}", resp.error);
+        assert_eq!(drive_files(mirror.path(), "me@x.test", "INBOX").len(), 1);
+    }
+
+    #[tokio::test]
+    async fn lapsed_copy_adds_nothing_and_keeps_what_is_already_on_the_drive() {
+        let (v, s) = st();
+        with_plan(&s, lapsed());
+        let mirror = tempfile::tempdir().unwrap();
+        let cur = mailvault_core::maildir::mirror_cur(mirror.path(), "me@x.test", "INBOX").unwrap();
+        std::fs::create_dir_all(&cur).unwrap();
+        std::fs::write(cur.join("1.eml"), b"copied while premium").unwrap();
+        seed_archived(v.path(), "acct1", "INBOX", 7, "a@x");
+        let _ = handle_request_for_test(
+            &s,
+            "backup_copy_uids",
+            json!({"accountId": "acct1", "email": "me@x.test", "mailbox": "INBOX", "uids": [7],
+                   "mirrorRoot": mirror.path().to_string_lossy()}),
+        )
+        .await;
+        assert_eq!(drive_files(mirror.path(), "me@x.test", "INBOX"), vec!["1.eml".to_string()]);
+        assert_eq!(std::fs::read(cur.join("1.eml")).unwrap(), b"copied while premium");
+    }
+
+    #[tokio::test]
+    async fn free_purge_never_deletes_from_the_drive() {
+        let (_v, s) = st();
+        with_plan(&s, free());
+        let mirror = tempfile::tempdir().unwrap();
+        let cur = mailvault_core::maildir::mirror_cur(mirror.path(), "me@test", "INBOX").unwrap();
+        std::fs::create_dir_all(&cur).unwrap();
+        std::fs::write(cur.join("7.eml"), b"kept").unwrap();
+        let resp = handle_request_for_test(
+            &s,
+            "backup_purge_uids",
+            json!({"email": "me@test", "mailbox": "INBOX", "uids": [7],
+                   "mirrorRoot": mirror.path(), "externalStatus": "ready"}),
+        )
+        .await;
+        assert!(cur.join("7.eml").exists(), "a free plan deleted from the drive: {:?} {:?}", resp.result, resp.error);
+    }
+
+    #[tokio::test]
+    async fn free_flag_change_never_touches_the_drive_copy() {
+        let (v, s) = st();
+        with_plan(&s, free());
+        let mirror = tempfile::tempdir().unwrap();
+        let src = seed_archived(v.path(), "acct1", "INBOX", 7, "a@x");
+        let cur = mailvault_core::maildir::mirror_cur(mirror.path(), "me@x.test", "INBOX").unwrap();
+        std::fs::create_dir_all(&cur).unwrap();
+        let name = src.file_name().unwrap().to_owned();
+        std::fs::copy(&src, cur.join(&name)).unwrap();
+        let before = drive_files(mirror.path(), "me@x.test", "INBOX");
+        let resp = handle_request_for_test(
+            &s,
+            "vault_apply_flags",
+            json!({"accountId": "acct1", "mailbox": "INBOX", "accountEmail": "me@x.test",
+                   "mirrorRoot": mirror.path(), "changes": [{"uid": 7, "flags": ["\\Flagged"], "on": true}]}),
+        )
+        .await;
+        assert!(resp.error.is_none(), "{:?}", resp.error);
+        assert_eq!(drive_files(mirror.path(), "me@x.test", "INBOX"), before, "a free plan renamed the drive copy");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn free_run_saves_the_vault_and_leaves_the_drive_untouched() {
+        use crate::jmap_test_support as support;
+        use mock_jmap::MockJmap;
+        let (_v, s) = st();
+        with_plan(&s, lapsed());
+        let m = MockJmap::start(support::scenario());
+        let (_trap, port) = support::imap_trap();
+        let mirror = tempfile::tempdir().unwrap();
+        let cur = mailvault_core::maildir::mirror_cur(mirror.path(), "alice@example.test", "INBOX").unwrap();
+        std::fs::create_dir_all(&cur).unwrap();
+        std::fs::write(cur.join("old.eml"), b"copied while premium").unwrap();
+        let mut rx = s.events.subscribe();
+
+        let resp = handle_request_for_test(
+            &s,
+            "backup_run_account",
+            json!({"accountId": "acct1", "accountJson": support::account_json(&m, port).to_string(),
+                   "mirrorRoot": mirror.path()}),
+        )
+        .await;
+        assert!(resp.error.is_none(), "{:?}", resp.error);
+        let done = super::daily_limit::terminal_frame(&mut rx).await;
+
+        assert_eq!(done["success"], json!(true), "{done}");
+        assert_eq!(done["completed_emails"], json!(3), "the vault still gets every message: {done}");
+        assert_eq!(drive_files(mirror.path(), "alice@example.test", "INBOX"), vec!["old.eml".to_string()]);
+        assert!(drive_files(mirror.path(), "alice@example.test", "Work").is_empty(), "a lapsed plan wrote to the drive");
+    }
+}
+
+// ── Fix wave: only drive WRITERS are gated; the decision is cached ─────────
+mod drive_gate_fixes {
+    use super::*;
+
+    const NOW: i64 = 1_792_929_600_000; // 2026-10-25T12:00:00Z
+
+    fn with_plan(s: &Arc<DaemonState>, state: Value) {
+        s.clock.set(NOW);
+        std::fs::write(
+            s.app_dir.join("frontend-settings.json"),
+            json!({"mailvault-settings": {"state": state}}).to_string(),
+        )
+        .unwrap();
+    }
+    fn copy(mirror: &std::path::Path) -> Value {
+        json!({"accountId": "acct1", "email": "me@x.test", "mailbox": "INBOX", "uids": [7],
+               "mirrorRoot": mirror.to_string_lossy()})
+    }
+    fn on_drive(mirror: &std::path::Path) -> usize {
+        std::fs::read_dir(mirror.join("me@x.test").join("INBOX").join("cur")).map(|d| d.count()).unwrap_or(0)
+    }
+
+    /// Reading the drive writes nothing: a free user with a reachable drive
+    /// still sees what is on it, never "drive not connected".
+    #[tokio::test]
+    async fn free_scan_still_reads_the_drive() {
+        let (_v, s) = st();
+        with_plan(&s, json!({"language": "en"}));
+        let mirror = tempfile::tempdir().unwrap();
+        let cur = mailvault_core::maildir::mirror_cur(mirror.path(), "me@test", "INBOX").unwrap();
+        std::fs::create_dir_all(&cur).unwrap();
+        std::fs::write(cur.join("7.eml"), b"Message-ID: <a@x>\r\n\r\nx").unwrap();
+        let resp = handle_request_for_test(
+            &s,
+            "backup_scan_uids",
+            json!({"email": "me@test", "mailbox": "INBOX", "mirrorRoot": mirror.path()}),
+        )
+        .await;
+        assert_eq!(resp.result, Some(json!([7])), "{:?}", resp.error);
+    }
+
+    #[tokio::test]
+    async fn free_transport_switch_with_a_paused_drive_is_refused() {
+        let (_v, s) = st();
+        with_plan(&s, json!({"language": "en"}));
+        let mirror = tempfile::tempdir().unwrap();
+        let resp = handle_request_for_test(
+            &s,
+            "accounts.switch_transport",
+            json!({"id": "acct1", "transport": "imap", "mirrorRoot": mirror.path()}),
+        )
+        .await;
+        assert_eq!(resp.error.map(|e| e.message).as_deref(), Some("errors.transportSwitchDrivePaused"));
+    }
+
+    #[tokio::test]
+    async fn premium_transport_switch_is_not_refused_for_the_drive() {
+        let (_v, s) = st();
+        with_plan(&s, json!({"billingProfile": {"hasSubscription": true, "status": "active"}}));
+        let mirror = tempfile::tempdir().unwrap();
+        let resp = handle_request_for_test(
+            &s,
+            "accounts.switch_transport",
+            json!({"id": "acct1", "transport": "imap", "mirrorRoot": mirror.path()}),
+        )
+        .await;
+        assert_ne!(resp.error.map(|e| e.message).as_deref(), Some("errors.transportSwitchDrivePaused"));
+    }
+
+    /// A flag click must not pay a settings parse: the decision is reused
+    /// until the settings file changes.
+    #[tokio::test]
+    async fn consecutive_gated_calls_read_the_settings_once() {
+        let (v, s) = st();
+        with_plan(&s, json!({"language": "en"}));
+        let mirror = tempfile::tempdir().unwrap();
+        seed_archived(v.path(), "acct1", "INBOX", 7, "a@x");
+        let before = crate::drive_gate::settings_reads_for_test(&s.app_dir);
+        let _ = handle_request_for_test(&s, "backup_copy_uids", copy(mirror.path())).await;
+        let _ = handle_request_for_test(&s, "backup_copy_uids", copy(mirror.path())).await;
+        assert_eq!(crate::drive_gate::settings_reads_for_test(&s.app_dir) - before, 1);
+        assert_eq!(on_drive(mirror.path()), 0);
+        // A changed plan is seen on the next call.
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        with_plan(&s, json!({"billingProfile": {"hasSubscription": true, "status": "active"}, "language": "en-GB"}));
+        let resp = handle_request_for_test(&s, "backup_copy_uids", copy(mirror.path())).await;
+        assert!(resp.error.is_none(), "{:?}", resp.error);
+        assert_eq!(on_drive(mirror.path()), 1);
+    }
+
+    /// A canceled plan's paid period ends with no settings write: the cached
+    /// decision must not outlive it.
+    #[tokio::test]
+    async fn the_cached_decision_ends_with_the_paid_period() {
+        let (v, s) = st();
+        with_plan(&s, json!({"billingProfile": {"hasSubscription": true, "status": "canceled",
+                                               "currentPeriodEnd": "2026-10-25T13:00:00Z"}}));
+        let mirror = tempfile::tempdir().unwrap();
+        seed_archived(v.path(), "acct1", "INBOX", 7, "a@x");
+        let resp = handle_request_for_test(&s, "backup_copy_uids", copy(mirror.path())).await;
+        assert!(resp.error.is_none(), "{:?}", resp.error);
+        assert_eq!(on_drive(mirror.path()), 1);
+        std::fs::remove_dir_all(mirror.path().join("me@x.test")).unwrap();
+        s.clock.set(NOW + 2 * 60 * 60 * 1000);
+        let _ = handle_request_for_test(&s, "backup_copy_uids", copy(mirror.path())).await;
+        assert_eq!(on_drive(mirror.path()), 0, "the period ended, the drive is paused");
+    }
+
+    /// A settings file that had to be recovered from a backup is not trusted,
+    /// the same rule the backup worker applies (`loaded_settings`).
+    #[tokio::test]
+    async fn a_recovered_settings_doc_fails_closed() {
+        let (v, s) = st();
+        s.clock.set(NOW);
+        let premium = json!({"mailvault-settings": {"state": {"billingProfile": {"hasSubscription": true, "status": "active"}}}});
+        std::fs::write(s.app_dir.join(mailvault_core::settings_doc::backup_name(1)), premium.to_string()).unwrap();
+        std::fs::write(s.app_dir.join("frontend-settings.json"), b"{ not json").unwrap();
+        let mirror = tempfile::tempdir().unwrap();
+        seed_archived(v.path(), "acct1", "INBOX", 7, "a@x");
+        let _ = handle_request_for_test(&s, "backup_copy_uids", copy(mirror.path())).await;
+        assert_eq!(on_drive(mirror.path()), 0);
+    }
 }

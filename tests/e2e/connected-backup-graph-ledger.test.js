@@ -32,6 +32,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { waitForApp, waitForEmails, runBackupAndWait, startBackup } from './helpers.js';
 import { appDataDir, INFO_PREFIX, INFO_SEP } from './mockImap.js';
+import { usePremiumPlan } from './premiumPlan.js';
 
 const ACCOUNT_ID = '7f3c2a1e-9b4d-4c8e-a6f1-0d5e8b2c4a17';
 const EMAIL = 'ledger-owner@outlook-mock.test';
@@ -178,6 +179,7 @@ describe('Outlook backup files every message under its ledger uid', function () 
     seedFile('Receipts', 1, RECEIPTS[0]);
 
     mirrorRoot = mkdtempSync(join(tmpdir(), 'mv-graph-ledger-'));
+    await usePremiumPlan(); // the drive is Premium (premiumPlan.js)
     const loc = await invoke('backup_save_external_location', { path: mirrorRoot });
     if (loc?.__error) throw new Error(`backup_save_external_location: ${loc.__error}`);
 

@@ -19,7 +19,12 @@ const KEYS = {
   'trial-ending': { subjectKey: 'lifecycle.trialEnding.subject', bodyKey: 'lifecycle.trialEnding.body' },
   'checkout-left': { subjectKey: 'lifecycle.checkoutLeft.subject', bodyKey: 'lifecycle.checkoutLeft.body' },
   'plan-ended': { subjectKey: 'lifecycle.planEnded.subject', bodyKey: 'lifecycle.planEnded.body' },
-  'free-nudge': { subjectKey: 'lifecycle.freeNudge.subject', bodyKey: 'lifecycle.freeNudge.body' },
+  // `vision`: the note sells what Premium is for in illustrated scenes
+  // (LifecycleMessageView), then shows what stays free.
+  'free-nudge': {
+    subjectKey: 'lifecycle.freeNudge.subject', bodyKey: 'lifecycle.freeNudge.body',
+    outroKey: 'lifecycle.freeNudge.outro', ctaKey: 'lifecycle.freeNudge.cta', vision: true,
+  },
 };
 
 export function lifecycleKeys(kind) {

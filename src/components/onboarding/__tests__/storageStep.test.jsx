@@ -37,6 +37,7 @@ import { t } from '../../../i18n';
 
 // The backup picker talks to the shell the way Settings > Backup always has.
 const invoke = vi.fn();
+const PREMIUM = { hasSubscription: true, status: 'active' };
 const WRITES = ['backup_save_external_location', 'backup_clear_external_location'];
 const wrote = () => invoke.mock.calls.filter(([cmd]) => WRITES.includes(cmd));
 
@@ -97,6 +98,26 @@ describe('onboarding storage step', () => {
     expect(wrote()).toEqual([]);
   });
 
+  // Direct build: backup to another drive is Premium (2026-11-25). The tour
+  // says so in Premium words, not the App Store purchase wording, and offers
+  // no Choose the daemon would ignore.
+  it('offers no backup folder in the direct build without Premium, and says it is part of Premium', async () => {
+    render(<StorageStep onContinue={() => {}} />);
+    const row = screen.getByTestId('storage-row-backup');
+    expect(row.querySelector('[data-testid="storage-backup-premium"]')).toBeTruthy();
+    expect(row.textContent).toContain(t('onboarding.storageBackupPremium'));
+    expect(row.textContent).not.toContain(t('onboarding.storageBackupLocked'));
+    expect(screen.queryByText(t('settings.backup.config.chooseFolder'))).toBeNull();
+    expect(wrote()).toEqual([]);
+  });
+
+  it('offers the backup folder in the direct build with Premium', async () => {
+    useSettingsStore.setState({ billingProfile: PREMIUM });
+    render(<StorageStep onContinue={() => {}} />);
+    expect(await screen.findByText(t('settings.backup.config.chooseFolder'))).toBeTruthy();
+    expect(screen.queryByTestId('storage-backup-premium')).toBeNull();
+  });
+
   it('does not let Continue leave while the mail folder is being moved', async () => {
     let finishMove;
     open.mockResolvedValue('/Volumes/Mail');
@@ -115,6 +136,7 @@ describe('onboarding storage step', () => {
   });
 
   it('saves a chosen backup folder the way Settings does, then checks it can really write there', async () => {
+    useSettingsStore.setState({ billingProfile: PREMIUM });
     open.mockResolvedValue('/Volumes/Backup');
     invoke.mockImplementation(async (cmd) => {
       if (cmd === 'backup_save_external_location') return { status: 'ready', displayPath: '/Volumes/Backup' };
@@ -137,6 +159,7 @@ describe('onboarding storage step', () => {
   // A write test that errors must not leave save's optimistic "ready" badge
   // beside the error.
   it('marks the folder unusable when the write check itself fails', async () => {
+    useSettingsStore.setState({ billingProfile: PREMIUM });
     open.mockResolvedValue('/Volumes/Backup');
     invoke.mockImplementation(async (cmd) => {
       if (cmd === 'backup_save_external_location') return { status: 'ready', displayPath: '/Volumes/Backup' };
@@ -154,6 +177,7 @@ describe('onboarding storage step', () => {
   });
 
   it('shows why a backup folder was refused', async () => {
+    useSettingsStore.setState({ billingProfile: PREMIUM });
     open.mockResolvedValue('/Volumes/Backup');
     invoke.mockImplementation(async (cmd) => {
       if (cmd === 'backup_save_external_location') throw 'Cloud Backups requires a one-time in-app purchase.';
@@ -178,6 +202,8 @@ describe('onboarding storage step', () => {
   });
 
   it('keeps every default when Continue is pressed without a change', async () => {
+    // Premium, so the backup row is the real picker that reads the saved location.
+    useSettingsStore.setState({ billingProfile: PREMIUM });
     const onContinue = vi.fn();
     render(<StorageStep onContinue={onContinue} />);
     await screen.findByTestId('vault-path');

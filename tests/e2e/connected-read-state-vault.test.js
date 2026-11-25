@@ -35,6 +35,7 @@ import { waitForApp, waitForEmails, switchToFolder, runBackupAndWait } from './h
 import { appDataDir, INFO_PREFIX, INFO_SEP } from './mockImap.js';
 import { serverFlags, storeFlag } from './rawImap.js';
 import { clickSelectionAction } from './selectionBar.js';
+import { usePremiumPlan } from './premiumPlan.js';
 
 const LUKE = 'luke@mock.test';
 const VADER = 'vader@mock.test';
@@ -201,6 +202,7 @@ describe('Read state — what the app does reaches every copy the vault keeps', 
     backupRoot = mkdtempSync(join(tmpdir(), 'mv-read-state-mirror-'));
     mirror = join(backupRoot, LUKE, 'INBOX', 'cur');
     mkdirSync(mirror, { recursive: true });
+    await usePremiumPlan(); // the drive is Premium (premiumPlan.js)
     const loc = await invoke('backup_save_external_location', { path: backupRoot });
     if (loc?.__error) throw new Error(`backup_save_external_location: ${loc.__error}`);
   });
@@ -351,6 +353,7 @@ describe('Read state — a backup carries the server\'s state and catches up wit
     cur = join(data, 'Maildir', account.id, FOLDER, 'cur');
     backupRoot = mkdtempSync(join(tmpdir(), 'mv-read-state-backup-'));
     mirror = join(backupRoot, VADER, FOLDER, 'cur');
+    await usePremiumPlan(); // the drive is Premium (premiumPlan.js)
     const loc = await invoke('backup_save_external_location', { path: backupRoot });
     if (loc?.__error) throw new Error(`backup_save_external_location: ${loc.__error}`);
 

@@ -39,6 +39,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { waitForApp, waitForEmails, switchToFolder } from './helpers.js';
 import { CROSS_FOLDER_SUBJECT, INFO_PREFIX } from './mockImap.js';
+import { usePremiumPlan } from './premiumPlan.js';
 
 const LUKE = 'luke@mock.test';
 
@@ -175,6 +176,7 @@ describe('The backup-drive dot', function () {
     mkdirSync(archiveMirror, { recursive: true });
     writeFileSync(join(archiveMirror, `${ARCHIVE_UID}${INFO_PREFIX}.eml`), eml(ARCHIVE_UID));
 
+    await usePremiumPlan(); // the drive is Premium (premiumPlan.js)
     const loc = await invoke('backup_save_external_location', { path: backupRoot });
     console.log('[backup-dot] backup_save_external_location ->', JSON.stringify(loc));
 

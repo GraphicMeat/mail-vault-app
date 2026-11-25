@@ -22,6 +22,7 @@ it.each([
   'errors.transportSwitchImapRefused',
   'errors.bulkIdentityChanged',
   'errors.transportSwitchPending',
+  'errors.transportSwitchDrivePaused',
 ])('a switch refused with %s keeps that reason', async (key) => {
   h.switchError = key;
   await expect(switchAccountTransport('m1', 'imap', {})).rejects.toThrow(key);

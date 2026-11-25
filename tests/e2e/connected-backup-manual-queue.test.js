@@ -4,6 +4,7 @@ import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { waitForApp, waitForEmails, openSettings, closeSettings, clickSettingsNav } from './helpers.js';
+import { usePremiumPlan } from './premiumPlan.js';
 const wait = (predicate, timeout, message) => browser.waitUntil(predicate,{timeout,interval:200,timeoutMsg:message});
 const invoke = (command,args={}) => browser.executeAsync((c,a,done) => { window.__TAURI__.core.invoke(c,a).then(done,e=>done({__error:String(e?.message||e)})); },command,args);
 const rpc = (method,params={}) => invoke('daemon_rpc',{method,params});
@@ -21,6 +22,7 @@ describe('Backup buttons use the native queue and retained results',function(){
     await waitForApp();await waitForEmails();
     await wait(()=>browser.execute(()=>!!window.__BACKUP_SCHEDULER__&&!!window.__SETTINGS_STORE__),20000,'Native backup probe unavailable');
     luke=browser.mockAccounts.find(a=>a.email==='luke@mock.test');vader=browser.mockAccounts.find(a=>a.email==='vader@mock.test');
+    await usePremiumPlan(); // the drive is Premium (premiumPlan.js)
     root=mkdtempSync(join(tmpdir(),'mv-native-manual-'));const saved=await invoke('backup_save_external_location',{path:root});assert.equal(saved?.__error,undefined);
     await browser.execute(()=>window.__SETTINGS_STORE__.setState({language:'en',billingProfile:{hasSubscription:true,premiumAccess:true,status:'active',clientAccessGranted:true},backupGlobalEnabled:false,backupSchedules:{},hiddenAccounts:{},snapshotAutoEnabled:false,backupNotifyOnSuccess:false,backupNotifyOnFailure:false}));
     await wait(async()=>{const s=await rpc('settings.get');return s.values?.['mailvault-settings']?.state?.billingProfile?.hasSubscription===true;},15000,'Premium settings were not durable');

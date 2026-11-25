@@ -312,6 +312,11 @@ pub(crate) fn daemon_command(bin: &Path) -> Command {
     if let Some(root) = mailvault_core::paths::portable_root() {
         cmd.env(mailvault_core::paths::PORTABLE_ENV, root);
     }
+    // The daemon is one binary for both builds. In the App Store build the
+    // backup drive is the one-time purchase, not Premium, so the daemon's
+    // Premium gate on it must not apply (`mailvault_core::external_backup`).
+    #[cfg(feature = "appstore")]
+    cmd.env(mailvault_core::external_backup::STORE_BUILD_ENV, "1");
     cmd
 }
 

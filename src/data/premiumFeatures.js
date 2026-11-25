@@ -1,6 +1,6 @@
 import {
   CalendarClock, ShieldCheck, Sparkles, Clock, EyeOff,
-  Trash2, ArrowLeftRight, Server, Image, Timer, AlarmClock, Monitor, FileSearch, Gauge, HardDrive, Usb, Paperclip, Bell,
+  Trash2, ArrowLeftRight, Server, Image, Timer, AlarmClock, Monitor, FileSearch, Gauge, HardDrive, Usb, Paperclip, Bell, DatabaseBackup,
 } from 'lucide-react';
 import { IS_APPSTORE_BUILD } from '../utils/buildFlags.js';
 
@@ -19,6 +19,10 @@ import { IS_APPSTORE_BUILD } from '../utils/buildFlags.js';
 export const PREMIUM_FEATURES = Object.freeze([
   { id: 'backup-schedule',  icon: CalendarClock,  titleKey: 'premium.backupSchedule.title',  blurbKey: 'premium.backupSchedule.blurb',  shot: 'premium-backup-schedule',  tab: 'backup' },
   { id: 'backup-health',    icon: ShieldCheck,    titleKey: 'premium.backupHealth.title',    blurbKey: 'premium.backupHealth.blurb',    shot: 'premium-backup-health',    tab: 'backup' },
+  // The App Store build sells the drive copy as its own one-time purchase.
+  ...(IS_APPSTORE_BUILD ? [] : [
+    { id: 'external-backup', icon: DatabaseBackup, titleKey: 'premium.externalBackup.title', blurbKey: 'premium.externalBackup.blurb', shot: null,                    tab: 'backup' },
+  ]),
   { id: 'cleanup',          icon: Sparkles,       titleKey: 'premium.cleanup.title',         blurbKey: 'premium.cleanup.blurb',         shot: 'premium-cleanup',          tab: 'cleanup' },
   { id: 'time-capsule',     icon: Clock,          titleKey: 'premium.timeCapsule.title',     blurbKey: 'premium.timeCapsule.blurb',     shot: 'premium-time-capsule',     tab: 'time-capsule' },
   { id: 'tracker-blocking', icon: EyeOff,         titleKey: 'premium.trackerBlocking.title', blurbKey: 'premium.trackerBlocking.blurb', shot: 'premium-tracker-blocking', tab: 'tracking' },

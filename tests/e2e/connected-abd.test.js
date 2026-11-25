@@ -29,6 +29,7 @@ import { join } from 'node:path';
 import { waitForApp, waitForEmails, openSettings, closeSettings, clickSettingsNav, expecting } from './helpers.js';
 import { appDataDir } from './mockImap.js';
 import { imap } from './rawImap.js';
+import { usePremiumPlan } from './premiumPlan.js';
 
 const LUKE = 'luke@mock.test';
 const BACKUP_FOLDER = 'AbdBackup';
@@ -249,6 +250,7 @@ describe('Archive & delete jobs (Settings > Backup & Restore)', function () {
   });
 
   it('archives, backs up and deletes a folder: minimize to the pill, restore, and it finishes', async function () {
+    await usePremiumPlan(); // the drive is Premium (premiumPlan.js)
     const loc = await invoke('backup_save_external_location', { path: backupRoot });
     if (loc?.__error) throw new Error(`backup_save_external_location: ${loc.__error}`);
     await browser.execute((billing, location) => {

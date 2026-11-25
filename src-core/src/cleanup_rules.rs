@@ -285,6 +285,23 @@ pub fn has_premium_access(state: &Value, now_ms: i64) -> bool {
     }
 }
 
+/// The next moment `has_premium_access` can change on its own, with no
+/// settings write: a share grant's or a canceled plan's paid period ending.
+/// `None` when nothing is due to end. Lets a caller cache the answer safely.
+pub fn premium_changes_at(state: &Value, now_ms: i64) -> Option<i64> {
+    let grant = state
+        .get("shareGrant")
+        .and_then(|g| g.get("expiresAt"))
+        .map(|e| js_number(Some(e)))
+        .filter(|e| e.is_finite() && *e > now_ms as f64)
+        .map(|e| e.ceil() as i64);
+    let period = state
+        .get("billingProfile")
+        .and_then(|b| js_date_ms(b.get("currentPeriodEnd")))
+        .filter(|end| *end > now_ms);
+    grant.into_iter().chain(period).min()
+}
+
 // ── Folders ────────────────────────────────────────────────────────────────
 
 /// Last segment of a mailbox path, for either delimiter a server may use.

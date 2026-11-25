@@ -218,3 +218,14 @@ impl DaemonState {
         state
     }
 }
+
+/// A Premium plan in this state's settings: using the backup drive is Premium
+/// in the direct build (`drive_gate`), so a test that drives a drive root
+/// through the dispatcher declares the plan it models.
+#[cfg(test)]
+pub(crate) fn premium_plan_for_test(state: &DaemonState) {
+    use mailvault_core::settings_doc::{SettingsDoc, STORE};
+    SettingsDoc::shared(&state.app_dir)
+        .patch(&serde_json::json!({STORE: {"state": {"billingProfile": {"hasSubscription": true, "status": "active"}}}}), None)
+        .unwrap();
+}

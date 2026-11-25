@@ -25,6 +25,7 @@ import { join } from 'node:path';
 import { waitForApp, waitForEmails, switchToFolder, expecting } from './helpers.js';
 import { appDataDir } from './mockImap.js';
 import { imap } from './rawImap.js';
+import { usePremiumPlan } from './premiumPlan.js';
 
 const LUKE = 'luke@mock.test';
 const FOLDER = 'BackupDelete';
@@ -172,6 +173,7 @@ describe('Archive, Back up & Delete', function () {
   });
 
   it('archives, backs up and deletes three rows from the server, leaving the vault and the drive holding them', async function () {
+    await usePremiumPlan(); // the drive is Premium (premiumPlan.js)
     const loc = await invoke('backup_save_external_location', { path: backupRoot });
     if (loc?.__error) throw new Error(`backup_save_external_location: ${loc.__error}`);
     await setStore({ billingProfile: PREMIUM, externalBackupLocation: loc });

@@ -1863,6 +1863,7 @@ mod tests {
             let drive = tempfile::tempdir().unwrap();
             let mut params = json!({"operationId":name,"type":name,"scope":original_scope(&config, "INBOX", Some("<selected@test>"))});
             if mirror {
+                crate::test_support::premium_plan_for_test(&state);
                 params["mirrorRoot"] = json!(drive.path().to_string_lossy());
             }
             let reply = handle_request_for_test(&state, "bulk.start", params.clone()).await;
@@ -2291,6 +2292,7 @@ mod tests {
                 let scope=original_scope(&cfg,"INBOX",mid);
                 let result=if phase=="initial" {
                     publish_purge_owner(&state,&owner_b,json!([{"uid":7,"messageId":mid}]));
+                    crate::test_support::premium_plan_for_test(&state);
                     let reply=handle_request_for_test(&state,"bulk.start",json!({"operationId":"owner-conflict","type":"delete_everywhere","scope":scope,"mirrorRoot":drive.path()})).await;assert!(reply.error.is_none());
                     let pending=wait_drained(&state).await;pending["result"]["failed"]==1
                 } else {
@@ -2318,7 +2320,7 @@ mod tests {
         let mut ports=purge_ports(&state);ports.purge_begin(&work.purge_targets,Arc::new(AtomicBool::new(false))).await.unwrap();work.purge_targets[0].proof=Some(live(ports.purge_prepare(&work.purge_targets[0],work.purge_targets[0].hint(&work.intent).unwrap()).await.unwrap()));
         let retained=work.purge_targets[0].proof.clone();state.bulk.lock().unwrap().begin_admission("server-pending","A").unwrap();prepare_claim(&state,"server-pending","A",work.intent.clone()).unwrap();checkpoint(&state,"server-pending","A",&work).unwrap();
         let drive=tempfile::tempdir().unwrap();let cur=mailvault_core::maildir::mirror_cur(drive.path(),&cfg.email,"INBOX").unwrap();std::fs::create_dir_all(&cur).unwrap();std::fs::write(cur.join("7.eml"),PURGE_RAW).unwrap();drop(ports);drop(state);
-        let restarted=DaemonState::for_test(dir.path().into(),dir.path().into(),true);let reply=handle_request_for_test(&restarted,"bulk.resume",json!({"operationId":"server-pending","attemptId":"B","mirrorRoot":drive.path()})).await;assert!(reply.error.is_none(),"{:?}",reply.error);let pending=wait_drained(&restarted).await;
+        let restarted=DaemonState::for_test(dir.path().into(),dir.path().into(),true);crate::test_support::premium_plan_for_test(&restarted);let reply=handle_request_for_test(&restarted,"bulk.resume",json!({"operationId":"server-pending","attemptId":"B","mirrorRoot":drive.path()})).await;assert!(reply.error.is_none(),"{:?}",reply.error);let pending=wait_drained(&restarted).await;
         assert_eq!(pending["result"],json!({"deleted":1,"failed":0,"queuedBackup":0,"needsResync":0}),"{pending}");
         assert_eq!(pending["worker"]["purgeTargets"][0]["proof"],json!(retained.unwrap()));assert_eq!(pending["worker"]["purgeTargets"][0]["local"],"complete");assert_eq!(pending["worker"]["purgeTargets"][0]["mirror"],"complete");
         assert!(provider.commands().iter().any(|command|command.contains("UID EXPUNGE 7")));assert!(mailvault_core::message_store::read_raw(dir.path(),"acc","INBOX",7).unwrap().is_none());assert!(!cur.join("7.eml").exists());std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
@@ -2530,6 +2532,7 @@ mod tests {
             let mut scope=original_scope(&cfg,"INBOX",Some("<selected@test>"));
             if mode=="online" {scope["targetHints"][0]["localIdentity"]=json!({"source":"local_sent","staged":true});}
             let mut params=json!({"operationId":"purge","type":"delete_everywhere","scope":scope,"externalStatus":if mode=="unconfigured" {"not_configured"}else{"unavailable"}});
+            crate::test_support::premium_plan_for_test(&state);
             if !matches!(mode,"offline"|"unconfigured"|"offline-missing-proof") {params["mirrorRoot"]=json!(drive.path());}
             let reply=handle_request_for_test(&state,"bulk.start",params).await;
             assert!(reply.error.is_none(),"{mode}: {:?}",reply.error);
@@ -2632,6 +2635,7 @@ mod tests {
         let drive=tempfile::tempdir().unwrap();let cur=mailvault_core::maildir::mirror_cur(drive.path(),&cfg.email,"INBOX").unwrap();std::fs::create_dir_all(&cur).unwrap();std::fs::write(cur.join("7.eml"),raw).unwrap();
         let capture_wire = std::env::var_os("MAILVAULT_BULK_WIRE_FIXTURE").is_some();
         let mut wire_events = state.events.subscribe();
+        crate::test_support::premium_plan_for_test(&state);
         let request = json!({"operationId":"no-mid","type":"delete_everywhere","scope":original_scope(&cfg,"INBOX",None),"mirrorRoot":drive.path()});
         let reply=handle_request_for_test(&state,"bulk.start",request.clone()).await;
         assert!(reply.error.is_none());let pending=wait_drained(&state).await;
@@ -2906,6 +2910,7 @@ mod tests {
         mailvault_core::app_db::with(dir.path(),|c|mailvault_core::app_db::compose_receipts::save(c,&receipt)).unwrap();
         let raw=mailvault_core::message_store::read_raw(dir.path(),"local-only","Sent",uid).unwrap().unwrap();
         let drive=tempfile::tempdir().unwrap();let cur=mailvault_core::maildir::mirror_cur(drive.path(),"one@example.test","Sent").unwrap();std::fs::create_dir_all(&cur).unwrap();let mirror=cur.join(format!("{uid}.eml"));std::fs::write(&mirror,&raw).unwrap();
+        crate::test_support::premium_plan_for_test(&state);
         let reply=handle_request_for_test(&state,"bulk.start",json!({"operationId":"cleaned","type":"delete_everywhere","mirrorRoot":drive.path(),"scope":{"accountId":"local-only","mailbox":"Sent","keys":[uid],"targetHints":[{
             "accountId":"local-only","mailbox":"Sent","uid":uid,"messageIdPresent":true,"messageId":staged["messageId"],"localIdentity":{"source":"local_sent","staged":true}}]}})).await;
         assert!(reply.error.is_none());let pending=wait_drained(&state).await;
@@ -2931,6 +2936,7 @@ mod tests {
             std::fs::create_dir_all(ledger.parent().unwrap()).unwrap();std::fs::write(&ledger,json!({"7":if mode=="collision" {"graph-B"}else{"graph-A"}}).to_string()).unwrap();
             let drive=tempfile::tempdir().unwrap();let cur=mailvault_core::maildir::mirror_cur(drive.path(),&cfg.email,"INBOX").unwrap();std::fs::create_dir_all(&cur).unwrap();std::fs::write(cur.join("7.eml"),PURGE_RAW).unwrap();
             let mut scope=original_scope(&cfg,"INBOX",Some("<selected@test>"));scope["targetHints"][0]["graphId"]=json!("graph-A");
+            crate::test_support::premium_plan_for_test(&state);
             let reply=handle_request_for_test(&state,"bulk.start",json!({"operationId":"graph-purge","type":"delete_everywhere","scope":scope,"mirrorRoot":drive.path()})).await;
             assert!(reply.error.is_none(),"{mode}: {:?}",reply.error);
             let pending=wait_drained(&state).await;
@@ -3864,6 +3870,7 @@ mod tests {
                 } else {
                     None
                 };
+                crate::test_support::premium_plan_for_test(&state);
                 let reply=handle_request_for_test(&state,"bulk.start",json!({"operationId":"no-id","type":action,"scope":original_scope(&serde_json::from_value(account.clone()).unwrap(), "INBOX", None),"mirrorRoot":mirror.path().to_string_lossy()})).await;
                 assert!(reply.error.is_none(), "{:?}", reply.error);
                 let pending = wait_drained(&state).await;

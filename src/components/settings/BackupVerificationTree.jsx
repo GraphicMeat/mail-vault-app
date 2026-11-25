@@ -8,6 +8,8 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { t as tr, useT  } from '../../i18n/index.js';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { useDrivePremiumLocked } from '../../hooks/useBackupsEntitled';
 
 function CountCell({ count, serverCount }) {
   if (serverCount === 0) return <span className="text-mail-text-muted">--</span>;
@@ -63,7 +65,12 @@ function FolderRow({ folder, depth = 0, hasExternal, defaultExpanded = false }) 
 export default function BackupVerificationTree({ data, onHide }) {
   const t = useT();
   const { total_server, total_app, total_external, external_available, folders } = data;
-  const hasExternal = external_available || total_external > 0;
+  // Without Premium (direct build) the daemon writes nothing to the drive, so
+  // its count is paused, not failing.
+  const driveLocked = useDrivePremiumLocked();
+  const driveSet = useSettingsStore(s => !!s.externalBackupLocation);
+  const externalPaused = driveLocked && (driveSet || external_available || total_external > 0);
+  const hasExternal = !externalPaused && (external_available || total_external > 0);
   const appComplete = total_app >= total_server && total_server > 0;
   const extComplete = hasExternal && total_external >= total_server && total_server > 0;
   const appPct = total_server > 0 ? Math.round((total_app / total_server) * 100) : 0;
@@ -83,7 +90,11 @@ export default function BackupVerificationTree({ data, onHide }) {
           {appComplete ? <CheckCircle2 size={10} /> : <AlertCircle size={10} />}
           {t('settings.backup.verify.appPct', { appPct })}
         </span>
-        {hasExternal ? (
+        {externalPaused ? (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-mail-surface text-mail-text-muted">
+            {t('settings.backup.verify.externalPaused')}
+          </span>
+        ) : hasExternal ? (
           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
             extComplete ? 'bg-mail-local-tint text-mail-local' : 'bg-mail-warning-tint text-mail-warning'
           }`}>

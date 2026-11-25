@@ -5,7 +5,7 @@ import MailStorageLocation from '../settings/MailStorageLocation';
 import BackupLocationPicker from '../settings/BackupLocationPicker';
 import { DownloadModeControl } from '../settings/DownloadModeControl';
 import { IS_APPSTORE_BUILD } from '../../utils/buildFlags';
-import { useBackupsEntitled } from '../../hooks/useBackupsEntitled';
+import { useBackupsEntitled, useDrivePremiumLocked } from '../../hooks/useBackupsEntitled';
 import { useT } from '../../i18n/index.js';
 
 /**
@@ -20,11 +20,14 @@ import { useT } from '../../i18n/index.js';
  * The Mac App Store build cannot relocate the vault (see BackupConfig), so it
  * gets only the backup and download mode rows, and without the backups
  * purchase its backup row only says where to unlock it (the shell refuses the
- * folder otherwise), the same gate Settings > Backup applies.
+ * folder otherwise), the same gate Settings > Backup applies. The direct build
+ * holds the backup drive behind Premium instead and says so in Premium words.
  */
 export function StorageStep({ onContinue, onBusyChange }) {
   const t = useT();
   const [entitled] = useBackupsEntitled();
+  // Direct build: backup to another drive is Premium.
+  const driveLocked = useDrivePremiumLocked();
   // Continue waits for a vault move: leaving mid-copy would add the account
   // while the mail is between two folders.
   // The shell holds its Back and Skip tour on the same flag.
@@ -53,7 +56,9 @@ export function StorageStep({ onContinue, onBusyChange }) {
           {t('onboarding.storageBackupTitle')}
         </h4>
         <p className="text-xs text-mail-text-muted">{t('onboarding.storageBackupHint')}</p>
-        {entitled ? <BackupLocationPicker /> : (
+        {driveLocked ? (
+          <p data-testid="storage-backup-premium" className="text-xs text-mail-text">{t('onboarding.storageBackupPremium')}</p>
+        ) : entitled ? <BackupLocationPicker /> : (
           <p data-testid="storage-backup-locked" className="text-xs text-mail-text">{t('onboarding.storageBackupLocked')}</p>
         )}
       </section>

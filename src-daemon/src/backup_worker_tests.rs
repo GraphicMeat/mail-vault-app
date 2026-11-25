@@ -273,6 +273,8 @@ async fn backup_worker_stop_cancels_owned_work_but_keeps_drain_truth() {
 #[tokio::test]
 async fn backup_worker_configured_and_unknown_slot_stay_pending_without_provider() {
     let mut r = rig();
+    // Waiting for the drive is a Premium run's behaviour (`drive_gate`).
+    patch(&r.state, json!({"billingProfile":{"hasSubscription":true,"status":"active"}}));
     app_db::with(&r.state.app_dir, |c| {
         app_db::locations::save_meta(c, "external-backup", "/display-only", "macos", 1, false)
     })
@@ -1273,7 +1275,10 @@ async fn backup_fix1_retry_timer_wakes_real_loop_without_deadline_command() {
     finish(r).await;
 }
 
+/// A configured backup drive. Using it is Premium (direct build), so the plan
+/// is Premium too; a free or lapsed case patches the plan after this.
 fn access_slot(r: &Rig) -> String {
+    patch(&r.state, json!({"billingProfile":{"hasSubscription":true,"status":"active"}}));
     app_db::with(&r.state.app_dir, |c| {
         app_db::locations::save_meta(c, "external-backup", "/display-only", "native", 1, false)
     })
@@ -3233,4 +3238,51 @@ async fn backup_worker_due_fence_preserves_limit_deadline_after_pending() {
     resumed.reply.send(Ok(result(1))).ok().unwrap();
     due_fence_idle(&mut r).await;
     finish(r).await;
+}
+
+// ── Backup to another drive is Premium (direct build, 2026-11-25) ──────────
+// Without Premium a run still saves the vault and finishes, but the drive is
+// neither written nor waited for: a configured slot must not hold a free
+// user's backup in `pending_access` for a drive nothing will be written to.
+const LAPSED_AT: &str = "2026-10-01T00:00:00Z";
+#[tokio::test]
+async fn backup_drive_free_run_saves_the_vault_without_the_drive_and_never_waits_for_it() {
+    let mut r = rig();
+    let _stamp = access_slot(&r);
+    patch(&r.state, json!({"billingProfile":null}));
+    manual(&r.state, "one", "free-no-drive").await;
+    let c = call(&mut r).await;
+    let local = c.ctx.mirror_root.is_none();
+    c.reply.send(Ok(result(1))).ok().unwrap();
+    wait(&r.state, |s| s["requests"]["free-no-drive"]["status"] == "success").await;
+    finish(r).await;
+    assert!(local, "a free run was handed the backup drive");
+}
+#[tokio::test]
+async fn backup_drive_lapsed_run_gets_no_drive_even_when_the_shell_attaches_one() {
+    let mut r = rig();
+    let _stamp = access_slot(&r);
+    patch(&r.state, json!({"billingProfile":{"hasSubscription":true,"status":"canceled","currentPeriodEnd":LAPSED_AT}}));
+    manual(&r.state, "one", "lapsed-no-drive").await;
+    let c = call(&mut r).await;
+    let local = c.ctx.mirror_root.is_none();
+    c.reply.send(Ok(result(1))).ok().unwrap();
+    wait(&r.state, |s| s["requests"]["lapsed-no-drive"]["status"] == "success").await;
+    finish(r).await;
+    assert!(local, "a lapsed plan's run was handed the backup drive");
+}
+#[tokio::test]
+async fn backup_drive_premium_run_still_gets_the_attached_drive() {
+    let mut r = rig();
+    let stamp = access_slot(&r);
+    let ack = manual(&r.state, "one", "premium-drive").await;
+    wait(&r.state, |s| !s["pendingAccess"].as_array().unwrap().is_empty()).await;
+    let attempt = access_attempt(&r, &ack, "shell-p");
+    assert_eq!(access_attach(&r, &attempt, &stamp, "/premium-drive").await["state"], "accepted");
+    let c = call(&mut r).await;
+    let root = c.ctx.mirror_root.clone();
+    c.reply.send(Ok(result(1))).ok().unwrap();
+    wait(&r.state, |s| s["requests"]["premium-drive"]["status"] == "success").await;
+    finish(r).await;
+    assert_eq!(root.as_deref(), Some("/premium-drive"));
 }

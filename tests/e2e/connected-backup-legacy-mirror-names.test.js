@@ -29,6 +29,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { waitForApp, waitForEmails, runBackupAndWait } from './helpers.js';
 import { appDataDir, INFO_PREFIX, INFO_SEP } from './mockImap.js';
+import { usePremiumPlan } from './premiumPlan.js';
 
 const VADER = 'vader@mock.test';
 const FOLDER = 'Matrix';
@@ -140,6 +141,7 @@ describe('Legacy mirror names — one file per uid on each side of a backup', fu
     // replace it, not add a second file beside it.
     writeFileSync(join(cur, `1${INFO_PREFIX}F.eml`), eml('stale-copy@old-host.test', 'Stale vault copy'));
 
+    await usePremiumPlan(); // the drive is Premium (premiumPlan.js)
     const loc = await invoke('backup_save_external_location', { path: backupRoot });
     if (loc?.__error) throw new Error(`backup_save_external_location: ${loc.__error}`);
   });

@@ -19,6 +19,7 @@ pub mod view_eval;
 pub mod archive;
 pub mod autostart;
 pub mod cleanup_rules;
+pub mod external_backup;
 pub mod clock;
 pub mod js_value;
 pub mod windows_mailto;

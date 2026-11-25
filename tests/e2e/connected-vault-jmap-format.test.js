@@ -65,6 +65,7 @@ import {
 } from './helpers.js';
 import { openTab } from './mockBilling.js';
 import { appDataDir, INFO_SEP } from './mockImap.js';
+import { usePremiumPlan } from './premiumPlan.js';
 
 const LUKE = 'luke@mock.test';
 const YODA = 'yoda@mock.test';
@@ -892,6 +893,7 @@ describe('Vault storage format: Maildir to JMAP and back, through the app', func
   it('in JMAP, a backup mirrors .eml files with the original bytes', async function () {
     const backupRoot = mkdtempSync(join(tmpdir(), 'mv-jmap-format-backup-'));
     work.push(backupRoot);
+    await usePremiumPlan(); // the drive is Premium (premiumPlan.js)
     await must('backup_save_external_location', invoke('backup_save_external_location', { path: backupRoot }));
     // skipFolders past luke's server folders: only the local pass runs, into a temp dir of this spec's own.
     const result = await runBackupAndWait({ accountId: luke.id, accountJson: JSON.stringify(luke), backupPath: null, skipFolders: 999 });

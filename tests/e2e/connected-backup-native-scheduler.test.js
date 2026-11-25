@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { waitForApp, waitForEmails, openSettings } from './helpers.js';
 import { appDataDir } from './mockImap.js';
+import { usePremiumPlan } from './premiumPlan.js';
 const wait=(predicate,timeout,message)=>browser.waitUntil(predicate,{timeout,interval:250,timeoutMsg:message});
 const invoke=(command,args={})=>browser.executeAsync((c,a,done)=>{window.__TAURI__.core.invoke(c,a).then(done,e=>done({__error:String(e?.message||e)}));},command,args);
 const rpc=(method,params={})=>invoke('daemon_rpc',{method,params});
@@ -52,6 +53,7 @@ describe('Native backup scheduler survives observers and owns automatic work',fu
     await waitForApp();await waitForEmails();main=await browser.getWindowHandle();
     await wait(()=>browser.execute(()=>!!window.__BACKUP_UI_OBSERVER__&&!!window.__BACKUP_SCHEDULER__),20000,'Native observer diagnostics unavailable');
     luke=browser.mockAccounts.find(a=>a.email==='luke@mock.test');vader=browser.mockAccounts.find(a=>a.email==='vader@mock.test');
+    await usePremiumPlan(); // the drive is Premium (premiumPlan.js)
     root=mkdtempSync(join(tmpdir(),'mv-native-scheduler-'));assert.equal((await invoke('backup_save_external_location',{path:root}))?.__error,undefined);
     await browser.execute(()=>{
       window.__SETTINGS_STORE__.setState({language:'en',billingProfile:{hasSubscription:true,premiumAccess:true,status:'active',clientAccessGranted:true},backupGlobalEnabled:false,backupSchedules:{},snapshotAutoEnabled:true,snapshotCadence:'after_every_backup',backupNotifyOnSuccess:false,backupNotifyOnFailure:false});
@@ -74,6 +76,7 @@ describe('Native backup scheduler survives observers and owns automatic work',fu
     await wait(async()=>(await rpc('backup.schedule.status')).pendingAccess?.some(i=>i.runId===first.runId),15000,'Configured unavailable access did not stay pending');
     assert.equal(existsSync(root),false,'A missing mount point was recreated');assert.equal(stateOnDisk().backupHistory?.[luke.id]?.length||0,0,'Pending access was filed as success');
     await browser.execute(()=>window.__BACKUP_UI_OBSERVER__.detach());
+    await usePremiumPlan(); // the drive is Premium (premiumPlan.js)
     mkdirSync(root,{recursive:true});assert.equal((await invoke('backup_save_external_location',{path:root}))?.__error,undefined);
     await rpc('backup.run_now',{accountId:luke.id,requestId:'native-access-first'});
     await wait(async()=>{const s=await rpc('backup.schedule.status');return s.requests?.['native-access-first']?.status==='success'&&s.requests?.['native-access-joined']?.status==='success';},180000,'Native authorized attach did not complete joined requests');
