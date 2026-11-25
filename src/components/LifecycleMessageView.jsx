@@ -104,7 +104,7 @@ export function LifecycleMessageView({ onOpenBilling }) {
 
         <div className="mt-6">
           <Button variant="primary" size="md" onClick={onOpenBilling} data-testid="lifecycle-open-billing">
-            {t(keys.ctaKey || 'lifecycle.cta')}
+            {t(keys.ctaKey)}
           </Button>
         </div>
 

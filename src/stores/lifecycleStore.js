@@ -16,9 +16,9 @@ import { IS_APPSTORE_BUILD } from '../utils/buildFlags';
 // Every kind the daemon delivers, as catalog keys. An unknown kind (a newer
 // daemon) has no entry and is not shown, never rendered as a raw key.
 const KEYS = {
-  'trial-ending': { subjectKey: 'lifecycle.trialEnding.subject', bodyKey: 'lifecycle.trialEnding.body' },
-  'checkout-left': { subjectKey: 'lifecycle.checkoutLeft.subject', bodyKey: 'lifecycle.checkoutLeft.body' },
-  'plan-ended': { subjectKey: 'lifecycle.planEnded.subject', bodyKey: 'lifecycle.planEnded.body' },
+  'trial-ending': { subjectKey: 'lifecycle.trialEnding.subject', bodyKey: 'lifecycle.trialEnding.body', ctaKey: 'lifecycle.trialEnding.cta' },
+  'checkout-left': { subjectKey: 'lifecycle.checkoutLeft.subject', bodyKey: 'lifecycle.checkoutLeft.body', ctaKey: 'lifecycle.checkoutLeft.cta' },
+  'plan-ended': { subjectKey: 'lifecycle.planEnded.subject', bodyKey: 'lifecycle.planEnded.body', ctaKey: 'lifecycle.planEnded.cta' },
   // `vision`: the note sells what Premium is for in illustrated scenes
   // (LifecycleMessageView), then shows what stays free.
   'free-nudge': {

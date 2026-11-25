@@ -101,9 +101,22 @@ describe('LifecycleMessageView', () => {
     render(<LifecycleMessageView onOpenBilling={() => {}} />);
     expect(screen.queryAllByTestId('lifecycle-scene')).toHaveLength(0);
     expect(screen.queryByTestId('lifecycle-star')).toBeNull();
-    expect(screen.getByTestId('lifecycle-open-billing').textContent).toBe(t('lifecycle.cta'));
     expect(screen.queryByTestId('lifecycle-message-outro')).toBeNull();
     expect(screen.queryByTestId('lifecycle-free-feature')).toBeNull();
+  });
+
+  it.each([
+    ['trial-ending', 'lifecycle.trialEnding.cta'],
+    ['checkout-left', 'lifecycle.checkoutLeft.cta'],
+    ['plan-ended', 'lifecycle.planEnded.cta'],
+    ['free-nudge', 'lifecycle.freeNudge.cta'],
+  ])('the %s note names its own next step on the button, never "Open Billing"', (kind, ctaKey) => {
+    useLifecycleStore.setState({ rows: [row(`${kind}:1`, kind)], openId: `${kind}:1` });
+    render(<LifecycleMessageView onOpenBilling={() => {}} />);
+    const label = screen.getByTestId('lifecycle-open-billing').textContent;
+    expect(label).toBe(t(ctaKey));
+    expect(label).not.toBe(ctaKey);
+    expect(label).not.toMatch(/open billing/i);
   });
 
   it('renders nothing for a kind this version does not know', () => {
