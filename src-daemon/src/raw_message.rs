@@ -509,6 +509,33 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// Forwarding a message the vault does not hold: the draft's attachment
+    /// comes the way the viewer's does (memory, else the server), never
+    /// "saved without it".
+    #[tokio::test]
+    async fn a_forward_draft_takes_an_attachment_of_a_message_only_the_server_holds() {
+        for mode in ["onDemand", "keepRecent"] {
+            let server = server_with(1, &raw_with_attachment("<r1@example.com>"));
+            let (dir, s) = state(mode, Some(&server), "<r1@example.com>");
+            std::fs::write(dir.join("accounts.json"), r#"[{"id":"acc1","email":"user@example.com"},{"id":"other"}]"#).unwrap();
+            let request = json!({"draftId": format!("fwd-{mode}"), "revision": 1, "accountId": "acc1",
+                "fromAddress": "user@example.com", "displayName": "", "snippet": "",
+                "snapshot": {"to": "next@example.com", "cc": "", "bcc": "", "subject": "Fwd: Report",
+                    "html": "<p>fyi</p>", "text": "fyi", "inReplyTo": "", "references": "", "attachments": [{"filename": "report.pdf",
+                    "contentType": "application/pdf",
+                    "source": {"accountId": "acc1", "mailbox": "INBOX", "uid": 1, "attachmentIndex": 0}}]}});
+
+            let r = call(&s, "drafts.save", request).await;
+
+            let saved = r.result.unwrap_or_else(|| panic!("{mode}: {:?}", r.error));
+            assert!(saved.get("omittedAttachments").is_none(), "{mode}: {saved}");
+            let copy = json!({"accountId": saved["accountId"], "mailbox": saved["mailbox"], "uid": saved["uid"], "attachmentIndex": 0});
+            let read = call(&s, "maildir_read_attachment", copy).await;
+            assert_eq!(read.result, Some(b64(PDF)), "{mode}: {:?}", read.error);
+            let _ = std::fs::remove_dir_all(&dir);
+        }
+    }
+
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn p2_delayed_fallback_cannot_remember_after_retirement() {
         let raw = raw_with_attachment("<r1@example.com>");

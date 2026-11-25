@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Fixed: forwarding an email whose attachments were not yet saved on this computer, for example with On Demand, left them out of the draft with "The draft is saved, but without ... The file could not be read." The draft now fetches them from the server the way opening the attachment does, so the forward keeps every file.
 - Fixed: when Send could not send, for example because no recipient was entered, the reason could appear below a long message or signature, out of view, so Send looked like it did nothing. The message now shows above Discard and Send, where it is always visible.
 - Fixed: Send no longer stops without sending or explaining why when an account refreshes its sign-in or a setting changes in the main window during the send. It checks the message you sent again and sends it. If changes keep arriving, it says it could not prepare the message. An edit you make while it is sending still cancels the send.
 - Added: removing a Gmail account signed in with MailVault's own Google sign-in offers "Also end MailVault's access in your Google account". Ticked, MailVault asks Google to revoke its access as well as deleting the tokens from this computer; MailVault on your other devices with that account then has to sign in again, so it is off unless you tick it. Accounts signed in with Thunderbird's shared Google sign-in do not offer it, since revoking would sign you out of Thunderbird too. The phone app offers the same choice when you remove an account.

@@ -737,7 +737,32 @@ fn response(record: &Record, disposition: &str) -> Value {
     value
 }
 
-fn resolve_attachments(s: &Arc<DaemonState>, r: &mut Save) -> Result<(), String> {
+type Fetched = HashMap<(String, String, u32), Arc<[u8]>>;
+
+/// The messages a draft's attachments come from, read the way the viewer reads
+/// them (`raw_message`: the vault, else memory, else the server), readable
+/// bytes so the indices match what the window listed. A message only the
+/// server holds would otherwise leave the draft without its file. A miss is
+/// left to `resolve_attachments`, which omits that file and keeps the words.
+async fn fetch_sources(s: &Arc<DaemonState>, r: &Save) -> Fetched {
+    let mut fetched = Fetched::new();
+    for a in &r.snapshot.attachments {
+        let Some(src) = a.source.as_ref().filter(|_| a.content.is_none()) else { continue };
+        let key = (src.account_id.clone(), src.mailbox.clone(), src.uid);
+        if fetched.contains_key(&key) {
+            continue;
+        }
+        match crate::raw_message::raw_message(s, &key.0, &key.1, key.2, true).await {
+            Ok(raw) => {
+                fetched.insert(key, raw);
+            }
+            Err(error) => tracing::warn!("[drafts] attachment source {}/{} uid {}: {error}", key.0, key.1, key.2),
+        }
+    }
+    fetched
+}
+
+fn resolve_attachments(s: &Arc<DaemonState>, r: &mut Save, fetched: &Fetched) -> Result<(), String> {
     let mut sources: HashMap<(String, String, u32), Vec<usize>> = HashMap::new();
     let mut gone = Vec::new();
     for (index, a) in r.snapshot.attachments.iter_mut().enumerate() {
@@ -757,13 +782,16 @@ fn resolve_attachments(s: &Arc<DaemonState>, r: &mut Save) -> Result<(), String>
             mailbox,
             uid,
         };
-        let i = inventory(s, &loc)?;
-        // The message it came from may be gone by now. A storage error above
+        // The message it came from may be gone by now. A storage error below
         // is worth a retry; an absent source never comes back, and it does not
         // get to stop the words from saving.
-        let raw = with_mailbox_write(s, &loc.account_id, &loc.mailbox, |root| {
-            checked_bytes(s, root, &loc, &i)
-        })?;
+        let raw = match fetched.get(&(loc.account_id.clone(), loc.mailbox.clone(), loc.uid)) {
+            Some(raw) => Some(raw.to_vec()),
+            None => {
+                let i = inventory(s, &loc)?;
+                with_mailbox_write(s, &loc.account_id, &loc.mailbox, |root| checked_bytes(s, root, &loc, &i))?
+            }
+        };
         let requested: Vec<_> = indices
             .iter()
             .map(|i| {
@@ -809,7 +837,7 @@ fn abandon_older_pending(s: &Arc<DaemonState>, id: &str, revision: u64, stamps: 
     r.epoch = r.epoch.checked_add(1).ok_or("draft attempt exhausted")?;
     persist(s, &r)
 }
-fn save(s: &Arc<DaemonState>, mut request: Save) -> Result<Value, String> {
+fn save(s: &Arc<DaemonState>, mut request: Save, fetched: Fetched) -> Result<Value, String> {
     let request_hash = request.request_hash();
     let original_record = load(s, &request.draft_id)?;
     let previous = if original_record.current.is_none() { request.previous_identity.as_ref() } else { None };
@@ -868,7 +896,7 @@ fn save(s: &Arc<DaemonState>, mut request: Save) -> Result<Value, String> {
     if request.from_address.is_empty() {
         request.from_address = config.email.clone();
     }
-    resolve_attachments(s, &mut request)?;
+    resolve_attachments(s, &mut request, &fetched)?;
     let fingerprint = request.content_hash();
     let raw = smtp::build_local_draft_mime(&config, &request.outgoing()?)?;
     let prepared_mailbox = match &initial.current {
@@ -1302,13 +1330,17 @@ pub(crate) async fn route(
     } else {
         None
     };
+    let fetched = match &request {
+        Some(r) => fetch_sources(state, r).await,
+        None => Fetched::new(),
+    };
     let s = Arc::clone(state);
     let params = params.clone();
     let method = method.to_string();
     let result = blocking(move || match method.as_str() {
         // The window retries a refused save without a word, so this line is
         // the only record of why a later "could not be saved" appeared.
-        "drafts.save" => save(&s, request.unwrap()).inspect_err(|error| tracing::warn!("[drafts] save refused: {error}")),
+        "drafts.save" => save(&s, request.unwrap(), fetched).inspect_err(|error| tracing::warn!("[drafts] save refused: {error}")),
         "drafts.discard" => params["draftId"]
             .as_str()
             .filter(|s| !s.is_empty())
