@@ -4,7 +4,8 @@ import { describe, expect, it } from 'vitest';
 
 const require = createRequire(import.meta.url);
 const {
-  findCustomer, findCustomerByLegacyEmail, legacyEmailSignInOpen, legacyView, LAST_EMAIL_SIGNIN_VERSION, LEGACY_EMAIL_SIGNIN_UNTIL,
+  findCustomer, findCustomerByLegacyEmail, legacyEmailSignInOpen, legacyEmailSignInExpired, legacyView, LAST_EMAIL_SIGNIN_VERSION, LEGACY_EMAIL_SIGNIN_UNTIL,
+  APP_UPDATE_REQUIRED,
   adminAuthorized, CUSTOMER_ID_REQUIRED,
 } = require('../api/billing-identity.js');
 
@@ -45,6 +46,40 @@ describe('legacy address sign-in for 2.25.0 and older, until the end of spring 2
     expect(open('2.25.0', Date.UTC(2028, 0, 1))).toBe(false);
   });
 
+  // From 1 June 2027 the path is shut by the clock alone, and an old app is told what to do
+  // instead of being asked for a code it has no screen for.
+  it('from 1 June 2027 tells 2.25.0 and older to update instead', () => {
+    const expired = (appVersion, now) => legacyEmailSignInExpired({ appVersion, now });
+    expect(expired('2.25.0', Date.UTC(2027, 5, 1))).toBe(true);
+    expect(expired('1.9.0', Date.UTC(2028, 0, 1))).toBe(true);
+    expect(expired('2.25.0', SPRING)).toBe(false);
+    expect(expired('2.26.0', Date.UTC(2027, 5, 1))).toBe(false);
+    for (const a of [undefined, '', 'x']) expect(expired(a, Date.UTC(2027, 5, 1)), String(a)).toBe(false);
+  });
+
+  it('the update error names the version to move past', () => {
+    expect(APP_UPDATE_REQUIRED.error).toBe('app_update_required');
+    expect(APP_UPDATE_REQUIRED.message).toMatch(/Update MailVault to a version newer than 2\.25\.0/);
+    expect(APP_UPDATE_REQUIRED.message).toMatch(/code we email you/);
+  });
+
+  it('the status route answers an expired old app with the update error', () => {
+    const src = readFileSync(new URL('../api/server.js', import.meta.url), 'utf8');
+    const start = src.indexOf("'/api/billing/subscription-status'");
+    const body = src.slice(start, src.indexOf('\napp.', start + 1));
+    const expiredAt = body.indexOf('if (legacyEmailSignInExpired({ appVersion, now })) return res.status(426).json(APP_UPDATE_REQUIRED);');
+    expect(expiredAt).toBeGreaterThan(0);
+    expect(body.indexOf('legacyEmailSignInOpen(')).toBeGreaterThan(expiredAt);
+  });
+
+  // The reminder. Goes red in the nightly CI run from 1 June 2027 on purpose.
+  it('REMINDER: address sign-in for 2.25.0 ends 31 May 2027, then delete it', () => {
+    expect(Date.now(), '31 May 2027 has passed. Delete legacyEmailSignInOpen, findCustomerByLegacyEmail, '
+      + 'legacyView, the legacy branch of /api/billing/subscription-status and their tests. Keep '
+      + 'legacyEmailSignInExpired and APP_UPDATE_REQUIRED so old apps are still told to update.')
+      .toBeLessThan(LEGACY_EMAIL_SIGNIN_UNTIL);
+  });
+
   it('stays closed for 2.25.1, 2.26.0 and later, which have code sign-in', () => {
     expect(open('2.25.1')).toBe(false);
     expect(open('2.26.0')).toBe(false);
@@ -78,7 +113,7 @@ describe('legacy address sign-in for 2.25.0 and older, until the end of spring 2
     const lookup = body.indexOf('findCustomerByLegacyEmail(');
     expect(gate).toBeGreaterThan(0);
     expect(lookup).toBeGreaterThan(gate);
-    expect(body).toMatch(/legacyEmailSignInOpen\(\{ appVersion, register, now: Date\.now\(\) \}\)/);
+    expect(body).toMatch(/const now = Date\.now\(\);[\s\S]*legacyEmailSignInOpen\(\{ appVersion, register, now \}\)/);
   });
 
   // The Stripe id is the key to the billing portal (cancel, invoices, card) and to removing

@@ -32,7 +32,8 @@ const path = require('path');
 const analytics = require('meatlytics');
 const { getPool, initDatabase } = require('./database');
 const {
-  findCustomer, findCustomerByLegacyEmail, legacyEmailSignInOpen, legacyView, adminAuthorized, CUSTOMER_ID_REQUIRED,
+  findCustomer, findCustomerByLegacyEmail, legacyEmailSignInOpen, legacyEmailSignInExpired, legacyView,
+  adminAuthorized, CUSTOMER_ID_REQUIRED, APP_UPDATE_REQUIRED,
 } = require('./billing-identity');
 const {
   ActivationError, computePremiumAccess, webSessionParams, ensureBillingCustomer, upsertSubscription,
@@ -1132,7 +1133,9 @@ app.get('/api/billing/subscription-status', statusLimiter, async (req, res) => {
 
     if (!customerId) {
       // 2.25.0 and older sign in by address; see LAST_EMAIL_SIGNIN_VERSION.
-      if (!legacyEmailSignInOpen({ appVersion, register, now: Date.now() })) return res.status(400).json(CUSTOMER_ID_REQUIRED);
+      const now = Date.now();
+      if (legacyEmailSignInExpired({ appVersion, now })) return res.status(426).json(APP_UPDATE_REQUIRED);
+      if (!legacyEmailSignInOpen({ appVersion, register, now })) return res.status(400).json(CUSTOMER_ID_REQUIRED);
       legacy = true;
       customerRow = await findCustomerByLegacyEmail(db, req.query.email);
       customerId = customerRow?.stripe_customer_id || '';

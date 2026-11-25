@@ -24,7 +24,8 @@ async function findCustomer(db, customerId) {
 // release had the code sign-in screen: 2.25.0 signs in by address alone. Address sign-in
 // stays open for apps at or below this version through the end of spring 2027 (31 May,
 // UTC); from 2.26.0 the app signs in with the code. Delete this and its call in the
-// subscription-status route after LEGACY_EMAIL_SIGNIN_UNTIL.
+// subscription-status route after LEGACY_EMAIL_SIGNIN_UNTIL (the REMINDER test goes red
+// then); keep legacyEmailSignInExpired and APP_UPDATE_REQUIRED.
 const LAST_EMAIL_SIGNIN_VERSION = '2.25.0';
 const LEGACY_EMAIL_SIGNIN_UNTIL = Date.UTC(2027, 5, 1);
 
@@ -45,6 +46,21 @@ function legacyEmailSignInOpen({ appVersion, register, now }) {
   const app = parseVersion(appVersion);
   return !!(app && atOrBelowLast(app));
 }
+
+/**
+ * From LEGACY_EMAIL_SIGNIN_UNTIL an old app's address sign-in is shut by the clock alone,
+ * and the app is told to update (it has no screen for the code). Stays after the address
+ * path itself is deleted; the REMINDER test in billing-identity.test.js says when.
+ */
+function legacyEmailSignInExpired({ appVersion, now }) {
+  const app = parseVersion(appVersion);
+  return !!(app && atOrBelowLast(app) && !(now < LEGACY_EMAIL_SIGNIN_UNTIL));
+}
+
+const APP_UPDATE_REQUIRED = {
+  error: 'app_update_required',
+  message: `This version of MailVault can no longer sign in to Premium. Update MailVault to a version newer than ${LAST_EMAIL_SIGNIN_VERSION}, then sign in with the code we email you.`,
+};
 
 /** The customer row for an address, only behind legacyEmailSignInOpen. */
 async function findCustomerByLegacyEmail(db, email) {
@@ -72,6 +88,6 @@ function adminAuthorized(provided, expected) {
 }
 
 module.exports = {
-  findCustomer, findCustomerByLegacyEmail, legacyEmailSignInOpen, legacyView, LAST_EMAIL_SIGNIN_VERSION, LEGACY_EMAIL_SIGNIN_UNTIL,
-  adminAuthorized, CUSTOMER_ID_REQUIRED,
+  findCustomer, findCustomerByLegacyEmail, legacyEmailSignInOpen, legacyEmailSignInExpired, legacyView, LAST_EMAIL_SIGNIN_VERSION, LEGACY_EMAIL_SIGNIN_UNTIL,
+  adminAuthorized, CUSTOMER_ID_REQUIRED, APP_UPDATE_REQUIRED,
 };
