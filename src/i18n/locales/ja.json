@@ -419,6 +419,7 @@
   "common.nextMonth": "翌月",
   "common.noAccountsConfigured": "アカウントが設定されていません",
   "common.noMatches": "一致する項目はありません",
+  "emailSelector.search": "アカウントとアドレスを検索",
   "common.noSubject": "（件名なし）",
   "common.open": "開く",
   "common.openFolder": "フォルダを開く",

@@ -7,6 +7,7 @@ import {useInsightsStore} from '../../../stores/insightsStore';
 import {useMailStore} from '../../../stores/mailStore';
 import {t} from '../../../i18n';
 import '../../../services/workflows/bindStoreActions';
+import { emailRows } from '../../../test/pickEmail';
 const actions={setTab:vi.fn(),setQuery:vi.fn(),refresh:vi.fn(),selectDay:vi.fn(),loadMessages:vi.fn()};
 beforeEach(()=>{
   useMailStore.setState({accounts:[{id:'a',email:'me@example.test'}]});
@@ -26,9 +27,8 @@ it('shows local coverage and distinct received/sent totals with unknown-date acc
 it('limits the account filter to real single-account choices',()=>{
   render(<InsightsPage onClose={()=>{}}/>);
   const filter=screen.getByTestId('insights-accounts');
-  expect(within(filter).queryByRole('option',{name:t('insights.allAccounts')})).toBeNull();
   expect(filter.value).toBe('a');
-  expect([...filter.options].map(option=>option.value)).toEqual(['a']);
+  expect(emailRows('insights-accounts').map(row=>row.value)).toEqual(['a']);
 });
 it('shares direction and account filters across real tabs',()=>{
   render(<InsightsPage onClose={()=>{}}/>);

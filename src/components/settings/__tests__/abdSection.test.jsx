@@ -23,6 +23,7 @@ import { useSettingsStore } from '../../../stores/settingsStore';
 import { useAbdStore } from '../../../stores/abdStore';
 import { t } from '../../../i18n';
 import { usePrivacyStore } from '../../../stores/privacyStore';
+import { pickEmail, emailRows } from '../../../test/pickEmail';
 
 const PREMIUM = { hasSubscription: true, status: 'active', premiumAccess: true };
 const READY = { displayPath: '/Volumes/Backup', status: 'ready', platform: 'macos', lastValidatedAt: 1, lastError: null };
@@ -123,7 +124,7 @@ describe('gating', () => {
     unmount();
 
     render(<AbdSection />);
-    fireEvent.change(screen.getByTestId('abd-account'), { target: { value: LEIA.id } });
+    pickEmail('abd-account', LEIA.id);
     fireEvent.click(setUpArchive());
     await waitFor(() => expect(svc.beginPreview).toHaveBeenCalledWith(LEIA.id));
   });
@@ -141,14 +142,14 @@ describe('accounts', () => {
   it('lists the visible accounts and hides the ones hidden in Settings', () => {
     useSettingsStore.setState({ hiddenAccounts: { [LEIA.id]: true } });
     render(<AbdSection />);
-    const options = [...screen.getByTestId('abd-account').querySelectorAll('option')].map(o => o.textContent);
+    const options = emailRows('abd-account').map(r => r.text);
     expect(options).toEqual([LUKE.email]);
   });
 
   it('says an Outlook account needs the app open, and says nothing for the others', () => {
     render(<AbdSection />);
     expect(screen.queryByTestId('abd-graph-hint')).toBeNull();
-    fireEvent.change(screen.getByTestId('abd-account'), { target: { value: LEIA.id } });
+    pickEmail('abd-account', LEIA.id);
     expect(screen.getByTestId('abd-graph-hint').textContent).toBe(t('settings.backup.abd.graphHint'));
   });
 
@@ -214,7 +215,7 @@ describe('privacy mode', () => {
     usePrivacyStore.setState({ enabled: true });
     try {
       render(<AbdSection />);
-      const options = [...screen.getByTestId('abd-account').querySelectorAll('option')].map(o => o.textContent);
+      const options = emailRows('abd-account').map(r => r.text);
       expect(options).toEqual(['xxxx@xxxx.xxxx', 'xxxx@xxxxxxx.xxxx']);
     } finally {
       usePrivacyStore.setState({ enabled: false });

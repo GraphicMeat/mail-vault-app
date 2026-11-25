@@ -3,7 +3,9 @@
 // mode: `Private` wraps a personal value on screen, `privateAttr(value, kind)` masks one in an
 // attribute; the phone has no such mode, so its are the identity), and the popover layer (desktop's
 // Escape stack, `registerPopoverLayer(onClose)` returning its removal: an open typeahead list
-// is peeled by Escape before the Settings dialog; the phone has none). Desktop containers provide them from
+// is peeled by Escape before the Settings dialog; the phone has none), and the account picker
+// (`AccountPicker`: desktop's EmailSelector; the phone's and the default a native select,
+// NativeAccountPicker). Desktop containers provide them from
 // src/i18n and utils/dateFormat; the phone's from src/mobile/i18n.js and src/mobile/format.js.
 // A view never imports a store, a service, src/i18n/index.js or a Tauri module
 // (views/__tests__/viewsPurity.test.js): it is rendered by both apps.
@@ -12,6 +14,7 @@
 import React, { createContext, useContext } from 'react';
 import en from '../../../i18n/locales/en.json';
 import { translate } from '../../../i18n/core.js';
+import { NativeAccountPicker } from './NativeAccountPicker';
 
 const english = (key, vars) => translate(en, en, 'en', key, vars);
 const PlainText = ({ children }) => children;
@@ -26,6 +29,7 @@ const DEFAULT = Object.freeze({
   privateAttr: (value) => value,
   privateInputClass: '',
   registerPopoverLayer: () => undefined,
+  AccountPicker: NativeAccountPicker,
 });
 
 const ViewContext = createContext(DEFAULT);
@@ -37,7 +41,7 @@ const ViewContext = createContext(DEFAULT);
  * wears, masked in privacy mode) and `registerPopoverLayer(onClose)` to the views under it. A container re-renders on a language or format
  * change (its own hooks), and the value is rebuilt each render, so every view under it follows.
  */
-export function SettingsViewProvider({ t, locale, formatTime, formatDateOnly, formatDateTime, formatBytes, Private, privateAttr, privateInputClass, registerPopoverLayer, children }) {
+export function SettingsViewProvider({ t, locale, formatTime, formatDateOnly, formatDateTime, formatBytes, Private, privateAttr, privateInputClass, registerPopoverLayer, AccountPicker, children }) {
   const value = {
     t: t || DEFAULT.t,
     locale: locale || DEFAULT.locale,
@@ -49,6 +53,7 @@ export function SettingsViewProvider({ t, locale, formatTime, formatDateOnly, fo
     privateAttr: privateAttr || DEFAULT.privateAttr,
     privateInputClass: privateInputClass || DEFAULT.privateInputClass,
     registerPopoverLayer: registerPopoverLayer || DEFAULT.registerPopoverLayer,
+    AccountPicker: AccountPicker || DEFAULT.AccountPicker,
   };
   return <ViewContext.Provider value={value}>{children}</ViewContext.Provider>;
 }

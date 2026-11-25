@@ -11,6 +11,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { render, screen, cleanup, waitFor, fireEvent } from '@testing-library/react';
 import '../../../services/workflows/bindStoreActions';
+import { pickEmail, emailRows } from '../../../test/pickEmail';
 
 vi.mock('../../../services/api', () => ({ sendNotification: vi.fn().mockResolvedValue(undefined) }));
 
@@ -45,7 +46,7 @@ const LOGIN = 'me@fastmail.test';
 const ALIAS = 'Contact@Domain.test';
 
 const selector = () => screen.getByRole('combobox', { name: t('account.emailAddress') });
-const listed = () => [...selector().options].map(o => o.value);
+const listed = () => emailRows('billing-email').map(r => r.value);
 
 beforeEach(async () => {
   await useSettingsStore.persist.rehydrate();
@@ -99,7 +100,7 @@ describe('Billing address selector', () => {
 
   /** Mails the code to `address`, types it and signs in. */
   async function signInWithCode(address) {
-    fireEvent.change(selector(), { target: { value: address } });
+    pickEmail('billing-email', address);
     fireEvent.click(screen.getByRole('button', { name: t('settings.billing.signPremium') }));
     const field = await screen.findByRole('textbox', { name: t('settings.billing.code') });
     fireEvent.change(field, { target: { value: '123456' } });
@@ -144,7 +145,7 @@ describe('Billing address selector', () => {
   it('starts checkout on the chosen alias', async () => {
     render(<BillingSettings />);
     const cta = await screen.findByTestId('billing-checkout');
-    fireEvent.change(selector(), { target: { value: ALIAS } });
+    pickEmail('billing-email', ALIAS);
     await waitFor(() => expect(cta.disabled).toBe(false));
     fireEvent.click(cta);
     await waitFor(() => expect(startCheckout).toHaveBeenCalledWith({ email: ALIAS, planId: 'yearly' }));
@@ -153,26 +154,27 @@ describe('Billing address selector', () => {
   // Same layout as the compose From picker: an account with aliases is a
   // native optgroup (its label greyed and unselectable, its addresses indented).
   describe('grouping', () => {
-    const groups = () => [...selector().querySelectorAll('optgroup')];
+    const kinds = () => {
+      fireEvent.click(selector());
+      return [...document.querySelectorAll('[data-email-selector-list="billing-email"] [role="option"]')]
+        .map(o => [o.dataset.kind, o.dataset.value]);
+    };
 
-    it('puts an account and its aliases in one group labelled with the login', () => {
+    it('puts an account\'s aliases under its login', () => {
       render(<BillingSettings />);
-      expect(groups().map(g => g.label)).toEqual([LOGIN]);
-      expect([...groups()[0].querySelectorAll('option')].map(o => o.value)).toEqual([LOGIN, ALIAS]);
+      expect(kinds()).toEqual([['account', LOGIN], ['alias', ALIAS]]);
     });
 
-    it('leaves an account without aliases as a plain option', () => {
+    it('leaves an account without aliases as a single row', () => {
       useMailStore.setState({ accounts: [{ id: 'a1', email: LOGIN }, { id: 'a2', email: 'other@mail.test' }] });
       render(<BillingSettings />);
-      expect(groups().map(g => g.label)).toEqual([LOGIN]);
-      const other = [...selector().options].find(o => o.value === 'other@mail.test');
-      expect(other.parentElement).toBe(selector());
+      expect(kinds()).toEqual([['account', LOGIN], ['alias', ALIAS], ['account', 'other@mail.test']]);
     });
 
-    it('groups nothing when no account has an alias', () => {
+    it('shows no alias rows when no account has an alias', () => {
       useSettingsStore.setState({ aliases: {} });
       render(<BillingSettings />);
-      expect(groups()).toEqual([]);
+      expect(kinds().filter(([kind]) => kind === 'alias')).toEqual([]);
     });
 
     it('lists an address held by two accounts under the first only', () => {
@@ -182,8 +184,7 @@ describe('Billing address selector', () => {
         a2: [{ address: ALIAS.toLowerCase(), name: '', source: 'manual' }],
       } });
       render(<BillingSettings />);
-      expect(groups().map(g => g.label)).toEqual([LOGIN]);
-      expect([...selector().options].map(o => o.value)).toEqual([LOGIN, ALIAS, 'other@mail.test']);
+      expect(kinds()).toEqual([['account', LOGIN], ['alias', ALIAS], ['account', 'other@mail.test']]);
     });
   });
 });

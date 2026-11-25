@@ -11,6 +11,7 @@ import { Private } from '../privacy/Private';
 import { usePrivateAttr, usePrivateInputClass } from '../../hooks/usePrivacy';
 import { registerPopoverLayer } from '../../hooks/useDialogA11y';
 import { SettingsViewProvider } from './views/viewContext';
+import { EmailSelector } from '../ui/EmailSelector';
 
 export function DesktopViewEnv({ children }) {
   const t = useT();
@@ -18,7 +19,7 @@ export function DesktopViewEnv({ children }) {
   const privateInputClass = usePrivateInputClass();
   return <SettingsViewProvider t={t} locale={getLocale()} formatTime={formatTime} formatDateOnly={formatDateOnly}
     formatDateTime={formatDateTime} formatBytes={formatBytes} Private={Private} privateAttr={privateAttr}
-    privateInputClass={privateInputClass} registerPopoverLayer={registerPopoverLayer}>
+    privateInputClass={privateInputClass} registerPopoverLayer={registerPopoverLayer} AccountPicker={EmailSelector}>
     {children}
   </SettingsViewProvider>;
 }

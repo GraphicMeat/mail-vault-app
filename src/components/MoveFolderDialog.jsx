@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FolderInput, FolderSymlink, Loader2, Search } from 'lucide-react';
 import { Dialog } from './ui/Dialog';
 import { Button } from './ui/Button';
+import { EmailSelector, useAccountSections } from './ui/EmailSelector';
 import { useAccountStore } from '../stores/accountStore';
-import { useSettingsStore, getAccountColor, getAccountInitial, hasPremiumAccess } from '../stores/settingsStore';
+import { useSettingsStore, hasPremiumAccess } from '../stores/settingsStore';
 import { usePrivateAttr } from '../hooks/usePrivacy';
 import { useT } from '../i18n/index.js';
 import { mailboxLabel, decodeImapUtf7 } from '../utils/imapUtf7';
@@ -38,7 +39,6 @@ export function MoveFolderDialog({ node, accountId, mailboxes, onClose, onUpgrad
   const t = useT();
   const pa = usePrivateAttr();
   const accounts = useAccountStore(s => s.accounts) || [];
-  const accountColors = useSettingsStore(s => s.accountColors);
   const premium = useSettingsStore(s => hasPremiumAccess(s.billingProfile));
   const [destId, setDestId] = useState(accountId);
   const [listing, setListing] = useState({ boxes: mailboxes, loading: false, failed: false });
@@ -133,7 +133,9 @@ export function MoveFolderDialog({ node, accountId, mailboxes, onClose, onUpgrad
   };
 
   const ready = !!target && !!plan && !plan.pending && !plan.refusal && !locked && !starting;
-  const destAccount = accounts.find(a => a.id === destId);
+  // Other accounts are Premium; they stay pickable so the upsell can say so.
+  const lockedAccount = useCallback(a => a.id !== accountId && !premium, [accountId, premium]);
+  const accountRows = useAccountSections(accounts, { lockedOf: lockedAccount });
   const copies = plan && !plan.pending && !plan.refusal && !plan.fastRename;
   const isPicked = (path) => !!target && target.path === path;
 
@@ -175,22 +177,11 @@ export function MoveFolderDialog({ node, accountId, mailboxes, onClose, onUpgrad
         </>
       )}
     >
-      <div className="flex items-center gap-2">
-        {destAccount && (
-          <div aria-hidden="true" className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
-            style={{ backgroundColor: getAccountColor(accountColors, destAccount) }}>
-            {getAccountInitial(destAccount)}
-          </div>
-        )}
+      <div>
         <label className="sr-only" htmlFor="move-folder-account">{t('folderMove.account')}</label>
-        <select id="move-folder-account" value={destId} onChange={(e) => chooseAccount(e.target.value)}
-          className="flex-1 min-w-0 bg-mail-input-bg border border-mail-border rounded-lg px-3 py-2 text-sm text-mail-text">
-          {accounts.map(a => (
-            <option key={a.id} value={a.id}>
-              {a.id === accountId || premium ? pa(a.email, 'email') : t('folderMove.accountLocked', { email: pa(a.email, 'email') })}
-            </option>
-          ))}
-        </select>
+        <EmailSelector id="move-folder-account" testId="move-folder-account" ariaLabel={t('folderMove.account')}
+          value={destId} sections={accountRows} onChange={chooseAccount}
+          lockedLabel={row => t('folderMove.accountLocked', { email: pa(row.address, 'email') })} />
       </div>
 
       {locked ? (

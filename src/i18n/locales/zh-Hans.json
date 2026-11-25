@@ -419,6 +419,7 @@
   "common.nextMonth": "下个月",
   "common.noAccountsConfigured": "未配置账户",
   "common.noMatches": "无匹配项",
+  "emailSelector.search": "搜索账户和地址",
   "common.noSubject": "（无主题）",
   "common.open": "打开",
   "common.openFolder": "打开文件夹",

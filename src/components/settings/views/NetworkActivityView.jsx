@@ -11,6 +11,7 @@
 // `onOpenLink(url)` for the map's attribution.
 import React, { useMemo, useState } from 'react';
 import { ArrowUpRight, ArrowDownLeft, Pause, Play, Copy, Check } from 'lucide-react';
+import { accountSections } from '../../ui/emailSelectorModel';
 import { Button } from '../../ui/Button';
 import { SettingsPageLayout, SettingsSection } from '../../ui/SettingsForm';
 import { PROTOCOL_LABELS, RETENTIONS, copyText, filterEvents, rangesFor, target } from '../../../utils/netActivity';
@@ -96,10 +97,13 @@ export function NetworkActivityView({ rows, summary, places, query, onQuery, ret
   loadError = false, filters, onFilter, remoteImages = null, paused = false, onPause = null, onResume = null,
   notShown = false, intro = null, onOpenLink = () => {} }) {
   const t = useT();
-  const { locale, privateAttr, formatBytes } = useViewEnv();
+  const { locale, formatBytes, AccountPicker } = useViewEnv();
   const [copied, setCopied] = useState(false);
   const shown = useMemo(() => filterEvents(rows, filters), [rows, filters]);
   const accounts = distinct([...summary.accounts, query.account], locale);
+  // The log names accounts by address only (a removed one too), so each row
+  // is drawn from its address.
+  const accountRows = accountSections(accounts.map(email => ({ id: email, email })));
 
   const copy = async () => {
     try {
@@ -141,10 +145,11 @@ export function NetworkActivityView({ rows, summary, places, query, onQuery, ret
           <select aria-label={t('netActivity.range')} value={query.range} onChange={e => onQuery({ range: e.target.value })} className={SELECT}>
             {rangesFor(retention).map(r => <option key={r} value={r}>{t(`netActivity.ranges.${r}`)}</option>)}
           </select>
-          <select aria-label={t('netActivity.account')} value={query.account} onChange={e => onQuery({ account: e.target.value })} className={SELECT}>
-            <option value="">{t('netActivity.allAccounts')}</option>
-            {accounts.map(a => <option key={a} value={a}>{privateAttr(a, 'email')}</option>)}
-          </select>
+          <div className="net-activity-account">
+            <AccountPicker testId="net-activity-account" ariaLabel={t('netActivity.account')} value={query.account || ''}
+              sections={accountRows} onChange={account => onQuery({ account })}
+              leading={[{ value: '', label: t('netActivity.allAccounts') }]} />
+          </div>
         </div>
         <div className="grid grid-cols-3 gap-2 mb-2" data-testid="net-summary">
           {stat('net-summary-hosts', 'netActivity.hostsContacted', summary.hosts)}

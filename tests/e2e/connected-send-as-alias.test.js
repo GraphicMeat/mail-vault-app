@@ -26,6 +26,7 @@ import {
 } from './helpers.js';
 import { SEND_REFUSED_TO } from './mockImap.js';
 import { closeComposeHard } from './composeHelpers.js';
+import { emailRows, pickEmail } from './emailSelectorHelpers.js';
 
 const ALIAS = 'alias@mock.test';
 const OTHER_DOMAIN_ALIAS = 'hello@graphicmeat.com';
@@ -408,22 +409,17 @@ describe('Connected Send-As Alias', function () {
     });
     afterEach(async () => { await closeComposeHard(); });
 
-    /** The From `<select>`: every option plus which one is selected. */
-    const fromSelect = () => browser.execute(() => {
-      const el = document.querySelector('[data-testid="compose-from"]');
-      if (!el) return null;
+    /** The From selector: every row (text = its address) plus which one is selected. */
+    const fromSelect = async () => {
+      const rows = await emailRows('[data-testid="compose-from"]');
+      if (!rows) return null;
       return {
-        selectedIndex: el.selectedIndex,
-        options: [...el.options].map(o => ({ value: o.value, text: o.text.trim() })),
+        selectedIndex: rows.findIndex(r => r.selected),
+        options: rows.map(r => ({ value: r.value, text: r.address })),
       };
-    });
+    };
 
-    const selectFrom = (value) => browser.execute((v) => {
-      const el = document.querySelector('[data-testid="compose-from"]');
-      const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
-      setter.call(el, v);
-      el.dispatchEvent(new Event('change', { bubbles: true }));
-    }, value);
+    const selectFrom = (value) => pickEmail('[data-testid="compose-from"]', value);
 
     async function closeCompose() {
       await pressKey('Escape');
@@ -444,11 +440,10 @@ describe('Connected Send-As Alias', function () {
       await openCompose();
       await browser.pause(400);
 
+      // The closed From selector shows the address the message leaves from.
       const fromText = await browser.execute(() => {
-        const select = document.querySelector('[data-testid="compose-modal"] select');
-        if (!select) return null;
-        const opt = select.options[select.selectedIndex];
-        return opt ? opt.textContent.trim() : null;
+        const from = document.querySelector('[data-testid="compose-modal"] [data-testid="compose-from"]');
+        return from ? from.textContent.trim() : null;
       });
       expect(fromText).not.toBe(null);
       expect(fromText).toContain(ALIAS);
@@ -482,7 +477,13 @@ describe('Connected Send-As Alias', function () {
 
     it('links from the From row to Settings > Accounts > Aliases', async function () {
       await openCompose();
-      await browser.waitUntil(() => click('[data-testid="compose-add-address"]'), {
+      await browser.waitUntil(async () => {
+        await browser.execute(() => {
+          const from = document.querySelector('[data-testid="compose-from"]');
+          if (from && from.getAttribute('aria-expanded') !== 'true') from.click();
+        });
+        return click('[data-testid="compose-add-address"]');
+      }, {
         timeout: 5000, interval: 100, timeoutMsg: 'the From row has no Add address link',
       });
       await browser.waitUntil(() => browser.execute(() => {

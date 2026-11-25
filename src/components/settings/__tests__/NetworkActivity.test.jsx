@@ -2,6 +2,7 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { pickEmail } from '../../../test/pickEmail';
 
 const harness = vi.hoisted(() => ({ daemonCall: vi.fn(), listeners: new Map(), unlisten: vi.fn() }));
 
@@ -127,13 +128,13 @@ describe('Network Activity', () => {
     fireEvent.change(screen.getByLabelText('Protocol'), { target: { value: 'imap' } });
     expect(hosts()).toEqual(['a.test', 'd.test']);
     // The account is the daemon's query: the map and totals follow it too.
-    fireEvent.change(screen.getByLabelText('Account'), { target: { value: 'two@example.test' } });
+    pickEmail('net-activity-account', 'two@example.test');
     await flush();
     expect(calls('net.activity').at(-1).account).toBe('two@example.test');
     expect(calls('net.geo').at(-1).account).toBe('two@example.test');
     expect(hosts()).toEqual(['d.test']);
     fireEvent.change(screen.getByLabelText('Protocol'), { target: { value: '' } });
-    fireEvent.change(screen.getByLabelText('Account'), { target: { value: '' } });
+    pickEmail('net-activity-account', '');
     await flush();
     fireEvent.change(screen.getByLabelText('Purpose'), { target: { value: 'AI model' } });
     expect(hosts()).toEqual(['c.test']);
@@ -141,7 +142,7 @@ describe('Network Activity', () => {
 
   it('keeps a live row for another account off a table narrowed to one', async () => {
     await mount([ev({ host: 'mine.test', account: 'one@example.test' })], { summary: { accounts: ['one@example.test'] } });
-    fireEvent.change(screen.getByLabelText('Account'), { target: { value: 'one@example.test' } });
+    pickEmail('net-activity-account', 'one@example.test');
     await flush();
     await push(ev({ host: 'other.test', account: 'two@example.test' }));
     await push(ev({ host: 'mine-live.test', account: 'one@example.test' }));

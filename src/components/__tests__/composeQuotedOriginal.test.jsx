@@ -11,6 +11,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { savedDraftReply } from '../../test/draftReply';
 import React from 'react';
 import { act, render, screen, cleanup, waitFor, fireEvent } from '@testing-library/react';
+import { pickEmail } from '../../test/pickEmail';
 
 const { stageOutgoing, saveLocalDraft, readAttachments } = vi.hoisted(() => ({
   // compose.stage's answer: the staged copy and the row the daemon wrote.
@@ -225,8 +226,9 @@ describe('the quoted original in a reply', () => {
     settings.sendAsAddresses = { 'acct-1': 'desk@example.test' };
     render(<ComposeModal mode="new" onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} />);
 
-    await screen.findByTestId('compose-from');
-    expect(screen.getByRole('option', { name: 'Front Desk <desk@example.test>' })).not.toBeNull();
+    fireEvent.click(await screen.findByTestId('compose-from'));
+    expect(screen.getByRole('option', { name: 'Front Desk desk@example.test' })).not.toBeNull();
+    fireEvent.click(screen.getByTestId('compose-from'));
     fireEvent.change(screen.getByTestId('compose-to'), { target: { value: 'recipient@example.test' } });
     await waitFor(() => expect(screen.getByTestId('compose-send').closest('form').dataset.preparationReady).toBe('true'));
     fireEvent.click(screen.getByTestId('compose-send'));
@@ -236,7 +238,8 @@ describe('the quoted original in a reply', () => {
 
     stageOutgoing.mockClear();
     render(<ComposeModal mode="new" onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} />);
-    fireEvent.change(await screen.findByTestId('compose-from'), { target: { value: 'acct-1 me@example.test' } });
+    await screen.findByTestId('compose-from');
+    pickEmail('compose-from', 'acct-1 me@example.test');
     fireEvent.change(screen.getByTestId('compose-to'), { target: { value: 'recipient@example.test' } });
     await waitFor(() => expect(screen.getByTestId('compose-send').closest('form').dataset.preparationReady).toBe('true'));
     fireEvent.click(screen.getByTestId('compose-send'));
@@ -252,7 +255,7 @@ describe('the quoted original in a reply', () => {
     const onSaveState = vi.fn();
     mail.requestSettingsTab = vi.fn();
     render(<ComposeModal mode="new" onClose={() => {}} onMinimize={onMinimize} onSaveState={onSaveState} />);
-    await screen.findByTestId('compose-from');
+    fireEvent.click(await screen.findByTestId('compose-from'));
     fireEvent.click(screen.getByTestId('compose-add-address'));
     await waitFor(() => expect(mail.requestSettingsTab).toHaveBeenCalledWith('accounts', { accountId: 'acct-1', section: 'aliases' }));
     expect(onSaveState).toHaveBeenCalled();
@@ -264,7 +267,8 @@ describe('the quoted original in a reply', () => {
     const onOpenAliases = vi.fn();
     mail.requestSettingsTab = vi.fn();
     render(<ComposeModal mode="new" onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} onOpenAliases={onOpenAliases} />);
-    fireEvent.click(await screen.findByTestId('compose-add-address'));
+    fireEvent.click(await screen.findByTestId('compose-from'));
+    fireEvent.click(screen.getByTestId('compose-add-address'));
     await waitFor(() => expect(onOpenAliases).toHaveBeenCalledWith('acct-1'));
     expect(mail.requestSettingsTab).not.toHaveBeenCalled();
     delete mail.requestSettingsTab;

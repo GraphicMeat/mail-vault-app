@@ -4,6 +4,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { act, render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
+import { pickEmail } from '../../test/pickEmail';
 
 const { stageOutgoing, saveLocalDraft, readAttachments, deleteLocalDraft, resolveDraftsMailbox } = vi.hoisted(() => ({
   // compose.stage's answer: the staged copy and the row the daemon wrote.
@@ -207,7 +208,7 @@ describe('complete draft revisions at the actual component boundary', () => {
   it('freezes account and identity while the old native save waits', async () => {
     const save = deferred(); saveLocalDraft.mockReturnValueOnce(save.promise);
     render(<ComposeModal {...props} initialData={{ ...seed, _draftMailbox: null }} />); await tick();
-    fireEvent.change(screen.getByTestId('compose-from'), { target: { value: 'acct-2 two@example.test' } }); await tick();
+    pickEmail('compose-from', 'acct-2 two@example.test'); await tick();
     const first = saveLocalDraft.mock.calls[0][0];
     await act(async () => { save.resolve(accepted(first)); });
     expect(saveLocalDraft.mock.calls.map(([request]) => [request.accountId, request.fromAddress, request.draftId])).toEqual([['acct-1', 'me@example.test', 'stable-draft'], ['acct-2', 'two@example.test', 'stable-draft']]);
@@ -219,7 +220,7 @@ describe('complete draft revisions at the actual component boundary', () => {
     deleteLocalDraft.mockImplementation(async ({ accountId, mailbox, uid }) => { durable.delete(`${accountId}/${mailbox}/${uid}`); });
     saveLocalDraft.mockImplementation(async request => { if (request.accountId === 'acct-2') throw Error('destination unavailable'); durable.set(`${request.accountId}/LegacyDrafts/42`, request.payload.text); return accepted(request); });
     render(<ComposeModal {...props} initialData={seed} />); await tick();
-    fireEvent.change(screen.getByTestId('compose-from'), { target: { value: 'acct-2 two@example.test' } }); await tick();
+    pickEmail('compose-from', 'acct-2 two@example.test'); await tick();
     expect(durable.get('acct-1/LegacyDrafts/42')).toBe('typed');
   });
   it('waits for an in-flight local save before handing the latest snapshot off', async () => {
@@ -467,7 +468,7 @@ it('captures an edit before the recovery seed first timer and retries that exact
     body: '<p>old recovery</p>', bcc: 'secret@example.test', inReplyTo: '<parent>', references: '<root> <parent>', attachments: [file] }} />);
   fireEvent.change(screen.getByTestId('editor-stub'), { target: { value: '<p>latest before capture</p>' } });
   fireEvent.change(screen.getByTestId('compose-to'), { target: { value: 'latest@example.test' } });
-  fireEvent.change(screen.getByTestId('compose-from'), { target: { value: 'acct-2 two@example.test' } });
+  pickEmail('compose-from', 'acct-2 two@example.test');
   await tick();
   const request = saveLocalDraft.mock.calls[0][0];
   expect(request).toMatchObject({ draftId: 'recovered', revision: 1, accountId: 'acct-2', fromAddress: 'two@example.test', payload: {

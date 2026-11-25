@@ -4,9 +4,9 @@ import {useInsightsStore} from '../../stores/insightsStore';
 import {useMailStore} from '../../stores/mailStore';
 import {useSettingsStore} from '../../stores/settingsStore';
 import {Button} from '../ui/Button';
+import {EmailSelector,useAccountSections} from '../ui/EmailSelector';
 import {useT,getLocale} from '../../i18n';
 import { Private } from '../privacy/Private';
-import { usePrivateAttr } from '../../hooks/usePrivacy';
 import SenderMap from './SenderMap';
 import SenderTimeline from './SenderTimeline';
 import ActivityCalendar from './ActivityCalendar';
@@ -18,9 +18,9 @@ import '../../styles/insights.css';
 const locale=()=>getLocale()==='zh-Hans'?'zh-CN':getLocale();
 export default function InsightsPage({onClose,onComposeReply}) {
   const t = useT();
-  const pa = usePrivateAttr();
   const state=useInsightsStore();
   const accounts=useMailStore(s=>s.accounts);
+  const accountRows=useAccountSections(accounts);
   const sendAs=useSettingsStore(s=>s.sendAsAddresses);
   const aliases=useSettingsStore(s=>s.aliases);
   const accountSignature=JSON.stringify([accounts.map(({id,email,sentFolderOverride})=>({id,email,sentFolderOverride})),sendAs,aliases]);
@@ -62,9 +62,9 @@ export default function InsightsPage({onClose,onComposeReply}) {
     </header>
     <div className="insights-scroll">
       <div className="insights-toolbar">
-        <label><span>{t('insights.accounts')}</span><select data-testid="insights-accounts" value={preferences.accountIds?.[0] || accounts[0]?.id || ''}
-          onChange={e=>state.setQuery({accountIds:e.target.value ? [e.target.value] : []})}>
-          {accounts.map(a=><option key={a.id} value={a.id}>{pa(a.email,'email')}</option>)}</select></label>
+        <div className="insights-account-picker"><span>{t('insights.accounts')}</span><EmailSelector testId="insights-accounts" ariaLabel={t('insights.accounts')}
+          value={preferences.accountIds?.[0] || accounts[0]?.id || ''} sections={accountRows}
+          onChange={id=>state.setQuery({accountIds:id ? [id] : []})}/></div>
         <label><span>{t('insights.range')}</span><select data-testid="insights-range-preset" value={preferences.range || '12m'} onChange={e=>state.setQuery({range:e.target.value,...(e.target.value==='custom'?{startDate:query.startDate,endDate:query.endDate}:{})})}>
           <option value="30d">{t('insights.range30')}</option><option value="90d">{t('insights.range90')}</option><option value="12m">{t('insights.rangeYear')}</option><option value="custom">{t('insights.custom')}</option>
         </select></label>

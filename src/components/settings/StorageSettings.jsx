@@ -5,6 +5,9 @@ import { useSettingsStore, hasPremiumAccess } from '../../stores/settingsStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cleanupStatus, cleanupRules as readCleanupRules, onCleanupRun, runCleanupNow } from '../../services/cleanupApi';
 import { ToggleSwitch } from '../ui/ToggleSwitch';
+import { EmailSelector, useAccountSections } from '../ui/EmailSelector';
+
+const emailOf = account => account.email;
 import { SearchIndexSettings } from './SearchIndexSettings';
 import { StorageFormatSettings } from './StorageFormatSettings';
 import { DownloadModeControl } from './DownloadModeControl';
@@ -26,7 +29,6 @@ import { decodeImapUtf7 } from '../../utils/imapUtf7';
 import { formatDateTime } from '../../utils/dateFormat';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { t, tErr, useT } from '../../i18n/index.js';
-import { usePrivateAttr } from '../../hooks/usePrivacy';
 import { formatCount } from '../../utils/formatCount';
 import { DesktopViewEnv } from './DesktopViewEnv';
 import { StorageView } from './views/StorageView';
@@ -41,7 +43,6 @@ const CLEANUP_FOLDERS = ['all', 'INBOX', 'Sent', 'Trash', 'Junk', 'Archive'];
 
 export function StorageSettings({ accounts, onUpgrade }) {
   const t = useT();
-  const pa = usePrivateAttr();
   const priceBlurb = usePremiumPriceBlurb();
   // A native confirm() can only offer OK/Cancel, so the button on the most
   // destructive action in the app could not name what it was about to erase.
@@ -51,7 +52,6 @@ export function StorageSettings({ accounts, onUpgrade }) {
   const {
     localStoragePath,
     setLocalStoragePath,
-    hiddenAccounts,
     billingProfile,
     cleanupRules,
     addCleanupRule,
@@ -77,6 +77,8 @@ export function StorageSettings({ accounts, onUpgrade }) {
   const [clearCacheResult, setClearCacheResult] = useState(null);
   const [cleanupForm, setCleanupForm] = useState(null); // null | { mode: 'add' } | { mode: 'edit', id }
   const [cleanupAccount, setCleanupAccount] = useState('all');
+  // The cleanup rule names its account by address, not id.
+  const cleanupAccountRows = useAccountSections(accounts, { valueFor: emailOf, hideHidden: true });
   const [cleanupFolder, setCleanupFolder] = useState('INBOX');
   const [cleanupAge, setCleanupAge] = useState(30);
   const [cleanupUnit, setCleanupUnit] = useState('days');
@@ -528,19 +530,9 @@ export function StorageSettings({ accounts, onUpgrade }) {
                   {/* Account dropdown */}
                   <div>
                     <label className="text-xs text-mail-text-muted mb-1 block">{t('settings.storage.account')}</label>
-                    <select aria-label={t('settings.storage.account')}
-                      value={cleanupAccount}
-                      onChange={(e) => setCleanupAccount(e.target.value)}
-                      className="w-full px-3 py-2 text-sm bg-mail-surface border border-mail-border rounded-lg text-mail-text focus:outline-none focus:ring-1 focus:ring-mail-accent"
-                    >
-                      <option value="all">{t('settings.storage.allAccounts')}</option>
-                      {accounts
-                        .filter(a => !hiddenAccounts?.[a.id])
-                        .map(a => (
-                          <option key={a.id} value={a.email}>{pa(a.email, 'email')}</option>
-                        ))
-                      }
-                    </select>
+                    <EmailSelector testId="storage-cleanup-account" ariaLabel={t('settings.storage.account')}
+                      value={cleanupAccount} onChange={setCleanupAccount} sections={cleanupAccountRows}
+                      leading={[{ value: 'all', label: t('settings.storage.allAccounts') }]} />
                   </div>
 
                   {/* Folder dropdown */}

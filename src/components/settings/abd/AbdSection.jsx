@@ -1,6 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Archive, HardDriveDownload } from 'lucide-react';
 import { Button } from '../../ui/Button';
+import { EmailSelector, useAccountSections } from '../../ui/EmailSelector';
+
+const NO_ACCOUNTS = [];
 import { SettingsCard } from '../../ui/SettingsForm';
 import AbdSetup from './AbdSetup';
 import { useSettingsStore, hasPremiumAccess } from '../../../stores/settingsStore';
@@ -11,9 +14,7 @@ import { MODE_ARCHIVE, MODE_BACKUP, isFinished } from '../../../utils/abdFrame';
 import { IS_APPSTORE_BUILD } from '../../../utils/buildFlags';
 import { statusText } from '../../abd/abdText';
 import { useT } from '../../../i18n/index.js';
-import { usePrivateAttr } from '../../../hooks/usePrivacy';
 
-const selectClass = 'w-full px-4 py-2 text-sm bg-mail-surface border border-mail-border rounded-lg text-mail-text focus:outline-none focus:ring-1 focus:ring-mail-accent';
 
 function PremiumBadge() {
   const t = useT();
@@ -32,7 +33,6 @@ function PremiumBadge() {
  */
 export default function AbdSection({ onUpgrade }) {
   const t = useT();
-  const pa = usePrivateAttr();
   const accounts = useAccountStore(s => s.accounts);
   const hiddenAccounts = useSettingsStore(s => s.hiddenAccounts);
   const getOrderedAccounts = useSettingsStore(s => s.getOrderedAccounts);
@@ -41,6 +41,7 @@ export default function AbdSection({ onUpgrade }) {
   const jobs = useAbdStore(s => s.jobs);
 
   const visible = getOrderedAccounts(accounts || []).filter(a => !hiddenAccounts?.[a.id]);
+  const accountRows = useAccountSections(accounts || NO_ACCOUNTS, { hideHidden: true });
   const [accountId, setAccountId] = useState(null);
   const [setup, setSetup] = useState(null); // the mode being set up, or null
   const [upsell, setUpsell] = useState(null); // the mode whose Set up was pressed without Premium
@@ -109,10 +110,9 @@ export default function AbdSection({ onUpgrade }) {
 
       <div>
         <label htmlFor="abd-account" className="text-xs text-mail-text-muted mb-1 block">{t('settings.backup.abd.account')}</label>
-        <select id="abd-account" data-testid="abd-account" className={selectClass} value={account.id}
-          onChange={e => { setAccountId(e.target.value); setUpsell(null); }}>
-          {visible.map(a => <option key={a.id} value={a.id}>{pa(a.email, 'email')}</option>)}
-        </select>
+        <EmailSelector id="abd-account" testId="abd-account" ariaLabel={t('settings.backup.abd.account')}
+          value={account.id} sections={accountRows}
+          onChange={id => { setAccountId(id); setUpsell(null); }} />
         {graph && <p className="mt-2 text-xs text-mail-text-muted" data-testid="abd-graph-hint">{t('settings.backup.abd.graphHint')}</p>}
       </div>
 

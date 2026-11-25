@@ -419,6 +419,7 @@
   "common.nextMonth": "다음 달",
   "common.noAccountsConfigured": "설정된 계정이 없습니다",
   "common.noMatches": "일치하는 항목 없음",
+  "emailSelector.search": "계정 및 주소 검색",
   "common.noSubject": "(제목 없음)",
   "common.open": "열기",
   "common.openFolder": "폴더 열기",

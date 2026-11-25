@@ -22,6 +22,7 @@
  */
 
 import { waitForApp, waitForEmails } from './helpers.js';
+import { emailRows, pickEmail } from './emailSelectorHelpers.js';
 import {
   MODAL,
   openComposeFresh,
@@ -52,15 +53,13 @@ describe('Connected Compose Fields', function () {
     await openComposeFresh();
   }
 
-  /** The From `<select>`: its current value plus every option. */
-  const fromSelect = () => browser.execute(() => {
-    const el = document.querySelector('[data-testid="compose-from"]');
-    if (!el) return null;
-    return {
-      value: el.value,
-      options: [...el.options].map((o) => ({ value: o.value, text: o.text.trim() })),
-    };
-  });
+  /** The From selector: its current value plus every row (text = the row's address). */
+  const fromSelect = async () => {
+    const rows = await emailRows('[data-testid="compose-from"]');
+    if (!rows) return null;
+    const value = await browser.execute(() => document.querySelector('[data-testid="compose-from"]')?.dataset.value);
+    return { value, options: rows.map((r) => ({ value: r.value, text: r.address })) };
+  };
 
   /**
    * Every visible button in the modal that carries an email address in a `<p>`

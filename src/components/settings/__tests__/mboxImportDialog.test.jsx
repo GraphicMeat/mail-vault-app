@@ -11,6 +11,7 @@
 import React from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { emailRows, pickEmail } from '../../../test/pickEmail';
 
 // `db/keychain.js` reads the app data dir as a module side effect the moment
 // the `db` barrel loads (see backupRestoreImportAccountsMerge.test.jsx).
@@ -155,7 +156,7 @@ it('disables "Import and restore to the server" with its reason on a Graph accou
   expect(modeButton(dialog, SERVER).disabled).toBe(false);
   expect(within(dialog).queryByText(GRAPH_REASON)).toBeNull();
 
-  fireEvent.change(within(dialog).getByRole('combobox', { name: 'Account' }), { target: { value: GRAPH.id } });
+  pickEmail('mbox-import-account', GRAPH.id);
 
   await waitFor(() => expect(modeButton(dialog, SERVER).disabled).toBe(true));
   expect(within(dialog).getByText(GRAPH_REASON)).toBeTruthy();
@@ -174,7 +175,7 @@ it('for a Takeout file shows the labels toggle, on, and a fallback picker defaul
   // The cached folder list is the choice, unselectable parents left out.
   expect([...picker.options].map((o) => o.value)).toEqual(['INBOX', '[Gmail]/All Mail', 'Archive', 'Work']);
 
-  fireEvent.change(within(dialog).getByRole('combobox', { name: 'Account' }), { target: { value: PLAIN.id } });
+  pickEmail('mbox-import-account', PLAIN.id);
   await waitFor(() => expect(within(dialog).getByRole('combobox', { name: FALLBACK }).value).toBe('Archive'));
 });
 
@@ -308,7 +309,7 @@ it('a Graph account keeps the upload disabled with its reason, and the size warn
   fireEvent.click(modeButton(dialog, SERVER));
   expect(longUploadNotice(dialog)).not.toBeNull();
 
-  fireEvent.change(within(dialog).getByRole('combobox', { name: 'Account' }), { target: { value: GRAPH.id } });
+  pickEmail('mbox-import-account', GRAPH.id);
   await waitFor(() => expect(modeButton(dialog, SERVER).disabled).toBe(true));
   expect(within(dialog).getByText(GRAPH_REASON)).toBeTruthy();
   expect(modeButton(dialog, LOCAL).getAttribute('aria-pressed')).toBe('true');
@@ -528,7 +529,7 @@ it('masks the account choices while privacy mode is on', async () => {
   usePrivacyStore.setState({ enabled: true });
   try {
     const dialog = await openDialog();
-    const options = [...within(dialog).getByTestId('mbox-import-account').querySelectorAll('option')].map(o => o.textContent);
+    const options = (within(dialog).getByTestId('mbox-import-account'), emailRows('mbox-import-account').map(r => r.text));
     expect(options.length).toBeGreaterThan(0);
     for (const text of options) expect(text).toMatch(/^[x@.]+$/);
   } finally {

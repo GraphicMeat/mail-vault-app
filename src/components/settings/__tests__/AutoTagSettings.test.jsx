@@ -4,6 +4,7 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, within, act } from '@testing-library/react';
 import '../../../services/workflows/bindStoreActions';
+import { pickEmail, emailRows } from '../../../test/pickEmail';
 
 vi.mock('framer-motion', () => ({
   motion: { div: React.forwardRef((props, ref) => React.createElement('div', { ...props, ref })) },
@@ -133,14 +134,17 @@ describe('AutoTagSettings', () => {
     expect(domain.tomselect.options['example.test']).toBeTruthy();
   });
 
-  it('uses Tom Select to choose the preview account', () => {
+  it('chooses the preview account in the account selector', () => {
     useMailStore.setState({ accounts: [
       { id: 'a1', email: 'me@example.test' }, { id: 'a2', email: 'team@example.test' },
     ] });
     render(<AutoTagSettings />);
     fireEvent.click(screen.getByText('New rule'));
-    const from = document.querySelector('select[aria-label="From"]');
-    expect(from.tomselect.options.a2.text).toBe('team@example.test');
+    expect(emailRows('auto-tag-account')).toEqual([
+      { value: 'a1', text: 'me@example.test' }, { value: 'a2', text: 'team@example.test' },
+    ]);
+    pickEmail('auto-tag-account', 'a2');
+    expect(screen.getByTestId('auto-tag-account').dataset.value).toBe('a2');
   });
 
   it('does not preview a Gmail account against a cloud endpoint, and says why', async () => {

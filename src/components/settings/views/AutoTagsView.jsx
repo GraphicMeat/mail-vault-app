@@ -10,6 +10,7 @@ import { Tag, Trash2, PenTool, Plus, Eye, PlayCircle, Undo2 } from 'lucide-react
 import { Button } from '../../ui/Button';
 import { SettingsField, SettingsSection, SegmentedControl, SettingsPageLayout, SettingsCard } from '../../ui/SettingsForm';
 import { TomSelectField } from '../../ui/TomSelectField';
+import { accountSections } from '../../ui/emailSelectorModel';
 import { ToggleSwitch } from '../../ui/ToggleSwitch';
 import { useT, useViewEnv } from './viewContext';
 
@@ -116,7 +117,7 @@ const NO_SENDERS = { addresses: [], domains: [] };
  *   `showInboxAction` (the phone keeps a rule's inbox action but its list does not hide mail).
  */
 export function AutoTagsView({
-  rules, backfills = {}, tags = [], senderOptions = NO_SENDERS, accountOptions = [], defaultAccountId = '',
+  rules, backfills = {}, tags = [], senderOptions = NO_SENDERS, accountOptions = [], accountRows = null, defaultAccountId = '',
   onCreate, onUpdate, onDelete, onCreateTag, onPreview, onBackfill, onUndo,
   onToggle = (rule) => Promise.resolve(onUpdate(rule.id, { ...formToDraft(ruleToForm(rule)), enabled: !rule.enabled })).catch(() => {}),
   providerFor = (provider) => provider, currentProvider = () => null, errorText = (e) => e?.message || String(e),
@@ -124,7 +125,7 @@ export function AutoTagsView({
   intro, allowRemoteHint, notice = null, ruleNote = () => null, showInboxAction = true,
 }) {
   const t = useT();
-  const { Private } = useViewEnv();
+  const { Private, AccountPicker } = useViewEnv();
   const tagOptions = useMemo(() => tags.map(tag => ({ value: tag.id, label: tag.name })), [tags]);
 
   const [editing, setEditing] = useState(null); // null | { mode: 'add' } | { mode: 'edit', id }
@@ -406,8 +407,9 @@ export function AutoTagsView({
 
                   {accountOptions.length > 1 && (
                     <SettingsField label={t('common.from')}>
-                      <TomSelectField label={t('common.from')} value={accountId} options={accountOptions}
-                        placeholder={t('common.from')} onChange={setAccountId} />
+                      <AccountPicker testId="auto-tag-account" ariaLabel={t('common.from')} value={accountId}
+                        sections={accountRows || accountSections(accountOptions.map(o => ({ id: o.value, email: o.label })))}
+                        onChange={setAccountId} />
                     </SettingsField>
                   )}
 

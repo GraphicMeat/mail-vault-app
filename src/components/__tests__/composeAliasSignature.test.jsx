@@ -8,6 +8,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { render, screen, cleanup, waitFor, within, fireEvent } from '@testing-library/react';
+import { pickEmail } from '../../test/pickEmail';
 
 const { invoke } = vi.hoisted(() => ({ invoke: vi.fn() }));
 
@@ -136,7 +137,8 @@ const bodyText = async () => {
   return (await within(body).findByRole('textbox')).textContent;
 };
 const pickFrom = async address => {
-  fireEvent.change(await screen.findByTestId('compose-from'), { target: { value: `acct-1 ${address}` } });
+  await screen.findByTestId('compose-from');
+  pickEmail('compose-from', `acct-1 ${address}`);
 };
 
 describe('the signature follows the address a message leaves from', () => {

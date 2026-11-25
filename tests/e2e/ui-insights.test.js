@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { waitForApp, reloadApp, waitForEmails, openSettings, closeSettings, clickSettingsNav } from './helpers.js';
 import { clickReachable, setControl, openInsights, waitForInsights, setInsightsRange,
   nativeInvoke, cacheScenarioHeaders, captureInsights, summaryText, startNativeProbe, stopNativeProbe, nativeProbeOutcomes } from './insightsHelpers.js';
+import { emailRows } from './emailSelectorHelpers.js';
 
 async function assertNoWindowOverflow() {
   const dimensions = await browser.execute(() => ({ inner: innerWidth, scroll: document.documentElement.scrollWidth,
@@ -70,10 +71,10 @@ describe('Insights native workspace and responsive states', function () {
 
   it('offers only individual accounts and preserves the chosen account after reopening', async () => {
     await openInsights(); await setInsightsRange();
-    const accounts = await browser.execute(() => {
-      const select = document.querySelector('[data-testid="insights-accounts"]');
-      return { value: select.value, options: [...select.options].map(option => ({ value: option.value, text: option.textContent })) };
-    });
+    const accounts = {
+      value: await browser.execute(() => document.querySelector('[data-testid="insights-accounts"]').dataset.value),
+      options: await emailRows('[data-testid="insights-accounts"]'),
+    };
     assert.deepEqual(accounts.options.map(option => option.value), browser.mockAccounts.map(account => account.id));
     assert.ok(accounts.value, 'A valid single account is selected on entry');
     assert.ok(accounts.options.every(option => !/all accounts/i.test(option.text)));

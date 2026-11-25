@@ -10,6 +10,7 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { pickEmail } from '../../test/pickEmail';
 
 vi.mock('framer-motion', () => {
   const div = React.forwardRef(({ children, initial, animate, exit, transition, ...props }, ref) =>
@@ -82,7 +83,7 @@ async function pick(path) {
   fireEvent.click(row(path));
   await waitFor(() => expect(calls('folder_move.plan').length).toBeGreaterThan(0));
 }
-const chooseAccount = (id) => act(async () => { fireEvent.change(accountSelect(), { target: { value: id } }); });
+const chooseAccount = async (id) => { pickEmail('move-folder-account', id); await act(async () => {}); };
 
 beforeEach(() => {
   sendMock.mockClear();
@@ -239,8 +240,10 @@ describe('MoveFolderDialog', () => {
     // Its own account: free.
     expect(rows().length).toBeGreaterThan(1);
     // Another: named as Premium in the list, and no folders to pick there.
-    const option = [...accountSelect().options].find((o) => o.value === 'dst');
-    expect(option.textContent).toBe(words('folderMove.accountLocked', { email: 'me@gmail.test' }));
+    fireEvent.click(accountSelect());
+    const option = document.querySelector('[data-email-selector-list="move-folder-account"] [data-value="dst"]');
+    expect(option.dataset.locked).toBe('true');
+    expect(option.getAttribute('aria-label')).toBe(words('folderMove.accountLocked', { email: 'me@gmail.test' }));
     await chooseAccount('dst');
     expect(dialog().textContent).toContain(en['folderMove.premiumUpsell']);
     expect(rows()).toEqual([]);

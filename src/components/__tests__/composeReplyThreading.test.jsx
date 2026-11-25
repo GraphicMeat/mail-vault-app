@@ -11,6 +11,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { act, render, screen, cleanup, waitFor, fireEvent } from '@testing-library/react';
 import { buildThreads } from '../../utils/emailParser';
+import { pickEmail } from '../../test/pickEmail';
 
 const { invoke, sendStaged, stageOutgoing, preparation } = vi.hoisted(() => ({
   invoke: vi.fn(),
@@ -401,7 +402,7 @@ it('keeps the selected sender and re-prepares after account and alias changes du
   try {
     const { rerender } = render(<ComposeModal {...props} />);
     await waitFor(() => expect(preparation.calls).toHaveLength(1));
-    fireEvent.change(screen.getByTestId('compose-from'), { target: { value: 'acct-2 second@example.test' } });
+    pickEmail('compose-from', 'acct-2 second@example.test');
     settings.aliases = { 'acct-2': [{ address: 'newalias@example.test' }] };
     rerender(<ComposeModal {...props} />);
     await act(async () => { release(); });

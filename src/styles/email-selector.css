@@ -1,0 +1,40 @@
+/* EmailSelector: the account/address picker. The closed trigger and its rows
+   draw an account the way the sidebar does (avatar on the account colour, name
+   over full address). */
+.email-selector-trigger { display: flex; align-items: center; gap: 8px; min-width: 0; width: 100%; text-align: left; color: var(--mail-text); cursor: pointer; outline: none; }
+.email-selector-trigger:disabled { opacity: .5; cursor: default; }
+.email-selector-field { min-height: 40px; padding: 5px 10px; background: var(--mail-input-bg); border: 1px solid var(--mail-border); border-radius: 8px; transition: border-color .15s; }
+.email-selector-field:hover:not(:disabled) { border-color: var(--mail-border-strong, var(--mail-text-muted)); }
+.email-selector-field:focus-visible, .email-selector-field[aria-expanded="true"] { border-color: var(--mail-accent); }
+.email-selector-inline { padding: 3px 4px; margin: 0 -4px; background: transparent; border: 0; border-radius: 6px; }
+.email-selector-inline:hover:not(:disabled), .email-selector-inline[aria-expanded="true"] { background: var(--mail-surface-hover); }
+.email-selector-inline:focus-visible { box-shadow: 0 0 0 2px var(--mail-accent); }
+.email-selector-chevron { flex-shrink: 0; margin-left: auto; color: var(--mail-text-muted); }
+.email-selector-avatar { display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; flex-shrink: 0; border-radius: 50%; color: #fff; font-size: 11px; font-weight: 600; line-height: 1; }
+.email-selector-alias-mark { display: flex; align-items: center; justify-content: center; width: 26px; flex-shrink: 0; color: var(--mail-text-muted); }
+.email-selector-text { display: flex; flex-direction: column; min-width: 0; flex: 1; gap: 1px; }
+.email-selector-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 500; line-height: 1.35; color: var(--mail-text); }
+.email-selector-address { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; line-height: 1.35; color: var(--mail-text-muted); }
+.email-selector-placeholder .email-selector-name { font-weight: 400; color: var(--mail-text-muted); }
+
+.email-selector-panel { width: min(420px, calc(100vw - 16px)); max-width: calc(100vw - 16px); padding: 6px !important; }
+.email-selector-search { position: relative; display: flex; align-items: center; margin-bottom: 4px; color: var(--mail-text-muted); }
+.email-selector-search svg { position: absolute; left: 10px; pointer-events: none; }
+.email-selector-search input { width: 100%; height: 32px; padding: 0 10px 0 30px; font-size: 13px; color: var(--mail-text); background: var(--mail-input-bg); border: 1px solid var(--mail-border); border-radius: 6px; outline: none; }
+.email-selector-search input:focus { border-color: var(--mail-accent); }
+.email-selector-list { max-height: min(360px, 60vh); overflow-y: auto; margin: 0; padding: 0; list-style: none; }
+.email-selector-list ul { margin: 0; padding: 0; list-style: none; }
+.email-selector-group { display: flex; align-items: center; gap: 6px; padding: 10px 10px 4px; font-size: 11px; font-weight: 500; color: var(--mail-text-muted); }
+.email-selector-row { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 6px; cursor: pointer; }
+.email-selector-row.is-active { background: var(--mail-surface-hover); }
+.email-selector-row.is-selected { background: var(--mail-accent-tint); }
+.email-selector-row.is-selected .email-selector-address { color: var(--mail-accent-text); }
+.email-selector-alias { padding-left: 26px; }
+.email-selector-alias .email-selector-name { font-weight: 400; }
+.email-selector-row.is-locked .email-selector-text, .email-selector-row.is-locked .email-selector-avatar { opacity: .6; }
+.email-selector-lock { flex-shrink: 0; color: var(--mail-text-muted); }
+.email-selector-check { flex-shrink: 0; color: var(--mail-accent-text); }
+.email-selector-empty { padding: 12px 10px; font-size: 13px; color: var(--mail-text-muted); }
+.email-selector-footer { margin-top: 6px; padding-top: 4px; border-top: 1px solid var(--mail-border); }
+.email-selector-footer button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 7px 10px; font-size: 13px; text-align: left; color: var(--mail-accent-text); border-radius: 6px; }
+.email-selector-footer button:hover { background: var(--mail-surface-hover); }

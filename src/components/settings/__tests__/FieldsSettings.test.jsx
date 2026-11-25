@@ -3,6 +3,7 @@ import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { create } from 'zustand';
+import { pickEmail } from '../../../test/pickEmail';
 
 vi.mock('lucide-react', () => {
   const icon = (name) => props => React.createElement('span', { 'data-icon': name, ...props });
@@ -113,7 +114,7 @@ describe('the custom field editor', () => {
   it('copies another account’s fields into this one', () => {
     useFieldStoreMock.setState({ fields: { 'acct-1': [PRIORITY], 'acct-2': [{ ...PRIORITY, id: 'x1', name: 'Client', scope: 'acct-2' }] } });
     render(<FieldsSettings />);
-    fireEvent.change(screen.getByTestId('copy-from-account'), { target: { value: 'acct-2' } });
+    pickEmail('copy-from-account', 'acct-2');
     fireEvent.click(screen.getByTestId('copy-field-x1'));
     fireEvent.click(screen.getByTestId('copy-fields-run'));
     expect(useFieldStoreMock.getState().copyFields).toHaveBeenCalledWith(['x1'], 'acct-1');

@@ -353,7 +353,7 @@ describe('account marker', () => {
 
   it('uses desktop\'s colour for the same account', () => {
     // jsdom's import.meta.url is not a file URL: read from the repo root vitest runs in.
-    const src = readFileSync(resolve(process.cwd(), 'src/stores/settingsStore.js'), 'utf8');
+    const src = readFileSync(resolve(process.cwd(), 'src/utils/accountAvatar.js'), 'utf8');
     const block = src.slice(src.indexOf('AVATAR_COLORS = ['), src.indexOf('];', src.indexOf('AVATAR_COLORS = [')));
     expect(ACCOUNT_COLORS).toEqual(block.match(/#[0-9a-f]{6}/gi));
     // desktop's hashColor, run on the same address

@@ -13,6 +13,8 @@ export { Avatar } from './Avatar';
 export { SettingRow } from './SettingRow';
 export { SettingsField, SegmentedControl } from './SettingsForm';
 export { Combobox } from './Combobox';
+export { EmailSelector, useAccountSections } from './EmailSelector';
+export { accountSections } from './emailSelectorModel';
 export { DateTimePicker } from './DateTimePicker';
 export { TypeaheadChips } from './TypeaheadChips';
 export { TomSelectField } from './TomSelectField';

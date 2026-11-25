@@ -2,13 +2,14 @@ import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useId
 import { useDialogA11y } from '../hooks/useDialogA11y';
 import { useOriginalPictures } from '../hooks/useOriginalPictures';
 import { Dialog } from './ui/Dialog';
+import { EmailSelector, useAccountSections } from './ui/EmailSelector';
 import { Button } from './ui/Button';
 import { useAccountStore } from '../stores/accountStore';
 import { useMailStore } from '../stores/mailStore';
 import { resolveEmailLocation } from '../stores/slices/unifiedHelpers';
 import { useSettingsStore, hasPremiumAccess } from '../stores/settingsStore';
 import { motion } from 'framer-motion';
-import { X, Send, Paperclip, Loader, Minimize2, Maximize2, PictureInPicture2, ExternalLink, Trash2, ChevronDown, BookTemplate, ChevronRight, Clock, Columns, PanelRight } from 'lucide-react';
+import { X, Send, Paperclip, Loader, Minimize2, Maximize2, PictureInPicture2, ExternalLink, Trash2, BookTemplate, Plus, ChevronRight, Clock, Columns, PanelRight } from 'lucide-react';
 import { RichTextEditor, textToHtml, htmlToText } from './RichTextEditor';
 import { RecipientField } from './RecipientField';
 import { OriginalFrame, OriginalThemeToggle, useDefaultEmailDark } from './OriginalFrame';
@@ -20,7 +21,7 @@ import { withoutSnippet } from '../utils/withoutSnippet';
 import { composeIdentities, composeSenderName, composeSignature, resolveInitialComposeIdentity } from '../utils/sendAsSuggestions';
 import { deleteLocalDraft, newDraftId } from '../services/localDrafts';
 import { t, useT, getLocale } from '../i18n/index.js';
-import { usePrivateAttr, usePrivateInputClass } from '../hooks/usePrivacy';
+import { usePrivateInputClass } from '../hooks/usePrivacy';
 import { SchedulePicker } from './scheduled/SchedulePicker';
 import { ScheduledSendNotice } from './scheduled/ScheduledFolderModal';
 import { isPastLocalTime, formatWallClock } from '../utils/scheduledTime';
@@ -80,7 +81,6 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
   // Parent-owned quote/fill changes commit before any pending check can resume.
   useLayoutEffect(() => { invalidate(); }, [invalidate, replyToProp, preparedQuote, initialData?._replyTo, mode]);
   const t = useT();
-  const pa = usePrivateAttr();
   const privateInput = usePrivateInputClass();
   // A reader's snippet stand-in (`_bodyLoading`) is never quoted or forwarded
   // as the message: without it the quote waits for the real body like a
@@ -146,6 +146,16 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
     identities = [...identities, { key: `${selectedAccountId} ${pickedFrom}`, accountId: selectedAccountId, address: pickedFrom, name: '' }];
   }
   const composeFrom = pickedFrom || composeSendAs || selectedAccount?.email || '';
+  // From rows: each account's first identity is its own row, the rest
+  // (default From, aliases, a removed alias still in use) indent under it.
+  const identitiesOf = (account) => identities.filter(i => i.accountId === account.id);
+  const fromSections = useAccountSections(accounts.filter(account => identitiesOf(account).length), {
+    valueFor: account => identitiesOf(account)[0].key,
+    addressOf: account => identitiesOf(account)[0].address,
+    // A leading send-as alias keeps its own name on the account's row.
+    nameOf: account => identitiesOf(account)[0].name || '',
+    aliasesOf: account => identitiesOf(account).slice(1).map(i => ({ value: i.key, address: i.address, name: i.name || '' })),
+  });
   // The name the From header carries: the chosen alias's, else the account's.
   const senderNameFor = (account, fromAddress) => composeSenderName({
     account,
@@ -1113,48 +1123,19 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
             {identities.length > 0 && (
               <div className="flex items-center gap-2">
                 <label className="w-16 flex-shrink-0 text-sm text-mail-text-muted">{t('compose.from')}</label>
-                <div className="relative flex-1 min-w-0">
-                  <select aria-label={t('compose.from')}
-                    data-testid="compose-from"
+                <div className="flex-1 min-w-0">
+                  <EmailSelector variant="inline" ariaLabel={t('compose.from')} testId="compose-from"
                     value={`${selectedAccountId} ${composeFrom}`}
-                    onChange={(e) => {
+                    sections={fromSections}
+                    onChange={(key) => {
                       if (detaching) return;
-                      const [accountId, address] = e.target.value.split(' ');
-                      setSelectedAccountId(accountId);
-                      setPickedFrom(address);
+                      const at = key.indexOf(' ');
+                      setSelectedAccountId(key.slice(0, at));
+                      setPickedFrom(key.slice(at + 1));
                     }}
-                    className="w-full bg-transparent text-mail-text text-sm py-1 pr-6
-                              outline-none appearance-none cursor-pointer"
-                  >
-                    {accounts.map(acc => {
-                      const ids = identities.filter(i => i.accountId === acc.id);
-                      // A name that IS the address adds nothing and, with an
-                      // override set, would show both addresses at once.
-                      const named = acc.name && acc.name !== acc.email;
-                      if (ids.length === 1) {
-                        const name = ids[0].name || (named ? acc.name : '');
-                        const label = name ? `${pa(name, 'name')} <${pa(ids[0].address, 'email')}>` : pa(ids[0].address, 'email');
-                        return <option key={acc.id} value={ids[0].key}>{label}</option>;
-                      }
-                      // The native optgroup indents the addresses under the account.
-                      return (
-                        <optgroup key={acc.id} label={pa(named ? acc.name : acc.email, 'name')}>
-                          {ids.map(i => (
-                            <option key={i.key} value={i.key}>{i.name ? `${pa(i.name, 'name')} <${pa(i.address, 'email')}>` : pa(i.address, 'email')}</option>
-                          ))}
-                        </optgroup>
-                      );
-                    })}
-                  </select>
-                  <ChevronDown size={14} className="absolute right-0 top-1/2 -translate-y-1/2
-                                                     text-mail-text-muted pointer-events-none" />
+                    footer={{ label: t('compose.addAddress'), title: t('compose.addAddressHint'), onClick: openAliases,
+                      testId: 'compose-add-address', icon: <Plus size={14} aria-hidden="true" /> }} />
                 </div>
-                {/* A native <select> cannot hold an action, so it sits beside it. */}
-                <button type="button" onClick={openAliases} data-testid="compose-add-address"
-                  title={t('compose.addAddressHint')}
-                  className="flex-shrink-0 text-xs text-mail-accent-text hover:underline whitespace-nowrap">
-                  {t('compose.addAddress')}
-                </button>
               </div>
             )}
 

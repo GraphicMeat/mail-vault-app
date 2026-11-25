@@ -30,6 +30,7 @@ import { waitForApp, waitForEmails, openSettings, closeSettings, clickSettingsNa
 import { appDataDir } from './mockImap.js';
 import { imap } from './rawImap.js';
 import { usePremiumPlan } from './premiumPlan.js';
+import { pickEmail } from './emailSelectorHelpers.js';
 
 const LUKE = 'luke@mock.test';
 const BACKUP_FOLDER = 'AbdBackup';
@@ -97,14 +98,8 @@ const textOf = (testid) => browser.execute((id) =>
 const isChecked = (testid) => browser.execute((id) =>
   !!document.querySelector(`[data-testid="${id}"]`)?.checked, testid);
 
-/** A native <select> is set through the prototype setter so React sees the change. */
-const chooseAccount = (accountId) => browser.execute((id) => {
-  const select = document.querySelector('[data-testid="abd-account"]');
-  if (!select) return false;
-  Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(select, id);
-  select.dispatchEvent(new Event('change', { bubbles: true }));
-  return true;
-}, accountId);
+/** Open the account selector and click the account's row. */
+const chooseAccount = (accountId) => pickEmail('[data-testid="abd-account"]', accountId);
 
 /** The uids a folder holds on the server, read by a second client with none of the app in the way. */
 async function serverUids(port, mailbox) {

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { join, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { waitForApp } from './helpers.js';
+import { isEmailSelector, pickEmail } from './emailSelectorHelpers.js';
 
 /** Semantic handlers through the real visible controls. This driver cannot
  * reliably provide trusted native key activation; do not claim that coverage. */
@@ -46,6 +47,10 @@ export async function clickReachable(selector) {
 }
 export async function setControl(selector, value) {
   await waitForReachableControl(selector);
+  if (await isEmailSelector(selector)) {
+    assert.equal(await pickEmail(selector, value), true, `Reachable EmailSelector row: ${selector} = ${value}`);
+    return;
+  }
   const result = await browser.execute((sel, next) => {
     const node = document.querySelector(sel);
     if (!node || node.disabled || node.closest('[hidden], [inert]')) return false;

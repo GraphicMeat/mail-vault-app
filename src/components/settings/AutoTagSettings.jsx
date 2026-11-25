@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { useAccountSections } from '../ui/EmailSelector';
 import { useAutoTagStore } from '../../stores/autoTagStore';
 import { useTagStore } from '../../stores/tagStore';
 import { useAccountStore } from '../../stores/accountStore';
@@ -50,6 +51,7 @@ export function AutoTagSettings() {
   const accounts = useAccountStore(s => s.accounts) || [];
   const accountOptions = useMemo(() => accounts.map(account => ({ value: account.id, label: account.email })), [accounts]);
   const activeAccountId = useAccountStore(s => s.activeAccountId);
+  const accountRows = useAccountSections(accounts);
 
   // Google mail never goes to a cloud endpoint (the daemon refuses it too):
   // say so here instead of sending a request that is bound to be turned away.
@@ -60,7 +62,7 @@ export function AutoTagSettings() {
 
   return <DesktopViewEnv>
     <AutoTagsView rules={rules} backfills={backfills} tags={tags} senderOptions={senderOptions}
-      accountOptions={accountOptions} defaultAccountId={activeAccountId || accounts[0]?.id || ''}
+      accountOptions={accountOptions} accountRows={accountRows} defaultAccountId={activeAccountId || accounts[0]?.id || ''}
       onCreate={createRule} onUpdate={updateRule} onDelete={deleteRule}
       onToggle={rule => updateRule(rule.id, { ...ruleToForm(rule), enabled: !rule.enabled }).catch(() => {})}
       onCreateTag={createTag} onPreview={previewRule} onBackfill={runBackfill} onUndo={undoBackfill}

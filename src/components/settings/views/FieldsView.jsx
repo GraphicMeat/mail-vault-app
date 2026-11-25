@@ -12,6 +12,7 @@
 import React, { useEffect, useState } from 'react';
 import { Trash2, Globe, User, ChevronUp, ChevronDown } from 'lucide-react';
 import { SettingsCard } from '../../ui/SettingsForm';
+import { accountSections } from '../../ui/emailSelectorModel';
 import { useT, useViewEnv } from './viewContext';
 
 const KINDS = ['select', 'multi_select', 'date', 'checkbox', 'text'];
@@ -95,11 +96,11 @@ function OptionEditor({ field, onSave, usageOf }) {
 /// The custom fields of one account: what they are called, what kind of
 /// answer they take, and whether every account shares them.
 export function FieldsView({
-  accountId, accounts = [], fields = {}, onLoad, onSave, onDelete, onMove, onCopy, optionUsage,
+  accountId, accounts = [], accountRows = null, fields = {}, onLoad, onSave, onDelete, onMove, onCopy, optionUsage,
   explainerKey = 'fields.explainer',
 }) {
   const t = useT();
-  const { privateAttr: pa } = useViewEnv();
+  const { AccountPicker } = useViewEnv();
   const [name, setName] = useState('');
   const [kind, setKind] = useState('select');
   const [confirming, setConfirming] = useState(null);
@@ -197,11 +198,11 @@ export function FieldsView({
     </form>
 
     {others.length > 0 && <div className="fields-copy">
-      <select data-testid="copy-from-account" value={copyFrom} aria-label={t('fields.copyFrom')}
-        onChange={event => { setCopyFrom(event.target.value); setPicked([]); }}>
-        <option value="">{t('fields.copyFrom')}</option>
-        {others.map(account => <option key={account.id} value={account.id}>{pa(account.email, 'email')}</option>)}
-      </select>
+      <AccountPicker testId="copy-from-account" ariaLabel={t('fields.copyFrom')} value={copyFrom}
+        placeholder={t('fields.copyFrom')} sections={accountRows
+          ? accountRows.map(s => ({ ...s, items: s.items.filter(i => i.value !== accountId) })).filter(s => s.items.length)
+          : accountSections(others)}
+        onChange={id => { setCopyFrom(id); setPicked([]); }} />
       {sourceFields.map(field => <label key={field.id}>
         <input type="checkbox" data-testid={`copy-field-${field.id}`} checked={picked.includes(field.id)}
           onChange={event => setPicked(current => (event.target.checked

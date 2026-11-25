@@ -28,20 +28,7 @@ export function matchGroups(groups, draft) {
   };
 }
 
-export function groupAccounts(orderedAccounts, groupOf) {
-  const ungrouped = { name: null, accounts: [] };
-  const named = new Map();
-  for (const account of orderedAccounts) {
-    const name = groupOf[account.id];
-    if (!name) {
-      ungrouped.accounts.push(account);
-    } else {
-      if (!named.has(name)) named.set(name, { name, accounts: [] });
-      named.get(name).accounts.push(account);
-    }
-  }
-  return [...(ungrouped.accounts.length || !named.size ? [ungrouped] : []), ...named.values()];
-}
+export { groupAccounts } from '../utils/groupAccounts';
 
 export function accountsInScope(accounts, { hiddenAccounts = {}, accountGroups = {}, group = null } = {}) {
   return (accounts || []).filter(account => !hiddenAccounts?.[account.id]

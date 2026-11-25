@@ -33,6 +33,7 @@ import { join } from 'node:path';
 import { switchToFolder, waitForApp, waitForEmails } from './helpers.js';
 import { setPremium } from './mockBilling.js';
 import { appDataDir, MOCK_PASSWORD } from './mockImap.js';
+import { pickEmail } from './emailSelectorHelpers.js';
 
 const LUKE = 'luke@mock.test';
 const VADER = 'vader@mock.test';
@@ -273,13 +274,8 @@ describe('Move folder through the daemon', function () {
     });
     expect(await browser.execute(() => document.getElementById('move-folder-account').value)).toBe(accountId(LUKE));
 
-    // Pick vader. The select is React-controlled: WebDriver's own select never
-    // reaches onChange, so set it the way React reads it and dispatch.
-    await browser.execute((id) => {
-      const el = document.getElementById('move-folder-account');
-      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(el, id);
-      el.dispatchEvent(new Event('change', { bubbles: true }));
-    }, vaderId);
+    // Pick vader: open the account selector and click its row.
+    expect(await pickEmail('#move-folder-account', vaderId)).toBe(true);
     // Both accounts have an Archive, so the proof the switch took is the
     // select holding vader after a render and luke's own folders gone.
     const targets = () => browser.execute(() => [...document.querySelectorAll('[data-testid="move-folder-target"]')]

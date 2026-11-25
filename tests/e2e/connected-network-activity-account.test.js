@@ -19,6 +19,7 @@
 import { ImapFlow } from 'imapflow';
 import { MOCK_PASSWORD } from './mockImap.js';
 import { waitForApp, waitForEmails, switchToFolder, openSettings, closeSettings, clickSettingsNav } from './helpers.js';
+import { pickEmail } from './emailSelectorHelpers.js';
 
 const YODA = 'yoda@mock.test';
 const YODA_SERVER = 2; // MOCK_ACCOUNTS order: luke, vader, yoda
@@ -52,8 +53,12 @@ const tableRows = () => browser.execute(() =>
     account: row.querySelector('[data-testid="net-account"]')?.innerText.trim() || '',
   })));
 
-/** Pick `value` in the page's select labelled `label`, as a user would. */
-const choose = (label, value) => browser.execute((name, wanted) => {
+/** Pick `value` in the page's select labelled `label`, as a user would. The
+ *  account picker is an EmailSelector: open it and click the row. */
+const choose = (label, value) => (label === 'Account'
+  ? pickEmail('[data-testid="net-activity-account"]', value)
+  : chooseSelect(label, value));
+const chooseSelect = (label, value) => browser.execute((name, wanted) => {
   const select = document.querySelector(`[data-testid="network-activity"] select[aria-label="${name}"]`);
   if (!select || ![...select.options].some((o) => o.value === wanted)) return false;
   Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(select, wanted);

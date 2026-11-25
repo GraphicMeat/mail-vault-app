@@ -22,6 +22,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pressKey } from './helpers.js';
 import { appDataDir } from './mockImap.js';
+import { isEmailSelector, pickEmail } from './emailSelectorHelpers.js';
 
 export const MODAL = '[data-testid="compose-modal"]';
 export const EDITOR = `${MODAL} .ProseMirror`;
@@ -283,6 +284,7 @@ export const toolbarState = (titlePrefix) => browser.execute((sel, prefix) => {
 
 /** Set a React-controlled input/select by data-testid (value setter + input/change). */
 export async function setField(testid, value) {
+  if (await isEmailSelector(`[data-testid="${testid}"]`)) return pickEmail(`[data-testid="${testid}"]`, value);
   const ok = await browser.execute((id, v) => {
     const el = document.querySelector(`[data-testid="${id}"]`);
     if (!el) return false;

@@ -419,6 +419,7 @@
   "common.nextMonth": "Mois suivant",
   "common.noAccountsConfigured": "Aucun compte configuré",
   "common.noMatches": "Aucun résultat",
+  "emailSelector.search": "Rechercher des comptes et des adresses",
   "common.noSubject": "(Sans objet)",
   "common.open": "Ouvrir",
   "common.openFolder": "Ouvrir le dossier",
