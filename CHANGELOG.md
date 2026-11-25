@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Fixed: right after you picked something in a menu or picker, a click elsewhere could do nothing for a moment while the menu faded out. The page now takes that click straight away.
 - Changed: backup to another drive or folder (the second, external copy) is now part of Premium in the direct download. Without an active Premium plan, copies to the drive pause: everything already on it stays there, and when Premium starts again the next backup catches up on what it missed. Your vault on this computer and manual backups stay free. The Mac App Store version is unchanged.
 - Changed: the note about Premium in a free inbox now shows what Premium does, with illustrations, and what stays free; its button reads Try Premium free.
 - Fixed: Hide mail from views showed 0 for a view that holds plenty of mail, so it could not be picked, and hiding left that mail in All Inboxes. With many accounts, the folders of accounts not opened lately were treated as folders kept only on this computer. MailVault now uses each account's saved folder list, so every view's mail is counted and hidden in every account. Searching All Inboxes names those messages by their real folder too.

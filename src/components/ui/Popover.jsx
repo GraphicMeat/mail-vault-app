@@ -1,4 +1,4 @@
-import React, { forwardRef, useCallback, useEffect, useRef } from 'react';
+import React, { forwardRef, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useViewportShift } from '../../hooks/useViewportShift';
@@ -58,17 +58,29 @@ export const Popover = forwardRef(function Popover({
   useViewportShift(panelRef, true, [open, style?.top, style?.left, style?.right, style?.bottom]);
 
   useEffect(() => open ? registerPopoverLayer(onClose, { handlesTab }) : undefined, [open, onClose, handlesTab]);
+  // A panel still fading out takes no clicks: set before paint, as framer
+  // would only apply an exit style a frame later.
+  useLayoutEffect(() => {
+    // Reopened mid-fade, framer may bring the same node back: clickable again.
+    if (panelRef.current) panelRef.current.style.pointerEvents = open ? '' : 'none';
+  }, [open]);
 
   const layer = z || (hasOpenDialog() ? Z.dialogPopover : Z.popover);
 
+  // The backdrop lives outside AnimatePresence: it goes the moment the popover
+  // closes. Kept through the panel's exit fade it swallowed the next click,
+  // the one a person makes right after picking a row. The fading panel stops
+  // taking clicks too.
   return createPortal(
-    <AnimatePresence>
+    <>
       {open && (
-        <>
-          <div
-            className={`fixed inset-0 ${layer}`}
-            onClick={(e) => { e.stopPropagation(); onClose?.(); }}
-          />
+        <div
+          className={`fixed inset-0 ${layer}`}
+          onClick={(e) => { e.stopPropagation(); onClose?.(); }}
+        />
+      )}
+      <AnimatePresence>
+        {open && (
           <motion.div
             ref={setPanel}
             initial={{ opacity: 0, scale: 0.95 }}
@@ -83,9 +95,9 @@ export const Popover = forwardRef(function Popover({
           >
             {children}
           </motion.div>
-        </>
-      )}
-    </AnimatePresence>,
+        )}
+      </AnimatePresence>
+    </>,
     document.body
   );
 });
