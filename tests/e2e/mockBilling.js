@@ -20,11 +20,14 @@
  *   await setBillingMode('premium');       // what the server says
  *   await setBillingFault('rate_limited'); // or how it fails
  *   await openBillingAs(CUSTOMERS.premium, email);
+ *   await signInWithCode();                // the mailed-code sign-in
+ *   await setSigninCodeFault('code_wrong'); // or how the code is refused
  */
 
 import { openSettings, closeSettings, clickSettingsNav } from './helpers.js';
 
 export const CUSTOMERS = {
+  signin: 'cus_signin_mock', // what /signin/verify answers for a right code
   premium: 'cus_premium_mock',
   lapsed: 'cus_lapsed_mock',
   seat: 'cus_seat_denied_mock',
@@ -66,6 +69,10 @@ export async function installMockBilling() {
     window.__MV_BILLING_FAULT__ = null;
     window.__MV_BILLING_RETRY_AFTER__ = 2;
     window.__MV_BILLING_EMAIL__ = '';
+    // The customer id a correct sign-in code proves, and how verify fails instead.
+    window.__MV_SIGNIN_CUSTOMER__ = 'cus_signin_mock';
+    window.__MV_SIGNIN_CODE_FAULT__ = null;
+    window.__MV_SIGNIN_CALLS__ = [];
     // Every subscription-status request the app made, so a spec can assert on
     // what was ASKED as well as what came back.
     window.__MV_BILLING_CALLS__ = [];
@@ -160,6 +167,25 @@ export async function installMockBilling() {
         // the page's own window.open fallback is stubbed by the spec.
         return Promise.resolve(json({ url: 'mailvault-e2e://checkout', customerId: 'cus_checkout_mock' }));
       }
+      // Email-code sign-in. start always answers {ok:true}, as the server does
+      // whether or not the address is a customer's. verify is where an unknown
+      // address shows: no code row was ever written, which the server answers
+      // as code_expired (signin-code.js verify).
+      if (url.includes('/api/billing/signin/start')) {
+        const body = JSON.parse((init && init.body) || '{}');
+        (window.__MV_SIGNIN_CALLS__ = window.__MV_SIGNIN_CALLS__ || []).push({ step: 'start', email: body.email });
+        return Promise.resolve(json({ ok: true }));
+      }
+      if (url.includes('/api/billing/signin/verify')) {
+        const body = JSON.parse((init && init.body) || '{}');
+        (window.__MV_SIGNIN_CALLS__ = window.__MV_SIGNIN_CALLS__ || []).push({ step: 'verify', email: body.email, code: body.code });
+        const codeFault = window.__MV_SIGNIN_CODE_FAULT__
+          || (window.__MV_BILLING_MODE__ === 'unknown' ? 'code_expired' : null);
+        if (codeFault) {
+          return Promise.resolve(json({ error: codeFault }, { status: codeFault === 'code_expired' ? 410 : 401 }));
+        }
+        return Promise.resolve(json({ customerId: window.__MV_SIGNIN_CUSTOMER__ }));
+      }
       if (url.includes('/api/billing/unregister-client')) {
         return Promise.resolve(json({ ok: true }));
       }
@@ -201,6 +227,45 @@ export const billingState = () => browser.execute(() => {
     lastChecked: s.billingLastChecked || 0,
   };
 });
+
+/** How /signin/verify fails: 'code_wrong', 'code_expired', or null for a right code. */
+export const setSigninCodeFault = (fault) =>
+  browser.execute((f) => { window.__MV_SIGNIN_CODE_FAULT__ = f; }, fault ?? null);
+
+/** The /signin/start and /signin/verify requests the app made, in order. */
+export const signinCalls = () => browser.execute(() => window.__MV_SIGNIN_CALLS__ || []);
+
+/** Press "Sign In to Premium" on an open Billing tab: it asks the server to mail a code. */
+export const pressSignIn = () => browser.waitUntil(() => browser.execute(() => {
+  for (const b of document.querySelectorAll('button')) {
+    if (b.offsetHeight > 0 && !b.disabled && b.textContent.includes('Sign In to Premium')) { b.click(); return true; }
+  }
+  return false;
+}), { timeout: 15_000, interval: 400, timeoutMsg: 'no enabled "Sign In to Premium" button on the Billing tab' });
+
+/**
+ * The shipped sign-in on an open Billing tab: press "Sign In to Premium", type
+ * `code` into the code form it opens and submit it.
+ */
+export async function signInWithCode(code = '123456') {
+  await pressSignIn();
+  await browser.waitUntil(() => browser.execute(
+    () => !!document.querySelector('[data-testid="billing-code-form"] input'),
+  ), { timeout: 15_000, interval: 300, timeoutMsg: `the code form never opened; panel reads:\n${await settingsText()}` });
+  await browser.execute((value) => {
+    const form = document.querySelector('[data-testid="billing-code-form"]');
+    const input = form.querySelector('input');
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set.call(input, value);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  }, code);
+  // React enables the submit button on the render after the input event.
+  await browser.waitUntil(() => browser.execute(() => {
+    const btn = document.querySelector('[data-testid="billing-code-form"] button[type="submit"]');
+    if (!btn || btn.disabled) return false;
+    btn.click();
+    return true;
+  }), { timeout: 10_000, interval: 200, timeoutMsg: 'the code form\'s Sign in button never enabled' });
+}
 
 export const settingsText = () => browser.execute(() =>
   document.querySelector('[data-testid="settings-page"]')?.innerText || '');

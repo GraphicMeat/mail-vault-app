@@ -21,6 +21,7 @@ import {
   CUSTOMERS, installMockBilling, setBillingMode, setBillingFault, setBillingEmail,
   billingState, billingCalls, clearBillingCalls, settingsText,
   seedSignedIn, seedSignedOut, openBillingAs,
+  pressSignIn, signInWithCode, setSigninCodeFault, signinCalls,
 } from './mockBilling.js';
 
 describe('Subscription — signing in, and being told why it did not work', function () {
@@ -28,21 +29,11 @@ describe('Subscription — signing in, and being told why it did not work', func
 
   let firstEmail = null;
 
-  /** Open Billing signed out and press the sign-in button. */
+  /** Open Billing signed out and sign in with the mailed code. */
   async function signIn() {
     await seedSignedOut();
     await openBillingAs(null);
-    const clicked = await browser.execute(() => {
-      for (const b of document.querySelectorAll('button')) {
-        if (b.offsetHeight > 0 && !b.disabled && b.textContent.includes('Sign In to Premium')) {
-          b.click();
-          return true;
-        }
-      }
-      return false;
-    });
-    expect(clicked).toBe(true);
-    return clicked;
+    await signInWithCode();
   }
 
   /** Wait for the panel to say something specific, and show what it said if not. */
@@ -63,7 +54,9 @@ describe('Subscription — signing in, and being told why it did not work', func
 
   beforeEach(async function () {
     await setBillingFault(null);
+    await setSigninCodeFault(null);
     await clearBillingCalls();
+    await browser.execute(() => { window.__MV_SIGNIN_CALLS__ = []; });
   });
 
   after(async function () {
@@ -98,10 +91,14 @@ describe('Subscription — signing in, and being told why it did not work', func
       // stable per-machine id — without it the server cannot count devices.
       expect(call.register).toBe(true);
       expect(call.clientId).toBeTruthy();
-      // Sign-in looks up by email ONLY: sending a stale customerId is how a
-      // previous identity gets reused for a different person.
-      expect(call.email).toBe(firstEmail);
-      expect(call.customerId).toBeFalsy();
+      // The lookup names the customer the mailed code proved, never the
+      // address alone: anyone can type an address. The address is not sent
+      // beside the id at all.
+      expect(call.customerId).toBe(CUSTOMERS.signin);
+      expect(call.email).toBeNull();
+      expect((await signinCalls()).map((c) => [c.step, c.email])).toEqual([
+        ['start', firstEmail], ['verify', firstEmail],
+      ]);
     });
 
     it('a trial counts as premium', async function () {
@@ -117,7 +114,9 @@ describe('Subscription — signing in, and being told why it did not work', func
   describe('a sign-in that grants nothing says why', function () {
     /** Each mode, and the sentence it must produce. */
     const CASES = [
-      ['unknown', /No subscription found for this email/i, 'an email the server has never seen'],
+      // The server mails no code to an address it has never seen and keeps no
+      // code row for it, so verify answers code_expired.
+      ['unknown', /That code has expired/i, 'an email the server has never seen'],
       ['lapsed', /No active subscription on this email/i, 'a known customer with nothing active'],
       ['canceled', /This subscription has ended/i, 'a subscription that ended'],
       ['incomplete', /Checkout was never completed/i, 'a checkout that was abandoned'],
@@ -137,6 +136,20 @@ describe('Subscription — signing in, and being told why it did not work', func
       });
     }
 
+    for (const [fault, sentence] of [
+      ['code_wrong', /That code is not right/i],
+      ['code_expired', /That code has expired/i],
+    ]) {
+      it(`a ${fault.replace('_', ' ')} says so and asks nothing of the status server`, async function () {
+        await setBillingMode('premium');
+        await setSigninCodeFault(fault);
+        await signIn();
+        await waitForText(sentence, `never explained ${fault}`);
+        expect((await billingState()).billingEmail).toBe('');
+        expect(await billingCalls()).toEqual([]);
+      });
+    }
+
     it('past_due still grants access rather than locking the user out', async function () {
       // Payment failed, but Stripe keeps the subscription usable during the
       // retry window — the app must not treat that as an expiry.
@@ -153,7 +166,9 @@ describe('Subscription — signing in, and being told why it did not work', func
     it('shows the wait instead of a failure when rate limited', async function () {
       await setBillingFault('rate_limited');
       await setBillingMode('premium');
-      await signIn();
+      await seedSignedOut();
+      await openBillingAs(null);
+      await pressSignIn(); // the code request itself is refused: no code form opens
 
       await waitForText(/Billing checked too often|Try again in/i, 'a 429 was not explained');
       expect((await billingState()).hasSubscription).toBe(false);

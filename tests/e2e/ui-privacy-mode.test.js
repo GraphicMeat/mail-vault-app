@@ -14,7 +14,7 @@
  */
 
 import { waitForApp, waitForEmails, openSettings, closeSettings, clickSettingsNav, clickSidebarItem } from './helpers.js';
-import { installMockBilling, setBillingMode, setBillingEmail, settingsText } from './mockBilling.js';
+import { installMockBilling, setBillingMode, setBillingEmail, settingsText, signInWithCode } from './mockBilling.js';
 import { HTML_QUOTED_SUBJECT } from './mockImap.js';
 
 const LUKE = 'luke@mock.test';
@@ -76,12 +76,7 @@ describe('Privacy mode', function () {
     await setBillingEmail(LUKE);
     await openSettings();
     if (!(await clickSettingsNav('Billing'))) throw new Error('Billing tab not found in Settings nav');
-    await browser.waitUntil(() => browser.execute(() => {
-      for (const b of document.querySelectorAll('button')) {
-        if (b.offsetHeight > 0 && !b.disabled && b.textContent.includes('Sign In to Premium')) { b.click(); return true; }
-      }
-      return false;
-    }), { timeout: 15_000, interval: 400, timeoutMsg: 'no enabled "Sign In to Premium" button on the Billing tab' });
+    await signInWithCode();
     await browser.waitUntil(async () => /Premium Yearly/.test(await settingsText()), {
       timeout: 30_000, interval: 400,
       timeoutMsg: `sign-in never granted Premium; panel reads:\n${await settingsText()}`,
