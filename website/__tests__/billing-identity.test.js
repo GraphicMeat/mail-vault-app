@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 const require = createRequire(import.meta.url);
 const {
-  findCustomer, findCustomerByLegacyEmail, legacyEmailSignInOpen, LAST_EMAIL_SIGNIN_VERSION,
+  findCustomer, findCustomerByLegacyEmail, legacyEmailSignInOpen, legacyView, LAST_EMAIL_SIGNIN_VERSION,
   adminAuthorized, CUSTOMER_ID_REQUIRED,
 } = require('../api/billing-identity.js');
 
@@ -81,6 +81,35 @@ describe('legacy address sign-in, until the code sign-in app is released', () =>
     expect(lookup).toBeGreaterThan(gate);
     // The gate reads the latest PUBLISHED release, so publishing closes it with no deploy.
     expect(body).toMatch(/latestPublishedVersion\(/);
+  });
+
+  // The Stripe id is the key to the billing portal (cancel, invoices, card) and to removing
+  // devices: an address must never be traded for it. 2.25.0 hides Manage and the device list
+  // without it and keeps Premium on clientAccessGranted.
+  it('answers an address sign-in without the customer id or anyone\'s devices', () => {
+    const full = {
+      customerId: 'cus_7', customerEmail: 'payer@b.test', hasSubscription: true, status: 'active',
+      premiumAccess: true, clientAccessGranted: true, activeClientCount: 2,
+      activeClients: [{ clientId: 'c1', clientName: 'Payer MacBook' }],
+      replacedClient: { clientId: 'c0', clientName: 'Old Mac' },
+    };
+    const view = legacyView(full);
+    expect(view.customerId).toBeNull();
+    expect(view.activeClients).toEqual([]);
+    expect(view).not.toHaveProperty('replacedClient');
+    expect(view).toMatchObject({ hasSubscription: true, status: 'active', premiumAccess: true, clientAccessGranted: true });
+    expect(full.customerId).toBe('cus_7'); // the input is left alone
+    expect(JSON.stringify(view)).not.toContain('cus_7');
+  });
+
+  it('the status route answers the address path through legacyView and never caches it', () => {
+    const src = readFileSync(new URL('../api/server.js', import.meta.url), 'utf8');
+    const start = src.indexOf("'/api/billing/subscription-status'");
+    const body = src.slice(start, src.indexOf('\napp.', start + 1));
+    // One cache write in the route, and the address path has already answered before it.
+    expect(body.match(/setCachedBilling\(/g)).toHaveLength(1);
+    expect(body).toMatch(/if \(legacy\) return res\.json\(legacyView\(body\)\);\s*setCachedBilling\(cacheKey, body\);/);
+    expect(body.match(/res\.json\(/g).length).toBeLessThanOrEqual(4); // 400, legacy, reply, 500
   });
 
   it('no other billing route takes an address', () => {

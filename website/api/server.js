@@ -32,7 +32,7 @@ const path = require('path');
 const analytics = require('meatlytics');
 const { getPool, initDatabase } = require('./database');
 const {
-  findCustomer, findCustomerByLegacyEmail, legacyEmailSignInOpen, adminAuthorized, CUSTOMER_ID_REQUIRED,
+  findCustomer, findCustomerByLegacyEmail, legacyEmailSignInOpen, legacyView, adminAuthorized, CUSTOMER_ID_REQUIRED,
 } = require('./billing-identity');
 const {
   ActivationError, computePremiumAccess, webSessionParams, ensureBillingCustomer, upsertSubscription,
@@ -1137,14 +1137,22 @@ app.get('/api/billing/subscription-status', statusLimiter, async (req, res) => {
     let { customerId } = req.query;
     const db = getPool();
     let customerRow;
+    let legacy = false;
 
     if (!customerId) {
       // 2.25.0 and older sign in by address; see LAST_EMAIL_SIGNIN_VERSION.
       const latestVersion = await latestPublishedVersion();
       if (!legacyEmailSignInOpen({ appVersion, latestVersion, register })) return res.status(400).json(CUSTOMER_ID_REQUIRED);
+      legacy = true;
       customerRow = await findCustomerByLegacyEmail(db, req.query.email);
       customerId = customerRow?.stripe_customer_id || '';
     }
+    // An address sign-in is answered without the Stripe id and never cached under it.
+    const reply = (body) => {
+      if (legacy) return res.json(legacyView(body));
+      setCachedBilling(cacheKey, body);
+      return res.json(body);
+    };
 
     // Check in-memory cache (same customer+client pair within TTL → return cached)
     const cacheKey = `${customerId}::${clientId || ''}`;
@@ -1164,14 +1172,14 @@ app.get('/api/billing/subscription-status', statusLimiter, async (req, res) => {
       currentClientId: clientId || null, clientAccessGranted: false,
     };
 
-    if (!customerRow) { setCachedBilling(cacheKey, noSubBase); return res.json(noSubBase); }
+    if (!customerRow) return reply(noSubBase);
 
     const [subs] = await db.execute(
       `SELECT * FROM billing_subscriptions WHERE billing_customer_id = ? ORDER BY current_period_end DESC LIMIT 1`,
       [customerRow.id]
     );
 
-    if (subs.length === 0) { setCachedBilling(cacheKey, noSubBase); return res.json(noSubBase); }
+    if (subs.length === 0) return reply(noSubBase);
 
     const sub = subs[0];
     const premiumAccess = computePremiumAccess(sub.status, sub.cancel_at_period_end, sub.current_period_end);
@@ -1245,8 +1253,7 @@ app.get('/api/billing/subscription-status', statusLimiter, async (req, res) => {
       ...(replacedClient ? { replacedClient } : {}),
     };
 
-    setCachedBilling(cacheKey, result);
-    res.json(result);
+    reply(result);
   } catch (error) {
     console.error('[billing/subscription-status]', error.message);
     res.status(500).json({ error: 'status_failed', message: 'Could not check subscription status. Please try again.' });

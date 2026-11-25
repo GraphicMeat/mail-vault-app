@@ -54,6 +54,15 @@ async function findCustomerByLegacyEmail(db, email) {
   return rows[0];
 }
 
+/**
+ * A status answer for an address sign-in: no Stripe id (it opens the billing portal and
+ * removes devices) and nobody's device list. 2.25.0 keeps Premium on clientAccessGranted.
+ */
+function legacyView(body) {
+  const { replacedClient: _replaced, ...rest } = body;
+  return { ...rest, customerId: null, activeClients: [] };
+}
+
 /** Admin routes: closed while ADMIN_KEY is unset or short; a constant-time compare otherwise. */
 function adminAuthorized(provided, expected) {
   if (typeof expected !== 'string' || expected.length < 16) return false;
@@ -64,6 +73,6 @@ function adminAuthorized(provided, expected) {
 }
 
 module.exports = {
-  findCustomer, findCustomerByLegacyEmail, legacyEmailSignInOpen, LAST_EMAIL_SIGNIN_VERSION,
+  findCustomer, findCustomerByLegacyEmail, legacyEmailSignInOpen, legacyView, LAST_EMAIL_SIGNIN_VERSION,
   adminAuthorized, CUSTOMER_ID_REQUIRED,
 };
