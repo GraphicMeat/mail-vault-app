@@ -42,6 +42,14 @@ jobs:
       - name: cargo audit
         run: cargo audit
 
+  tauri-versions:
+    # tauri build refuses npm/crate major.minor splits; catch them at the lockfile push, not the nightly.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Tauri npm packages match their crates
+        run: node scripts/check-tauri-versions.mjs
+
   npm:
     runs-on: ubuntu-24.04
     steps:
