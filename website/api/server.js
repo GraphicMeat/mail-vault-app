@@ -31,7 +31,9 @@ try { stripe = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STR
 const path = require('path');
 const analytics = require('meatlytics');
 const { getPool, initDatabase } = require('./database');
-const { findCustomer, adminAuthorized, CUSTOMER_ID_REQUIRED } = require('./billing-identity');
+const {
+  findCustomer, findCustomerByLegacyEmail, legacyEmailSignInOpen, adminAuthorized, CUSTOMER_ID_REQUIRED,
+} = require('./billing-identity');
 const {
   ActivationError, computePremiumAccess, webSessionParams, ensureBillingCustomer, upsertSubscription,
   applyCheckoutCompleted, mintActivationToken, redeemActivationToken,
@@ -750,6 +752,15 @@ async function fetchLatestVersion() {
   return _versionCache;
 }
 
+/** The latest published release's version, the stale one on a GitHub blip, or null. */
+async function latestPublishedVersion() {
+  try {
+    return (await fetchLatestVersion()).version;
+  } catch {
+    return _versionCache?.version || null;
+  }
+}
+
 app.get('/api/latest-version', statusLimiter, async (req, res) => {
   try {
     const { version, tag, publishedAt } = await fetchLatestVersion();
@@ -1122,8 +1133,18 @@ const CLIENT_LIMIT = 5;
 // status check + client registration in one round trip.
 app.get('/api/billing/subscription-status', statusLimiter, async (req, res) => {
   try {
-    const { customerId, clientId, register, clientName, platform, appVersion, osVersion } = req.query;
-    if (!customerId) return res.status(400).json(CUSTOMER_ID_REQUIRED);
+    const { clientId, register, clientName, platform, appVersion, osVersion } = req.query;
+    let { customerId } = req.query;
+    const db = getPool();
+    let customerRow;
+
+    if (!customerId) {
+      // 2.25.0 and older sign in by address; see LAST_EMAIL_SIGNIN_VERSION.
+      const latestVersion = await latestPublishedVersion();
+      if (!legacyEmailSignInOpen({ appVersion, latestVersion, register })) return res.status(400).json(CUSTOMER_ID_REQUIRED);
+      customerRow = await findCustomerByLegacyEmail(db, req.query.email);
+      customerId = customerRow?.stripe_customer_id || '';
+    }
 
     // Check in-memory cache (same customer+client pair within TTL → return cached)
     const cacheKey = `${customerId}::${clientId || ''}`;
@@ -1132,10 +1153,7 @@ app.get('/api/billing/subscription-status', statusLimiter, async (req, res) => {
       if (cached) return res.json(cached);
     }
 
-    const db = getPool();
-    let customerRow;
-
-    customerRow = await findCustomer(db, customerId);
+    if (!customerRow) customerRow = await findCustomer(db, customerId);
 
     const noSubBase = {
       customerId: customerRow?.stripe_customer_id || null,

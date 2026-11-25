@@ -3,19 +3,95 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const require = createRequire(import.meta.url);
-const { findCustomer, adminAuthorized, CUSTOMER_ID_REQUIRED } = require('../api/billing-identity.js');
+const {
+  findCustomer, findCustomerByLegacyEmail, legacyEmailSignInOpen, LAST_EMAIL_SIGNIN_VERSION,
+  adminAuthorized, CUSTOMER_ID_REQUIRED,
+} = require('../api/billing-identity.js');
 
-function fakeDb(byId) {
+function fakeDb(byId, byEmail = {}) {
   const calls = [];
   return {
     calls,
     async execute(sql, p) {
       calls.push(sql);
       if (sql === 'SELECT * FROM billing_customers WHERE stripe_customer_id = ?') return [byId[p[0]] ? [byId[p[0]]] : []];
+      if (sql === 'SELECT * FROM billing_customers WHERE email = ?') return [byEmail[p[0]] ? [byEmail[p[0]]] : []];
       throw new Error(`unexpected statement: ${sql}`);
     },
   };
 }
+
+// Server deployed code sign-in (11-24) before any app release had the code screen: 2.25.0
+// signs in by address alone and has nothing to update to, so a new payer could never turn
+// Premium on. Address sign-in stays open for those apps only until a newer release is
+// published, then closes by itself.
+describe('legacy address sign-in, until the code sign-in app is released', () => {
+  const open = (appVersion, latestVersion, register = '1') => legacyEmailSignInOpen({ appVersion, latestVersion, register });
+
+  it('names 2.25.0 as the last app that signs in by address', () => {
+    expect(LAST_EMAIL_SIGNIN_VERSION).toBe('2.25.0');
+  });
+
+  it('opens for 2.25.0 and older while no newer release is published', () => {
+    expect(open('2.25.0', '2.25.0')).toBe(true);
+    expect(open('2.24.3', '2.25.0')).toBe(true);
+    expect(open('1.9.0', '2.25.0')).toBe(true);
+  });
+
+  it('closes by itself once a newer release is published (patch or minor)', () => {
+    expect(open('2.25.0', '2.25.1')).toBe(false);
+    expect(open('2.25.0', '2.26.0')).toBe(false);
+    expect(open('2.25.0', '3.0.0')).toBe(false);
+  });
+
+  it('stays closed for an app that has code sign-in', () => {
+    expect(open('2.25.1', '2.25.0')).toBe(false);
+    expect(open('2.26.0', '2.25.0')).toBe(false);
+  });
+
+  it('stays closed when either version is unknown or malformed', () => {
+    for (const [a, l] of [[undefined, '2.25.0'], ['', '2.25.0'], ['x', '2.25.0'], [['2.25.0'], '2.25.0'],
+      ['2.25.0', null], ['2.25.0', undefined], ['2.25.0', 'v-next']]) {
+      expect(open(a, l), `${a} / ${l}`).toBe(false);
+    }
+  });
+
+  it('only for the sign-in call that registers this device (what 2.25.0 sends)', () => {
+    expect(legacyEmailSignInOpen({ appVersion: '2.25.0', latestVersion: '2.25.0' })).toBe(false);
+    expect(open('2.25.0', '2.25.0', '0')).toBe(false);
+  });
+
+  it('finds the customer by lower-cased address, and nobody for a non-address', async () => {
+    const row = { id: 7, stripe_customer_id: 'cus_7', email: 'payer@b.test' };
+    const db = fakeDb({}, { 'payer@b.test': row });
+    expect(await findCustomerByLegacyEmail(db, ' Payer@B.test ')).toBe(row);
+    expect(await findCustomerByLegacyEmail(db, 'other@b.test')).toBeUndefined();
+    const quiet = fakeDb({});
+    for (const e of [undefined, null, '', 42, ['payer@b.test']]) expect(await findCustomerByLegacyEmail(quiet, e)).toBeUndefined();
+    expect(quiet.calls).toEqual([]);
+  });
+
+  it('the status route reaches the address only through the gate', () => {
+    const src = readFileSync(new URL('../api/server.js', import.meta.url), 'utf8');
+    const start = src.indexOf("'/api/billing/subscription-status'");
+    const body = src.slice(start, src.indexOf('\napp.', start + 1));
+    const gate = body.indexOf('legacyEmailSignInOpen(');
+    const lookup = body.indexOf('findCustomerByLegacyEmail(');
+    expect(gate).toBeGreaterThan(0);
+    expect(lookup).toBeGreaterThan(gate);
+    // The gate reads the latest PUBLISHED release, so publishing closes it with no deploy.
+    expect(body).toMatch(/latestPublishedVersion\(/);
+  });
+
+  it('no other billing route takes an address', () => {
+    const src = readFileSync(new URL('../api/server.js', import.meta.url), 'utf8');
+    for (const route of ['/api/billing/register-client', '/api/billing/unregister-client', '/api/billing/portal-session']) {
+      const start = src.indexOf(`'${route}'`);
+      const body = src.slice(start, src.indexOf('\napp.', start + 1));
+      expect(body, route).not.toMatch(/findCustomerByLegacyEmail|legacyEmailSignInOpen/);
+    }
+  });
+});
 
 describe('billing identity', () => {
   it('finds a customer by Stripe customer id only', async () => {
