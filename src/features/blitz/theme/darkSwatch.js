@@ -11,8 +11,8 @@
 // The dark selection must stay translucent: the text layer is transparent over the
 // tile, so an opaque highlight would hide the glyphs. overlayFor can only return an
 // opaque colour for Dark Reader's real values (rgb(0,77,170) over a near-black paper),
-// so mapSwatch rejects an opaque overlay and the light selection stands until the probe
-// work settles how to paint it (for example under the glyphs).
+// so mapSwatch rejects an opaque overlay. BlitzTiles paints the dark selection without
+// this probe: selectionColors.js DARK_SELECTION, lightened under the glyphs (blitz.css).
 import { getContextMenuColors } from '../../../utils/emailIframeTemplate';
 import { overlayFor } from '../text/selectionColors';
 

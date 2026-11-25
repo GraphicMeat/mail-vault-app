@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { blendWithWhite, overlayFor, lightSelectionColor, inactiveSelectionColor, applySelectionColors } from '../selectionColors';
+import { blendWithWhite, overlayFor, lightSelectionColor, inactiveSelectionColor, applySelectionColors, DARK_SELECTION } from '../selectionColors';
 
 afterEach(() => vi.restoreAllMocks());
 const highlightIs = (color) => vi.spyOn(window, 'getComputedStyle').mockReturnValue({ color });
@@ -74,5 +74,18 @@ describe('inactive window highlight', () => {
     expect(css).toMatch(/\n\.mv-blitz-text span::selection:window-inactive \{[^}]*background-color: var\(--mv-blitz-sel-inactive-bg, var\(--mv-blitz-sel-bg/);
     expect(css).not.toMatch(/,\s*\.mv-blitz-text span::selection:window-inactive/);
     expect(css).not.toMatch(/span::selection:window-inactive\s*,/);
+  });
+});
+
+describe('dark selection', () => {
+  it('is Dark Reader\'s opaque selection colour', () => {
+    expect(DARK_SELECTION).toEqual({ r: 0, g: 77, b: 170, a: 1 });
+  });
+  it('blitz.css lightens the whole layer over the tiles while data-sel-blend is set, and only then', () => {
+    const css = readFileSync(resolve(process.cwd(), 'src/features/blitz/blitz.css'), 'utf8');
+    // On the layer, not the spans: the layer isolates, so a span would blend with nothing.
+    expect(css).toMatch(/\n\.mv-blitz-text\[data-sel-blend\] \{[^}]*mix-blend-mode: lighten;/);
+    expect(css).not.toMatch(/span[^{]*\{[^}]*mix-blend-mode/);
+    expect(css.match(/mix-blend-mode/g)).toHaveLength(1);
   });
 });

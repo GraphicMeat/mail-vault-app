@@ -79,6 +79,12 @@ export function inactiveSelectionColor(active) {
   return c ? blendWithWhite(c) : active;
 }
 
+// Dark Reader's selection (rgb(0,96,212) re-themed) as the dark iframe paints it. Opaque: in
+// dark the layer lightens over the tiles while it holds a selection (blitz.css data-sel-blend),
+// so the highlight shows on the paper and the light glyphs keep their own colour over it.
+// Dark Reader has no inactive variant, so it stays the same when the window blurs.
+export const DARK_SELECTION = Object.freeze({ r: 0, g: 77, b: 170, a: 1 });
+
 // `inactive` is what ::selection:window-inactive paints (blitz.css). It is the active
 // colour unless given. The light path gives the engine's grey one; the dark path
 // (theme/darkSwatch.js, not wired yet) will not: Dark Reader's author ::selection rule has no inactive

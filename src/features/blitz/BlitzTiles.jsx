@@ -9,7 +9,7 @@ import TextLayer from './text/TextLayer';
 import { createCopyController } from './text/clipboard';
 import { layerPlainText, selectionInLayer, selectLayer } from './text/selection';
 import { useBodyKeyboard } from './text/useBodyKeyboard';
-import { applySelectionColors, inactiveSelectionColor, lightSelectionColor } from './text/selectionColors';
+import { applySelectionColors, inactiveSelectionColor, lightSelectionColor, DARK_SELECTION } from './text/selectionColors';
 import BodyContextMenu from './menu/BodyContextMenu';
 import { menuColorsFor } from './menu/menuColors';
 import { viewportShift } from '../../hooks/useViewportShift';
@@ -301,6 +301,18 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onOpenI
   }, []);
   const inBody = useCallback((target) => !!boxRef.current?.contains(target), []);
 
+  // Dark blends the layer only while it holds a selection: the blend costs scrolling.
+  // Run from the copy controller's selectionchange listener below.
+  const darkRef = useRef(dark);
+  darkRef.current = dark;
+  const syncBlend = useCallback(() => {
+    const el = textLayerRef.current?.layerEl();
+    if (!el) return;
+    const sel = darkRef.current ? document.getSelection() : null;
+    const on = !!sel && sel.rangeCount > 0 && !sel.isCollapsed && sel.getRangeAt(0).intersectsNode(el);
+    el.toggleAttribute('data-sel-blend', on);
+  }, []);
+
   // Copy: serialize ahead, write synchronously on copy (text/clipboard.js). The
   // controller is rebuilt per rev (a fold toggle changes what a range covers),
   // so it asks again right away for a selection that is already live.
@@ -314,7 +326,7 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onOpenI
     // A drag is serialized when it ends, a key-driven selection on key up, and
     // anything else (select all, a script) on a short pause.
     const on = [
-      ['selectionchange', () => ctl.onSelectionChange()],
+      ['selectionchange', () => { ctl.onSelectionChange(); syncBlend(); }],
       ['pointerdown', (e) => ctl.onPointerDown(e.target)],
       ['pointerup', () => ctl.onPointerUp()],
       ['pointercancel', () => ctl.onPointerUp()],
@@ -347,17 +359,18 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onOpenI
   }, []);
   useBodyKeyboard(boxRef, { selectAll: selectAllBody, layerEl: () => textLayerRef.current?.layerEl() });
 
-  // Selection colour: the engine's light highlight (grey while the window is inactive) in
-  // every theme. The worker paints a dark paper in the dark theme (plan B's Dark Reader port),
-  // but nothing wires Dark Reader's colours for the menu and the selection yet: the
-  // theme/darkSwatch.js probe seam has no render.inspect probe, so both stay light.
+  // Selection colour: the engine's light highlight (grey while the window is inactive) in the light
+  // theme; Dark Reader's opaque one in the dark theme, lightened under the glyphs (blitz.css).
   const paintSelection = useCallback(() => {
     const el = textLayerRef.current?.layerEl();
     if (!el) return;
+    if (dark) { applySelectionColors(el, DARK_SELECTION); return; }
     const active = lightSelectionColor();
     applySelectionColors(el, active, inactiveSelectionColor(active));
-  }, []);
+  }, [dark]);
   useEffect(() => { paintSelection(); }, [doc?.docId, paintSelection]);
+
+  useEffect(() => { syncBlend(); }, [dark, doc?.docId, syncBlend]);
 
   // The OS accent colour changes while the app is in the background (System Settings), so the
   // highlight is read again when the window comes back.

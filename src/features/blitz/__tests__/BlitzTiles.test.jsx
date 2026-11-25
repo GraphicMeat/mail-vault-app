@@ -1291,7 +1291,7 @@ describe('body context menu', () => {
   });
 });
 
-describe('dark mode (interim: light menu and selection until a dark swatch probe)', () => {
+describe('dark mode (light menu until a dark swatch probe; dark selection under the glyphs)', () => {
   const dark = (palette = 'graphite') => ({ dark: true, palette });
   const sel = () => screen.getByTestId('blitz-text-layer').style.getPropertyValue('--mv-blitz-sel-bg');
   const inactive = () => screen.getByTestId('blitz-text-layer').style.getPropertyValue('--mv-blitz-sel-inactive-bg');
@@ -1315,14 +1315,45 @@ describe('dark mode (interim: light menu and selection until a dark swatch probe
     expect(document.querySelectorAll('iframe').length).toBe(0);
   });
 
-  it('paints the light selection in both modes, with the inactive-window variable set', async () => {
-    const { rerender } = render(tiles({ theme: dark() }));
+  it('paints the light selection in light mode, with the inactive-window variable set', async () => {
+    render(tiles({ theme: { dark: false, palette: 'graphite' } }));
     await screen.findByTestId('blitz-text-layer');
     await waitFor(() => expect(sel()).toBe(LIGHT));
     expect(inactive()).not.toBe('');
+  });
+
+  it('paints Dark Reader\'s opaque selection in dark mode, the same while the window is inactive', async () => {
+    const { rerender } = render(tiles({ theme: dark() }));
+    await screen.findByTestId('blitz-text-layer');
+    await waitFor(() => expect(sel()).toBe('rgba(0, 77, 170, 1)'));
+    expect(inactive()).toBe('rgba(0, 77, 170, 1)');
     rerender(tiles({ theme: { dark: false, palette: 'graphite' } }));
     await waitFor(() => expect(screen.getByTestId('blitz-email-body').getAttribute('data-doc-id')).toBe('2'));
     await waitFor(() => expect(sel()).toBe(LIGHT));
+  });
+
+  it('blends the layer under the glyphs only in dark mode and only while it holds a selection', async () => {
+    openRender.mockResolvedValue({ docId: 7, rev: 1, meta: meta({ tileCount: 1, cssHeight: 100 }) });
+    textRunsRender.mockResolvedValue({ runs: [{ x: 0, y: 0, w: 50, h: 20, text: 'hello', fontPx: 16, node: 1, start: 0 }] });
+    const { rerender } = render(tiles({ theme: dark() }));
+    const span = await screen.findByText('hello');
+    const layer = () => screen.getByTestId('blitz-text-layer');
+    expect(layer().hasAttribute('data-sel-blend')).toBe(false);
+    const r = document.createRange(); r.setStart(span.firstChild, 0); r.setEnd(span.firstChild, 3);
+    window.getSelection().removeAllRanges(); window.getSelection().addRange(r);
+    act(() => { document.dispatchEvent(new Event('selectionchange')); });
+    await waitFor(() => expect(layer().hasAttribute('data-sel-blend')).toBe(true));
+    window.getSelection().removeAllRanges();
+    act(() => { document.dispatchEvent(new Event('selectionchange')); });
+    await waitFor(() => expect(layer().hasAttribute('data-sel-blend')).toBe(false));
+    rerender(tiles({ theme: { dark: false, palette: 'graphite' } }));
+    const light = await screen.findByText('hello');
+    const r2 = document.createRange(); r2.setStart(light.firstChild, 0); r2.setEnd(light.firstChild, 3);
+    window.getSelection().removeAllRanges(); window.getSelection().addRange(r2);
+    act(() => { document.dispatchEvent(new Event('selectionchange')); });
+    await new Promise(res => setTimeout(res, 50));
+    expect(layer().hasAttribute('data-sel-blend')).toBe(false);
+    window.getSelection().removeAllRanges();
   });
 
   it('the menu keeps the light colours in dark mode', async () => {
@@ -1345,8 +1376,8 @@ describe('dark mode (interim: light menu and selection until a dark swatch probe
     await waitFor(() => expect(screen.queryByTestId('blitz-context-menu')).toBeNull());
   });
 
-  it('re-reads the system highlight when the window regains focus (accent colour change), in either mode', async () => {
-    render(tiles({ theme: dark() }));
+  it('re-reads the system highlight when the window regains focus (accent colour change) in light mode', async () => {
+    render(tiles({ theme: { dark: false, palette: 'graphite' } }));
     await waitFor(() => expect(sel()).toBe(LIGHT));
     highlightIs('rgb(0, 96, 212)');
     act(() => { window.dispatchEvent(new Event('focus')); });

@@ -84,6 +84,10 @@ describe('blitz.css', () => {
     expect(text).toContain('position: relative');
     expect(text).toContain('z-index: 1');
   });
+  it('a root has no font of its own, so a selected line is exactly its line box (WebKit counts the root font into the highlight)', () => {
+    const root = css.match(/\.mv-blitz-text \.mv-blitz-root\s*\{([^}]*)\}/)[1];
+    expect(root).toContain('font-size: 0');
+  });
   it('pins the properties the flow math assumes', () => {
     const layer = css.match(/\.mv-blitz-text\s*\{([^}]*)\}/)[1];
     for (const d of ['direction: ltr', 'text-align: left', 'text-indent: 0', 'word-spacing: normal', 'text-transform: none', 'font-weight: normal', 'font-style: normal']) expect(layer).toContain(d);

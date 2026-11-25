@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Fixed: selecting text in an email in dark mode painted a pale grey-blue box over the text, so the selected words were hard to read. The selection is now a deep blue under the text, which keeps its own colour. In every theme, each selected line is now highlighted exactly to its height, instead of taller boxes that overlapped the next line.
 - Fixed: forwarding an email whose attachments were not yet saved on this computer, for example with On Demand, left them out of the draft with "The draft is saved, but without ... The file could not be read." The draft now fetches them from the server the way opening the attachment does, so the forward keeps every file.
 - Fixed: when Send could not send, for example because no recipient was entered, the reason could appear below a long message or signature, out of view, so Send looked like it did nothing. The message now shows above Discard and Send, where it is always visible.
 - Fixed: Send no longer stops without sending or explaining why when an account refreshes its sign-in or a setting changes in the main window during the send. It checks the message you sent again and sends it. If changes keep arriving, it says it could not prepare the message. An edit you make while it is sending still cancels the send.

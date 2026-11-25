@@ -19,10 +19,14 @@
 }
 /* A root's lines wrap at the <wbr> between its 0 px wide line wrappers, and
    only there (TextLayer.jsx Root). line-height 0: no strut, so a line box is
-   exactly as tall as its spans. */
+   exactly as tall as its spans. font-size 0: WebKit counts the root's own
+   font into a selected line's highlight even at line-height 0, which made
+   each highlight taller than its line and overlap the next root's. Every
+   text span sets its own size. */
 .mv-blitz-text .mv-blitz-root {
   white-space: normal;
   line-height: 0;
+  font-size: 0;
 }
 .mv-blitz-text span {
   color: transparent;
@@ -61,4 +65,11 @@
 .mv-blitz-text span::selection:window-inactive {
   background-color: var(--mv-blitz-sel-inactive-bg, var(--mv-blitz-sel-bg, rgba(128, 188, 255, 0.6)));
   color: transparent;
+}
+/* Dark: the opaque highlight is lightened over the tiles, so it shows on the
+   dark paper and the light glyphs keep their colour over it. Only while the
+   layer holds a selection (BlitzTiles.jsx): a blended layer as tall as the
+   message costs scrolling. */
+.mv-blitz-text[data-sel-blend] {
+  mix-blend-mode: lighten;
 }
