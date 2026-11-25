@@ -135,6 +135,8 @@ export const useViewStore = create((set, get) => ({
   /// View id → how many messages it holds, straight from the daemon. Never
   /// counted from the rows on screen: those are one page of one view.
   counts: {},
+  /// The hide picker's last known numbers (`loadPickerMembers`), or null.
+  pickerMembers: null,
   activeViewId: null,
   /// The sidebar's + asked for a new view; the Views settings page consumes
   /// this once on open. A prop cannot cross that gap — Settings is a window of
@@ -158,7 +160,11 @@ export const useViewStore = create((set, get) => ({
   loadPickerMembers: async () => {
     try {
       const reply = await daemonCall('views.picker_members', { accounts: accountsPayload() });
-      return reply?.available && reply.members && typeof reply.members === 'object' ? reply.members : null;
+      const members = reply?.available && reply.members && typeof reply.members === 'object' ? reply.members : null;
+      // Kept for the picker's next open, which shows it at once while this
+      // asks again. An unknown answer keeps the last known one.
+      if (members) set({ pickerMembers: members });
+      return members;
     } catch {
       return null;
     }
@@ -189,6 +195,8 @@ export const useViewStore = create((set, get) => ({
         // the early return above: an index mid-build would answer "unknown"
         // and briefly show every hidden message again.
         void refreshHiddenMembers();
+        // The hide picker's numbers, once, so its first open has them.
+        if (!get().pickerMembers) void get().loadPickerMembers();
       } catch {
         // A count that would not come is not worth an error in the sidebar.
       } finally {

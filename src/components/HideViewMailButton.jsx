@@ -68,13 +68,14 @@ export function HideViewMailButton() {
     const acct = accountId && asArray(byAccount?.[accountId]) ? new Set(byAccount[accountId]) : null;
     const own = mailbox && asArray(byMailbox?.[accountId]?.[mailbox]) ? new Set(byMailbox[accountId][mailbox]) : null;
     setDraft({ scope: own ? 'folder' : acct ? 'account' : 'all', all: new Set(configured ? picked : []), acct, own });
-    setMembers(null);
+    // The last known numbers at once; the fresh ones replace them.
+    setMembers(useViewStore.getState().pickerMembers ?? null);
     const ask = ++asked.current;
     // A view made in the Settings window since this one loaded its list must
     // be pickable. A failed ask keeps the list it has.
     useViewStore.getState().loadViews().catch(() => {});
     Promise.resolve(useViewStore.getState().loadPickerMembers?.())
-      .then(found => { if (ask === asked.current) setMembers(found ?? null); }, () => {});
+      .then(found => { if (ask === asked.current && found) setMembers(found); }, () => {});
   };
   const close = () => {
     asked.current += 1;

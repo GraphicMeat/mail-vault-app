@@ -2132,7 +2132,7 @@ describe('a saved view drives the grouping', () => {
     const { useFieldStore } = await import('../../stores/fieldStore');
     useMailStore.setState({ sortedEmails: mockEmails, totalEmails: 500, activeMailbox: 'INBOX' });
     useSettingsStore.setState({ emailListView: 'list', explorerGrouping: 'date', viewOverrides: {} });
-    useViewStore.setState({ views: [], activeViewId: null, loading: false });
+    useViewStore.setState({ views: [], activeViewId: null, loading: false, pickerMembers: null });
     useFieldStore.setState({ fields: {}, byRow: {} });
   });
 
@@ -2811,7 +2811,7 @@ describe('the hide view mail toggle', () => {
     useSettingsStore.getState().setHideViewMail.mockClear();
     useSettingsStore.getState().setHideViewMailViews.mockClear();
     useSettingsStore.getState().setHideViewMailForMailbox.mockClear();
-    useViewStore.setState({ views: [], activeViewId: null, loading: false });
+    useViewStore.setState({ views: [], activeViewId: null, loading: false, pickerMembers: null });
     useViewHideStore.setState({ keys: null, hiddenByMailbox: null, unreadByMailbox: null });
   });
 
@@ -3035,6 +3035,20 @@ describe('the hide view mail toggle', () => {
     expect(pick('v2').disabled).toBe(true);
     expect(pick('v2').getAttribute('title')).toBe('No mail from this view in INBOX');
     expect(pick('v1').disabled).toBe(false);
+  });
+
+  it('opens with the last numbers at once, and swaps in the fresh ones when they come', async () => {
+    let answer;
+    const { container } = await mount({ views: TWO });
+    const { useViewStore } = await import('../../stores/viewStore');
+    useViewStore.setState({
+      pickerMembers: { v1: { acc1: { INBOX: [1] } } },
+      loadPickerMembers: vi.fn(() => new Promise(resolve => { answer = resolve; })),
+    });
+    fireEvent.click(config(container));
+    expect(counts()).toEqual(['1', '0']);
+    await act(async () => { answer({ v1: { acc1: { INBOX: [1, 2] } }, v2: { acc1: { INBOX: [3] } } }); });
+    expect(counts()).toEqual(['2', '1']);
   });
 
   it('the folder tab is off, with a note, when no view holds mail in this folder', async () => {

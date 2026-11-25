@@ -35,6 +35,41 @@ pub struct ViewAccount {
     pub special_use: HashMap<String, String>,
 }
 
+impl ViewAccount {
+    /// Adds the folders and special-use roles of the account's cached folder
+    /// list (`custody::cache::load_mailboxes`) that the app did not send. The
+    /// app only knows the folders of accounts it has shown lately, and a
+    /// folder missing here reads as local-only: its mail is never counted or
+    /// hidden. What the app sent stays, first.
+    pub fn fill_from_listing(&mut self, listing: &str) {
+        let Ok(listing) = serde_json::from_str::<Value>(listing) else { return };
+        let list = if listing.is_array() {
+            Some(&listing)
+        } else {
+            listing
+                .get("mailboxes")
+                .filter(|a| a.as_array().is_some_and(|a| !a.is_empty()))
+                .or_else(|| listing.get("lastKnownGoodMailboxes"))
+        };
+        fn walk(list: &Value, account: &mut ViewAccount) {
+            for m in list.as_array().into_iter().flatten() {
+                if let Some(path) = m["path"].as_str().filter(|p| !p.is_empty()) {
+                    if !account.known_mailboxes.iter().any(|known| known == path) {
+                        account.known_mailboxes.push(path.to_owned());
+                    }
+                    if let Some(role) = m["specialUse"].as_str().filter(|r| !r.is_empty()) {
+                        account.special_use.entry(role.to_owned()).or_insert_with(|| path.to_owned());
+                    }
+                }
+                walk(&m["children"], account);
+            }
+        }
+        if let Some(list) = list {
+            walk(list, self);
+        }
+    }
+}
+
 /// The definition to run: a saved view by id (`viewId`), or one handed over inline (`def`; which
 /// is how "save this search as a view" previews before it is saved).
 pub fn definition(conn: &Connection, params: &Value) -> Result<ViewDef, String> {
@@ -199,6 +234,37 @@ mod tests {
         let got = batches(&mine, &accounts, &HashMap::new(), 0);
         assert_eq!(got.iter().map(|(r, _)| r.account_ids.clone()).collect::<Vec<_>>(), vec![vec!["a".to_string()], vec!["c".to_string()]]);
         assert_eq!(in_scope(&mine, &accounts).count(), 2);
+    }
+
+    /// The app knows an account's folders only once it has shown them; the
+    /// daemon's cached folder list fills in the rest, and never drops what the
+    /// app sent.
+    #[test]
+    fn the_cached_folder_list_fills_in_folders_and_roles_the_app_did_not_send() {
+        let listing = json!({
+            "mailboxes": [],
+            "lastKnownGoodMailboxes": [
+                { "path": "INBOX", "specialUse": "\\Inbox" },
+                { "path": "[Gmail]", "noselect": true, "children": [
+                    { "path": "[Gmail]/Bin", "specialUse": "\\Trash" },
+                ] },
+            ],
+        })
+        .to_string();
+        let mut empty = account("a", "");
+        empty.fill_from_listing(&listing);
+        assert_eq!(empty.known_mailboxes, vec!["INBOX", "[Gmail]", "[Gmail]/Bin"]);
+        assert_eq!(empty.special_use.get("\\Trash").map(String::as_str), Some("[Gmail]/Bin"));
+
+        let mut sent = ViewAccount { known_mailboxes: vec!["New".into(), "INBOX".into()], ..account("a", "") };
+        sent.special_use.insert("\\Trash".into(), "Papierkorb".into());
+        sent.fill_from_listing(&listing);
+        assert_eq!(sent.known_mailboxes, vec!["New", "INBOX", "[Gmail]", "[Gmail]/Bin"]);
+        assert_eq!(sent.special_use.get("\\Trash").map(String::as_str), Some("Papierkorb"), "the app's own word wins");
+
+        let mut broken = account("a", "");
+        broken.fill_from_listing("not json");
+        assert!(broken.known_mailboxes.is_empty());
     }
 
     #[test]

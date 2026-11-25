@@ -31,8 +31,19 @@ fn json_of<T: serde::Serialize>(v: T) -> Result<Value, String> {
     serde_json::to_value(v).map_err(|e| e.to_string())
 }
 
-fn accounts_of(params: &Value) -> Result<Vec<Account>, String> {
-    serde_json::from_value(params.get("accounts").cloned().unwrap_or(Value::Null)).map_err(|e| format!("accounts: {e}"))
+/// The accounts a call runs over, each with the folders of the daemon's own
+/// cached folder list added (`ViewAccount::fill_from_listing`): the app sends
+/// only the folders of accounts it showed lately, and a folder missing here
+/// reads as local-only, so its mail would be neither counted nor hidden.
+fn accounts_of(state: &DaemonState, params: &Value) -> Result<Vec<Account>, String> {
+    let mut accounts: Vec<Account> =
+        serde_json::from_value(params.get("accounts").cloned().unwrap_or(Value::Null)).map_err(|e| format!("accounts: {e}"))?;
+    for account in &mut accounts {
+        if let Some(listing) = crate::handlers::mail_search::cached_folder_listing(state, &account.account_id) {
+            account.fill_from_listing(&listing);
+        }
+    }
+    Ok(accounts)
 }
 
 pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value, id: Value) -> Option<RpcResponse> {
@@ -80,7 +91,7 @@ fn export_attachments(state: &Arc<DaemonState>, params: &Value, job: &mut Export
             .map(|m| (m.account_id, m.mailbox, m.uid))
             .collect(),
         None => {
-            let accounts = accounts_of(params)?;
+            let accounts = accounts_of(state, params)?;
             let (mut def, keys) = app_db::with(app_dir, |conn| {
                 let def = definition(conn, params)?;
                 Ok((def.clone(), filter_keys(conn, &def, &accounts)?))
@@ -125,7 +136,7 @@ fn run(state: &Arc<DaemonState>, method: &str, params: &Value) -> Result<Value, 
             app_db::with(app_dir, |conn| views::reorder(conn, &ids).map(|_| Value::Null))
         }
         "views.evaluate" => {
-            let accounts = accounts_of(params)?;
+            let accounts = accounts_of(state, params)?;
             let limit = params.get("limit").and_then(Value::as_u64).unwrap_or(500) as usize;
             // Every app.db read happens here, before the index lock is taken.
             let (def, keys) = app_db::with(app_dir, |conn| {
@@ -139,7 +150,7 @@ fn run(state: &Arc<DaemonState>, method: &str, params: &Value) -> Result<Value, 
         // own }] }`. The view's own sender rules are left off, so a sender it
         // blocks stays on the list to be allowed again.
         "views.senders" => {
-            let accounts = accounts_of(params)?;
+            let accounts = accounts_of(state, params)?;
             let limit = params.get("limit").and_then(Value::as_u64).unwrap_or(30).min(100) as usize;
             let (def, keys) = app_db::with(app_dir, |conn| {
                 let def = definition(conn, params)?;
@@ -148,7 +159,7 @@ fn run(state: &Arc<DaemonState>, method: &str, params: &Value) -> Result<Value, 
             senders(state, &def, &accounts, &keys, limit)
         }
         "views.counts" => {
-            let accounts = accounts_of(params)?;
+            let accounts = accounts_of(state, params)?;
             let (all, keys) = app_db::with(app_dir, |conn| {
                 views::ensure_starters(conn)?;
                 let all = views::list(conn)?;
@@ -179,7 +190,7 @@ fn run(state: &Arc<DaemonState>, method: &str, params: &Value) -> Result<Value, 
         // `viewIdsByMailbox` (account -> mailbox -> ids) is a folder's own
         // pick, which replaces `viewIds` in that folder alone.
         "views.hidden_members" => {
-            let accounts = accounts_of(params)?;
+            let accounts = accounts_of(state, params)?;
             let picked: Option<Vec<String>> = params
                 .get("viewIds")
                 .map(|ids| serde_json::from_value(ids.clone()).map_err(|e| format!("viewIds: {e}")))
@@ -205,7 +216,7 @@ fn run(state: &Arc<DaemonState>, method: &str, params: &Value) -> Result<Value, 
         // The hide picker's numbers: each view's own members per account and
         // mailbox, as the lists show them. Background work, as above.
         "views.picker_members" => {
-            let accounts = accounts_of(params)?;
+            let accounts = accounts_of(state, params)?;
             let (all, keys) = app_db::with(app_dir, |conn| {
                 views::ensure_starters(conn)?;
                 let all = views::list(conn)?;
@@ -666,19 +677,18 @@ fn hidden_members(
     for view in all {
         let per_view = keys.get(&view.id).unwrap_or(&empty);
         // A view no pick names for an account is not run there at all.
-        for account in accounts
-            .iter()
-            .filter(|account| view.def.accounts.is_empty() || view.def.accounts.contains(&account.account_id))
-            .filter(|account| picks.runs_for(&view.id, &account.account_id))
-        {
-            // Keys only, uncapped, one index lock hold per (view, account):
-            // no row JSON, no snippet, no page walk.
-            let request = request_for(&view.def, account, per_view, now);
+        let picked: Vec<Account> =
+            accounts.iter().filter(|account| picks.runs_for(&view.id, &account.account_id)).cloned().collect();
+        // Keys only, uncapped, one index lock hold per group of accounts the
+        // view filters alike (`view_eval::batches`): no row JSON, no snippet,
+        // no page walk, and no whole-index probe repeated per account.
+        for (request, group) in mailvault_core::view_eval::batches(&view.def, &picked, per_view, now) {
             let hits = match crate::search_index::member_keys(&state.search_index, &request)? {
                 Ok(hits) => hits,
                 Err(_) => return Ok(unavailable()),
             };
-            for (_, vault_dir, uid) in hits {
+            for (account_id, vault_dir, uid) in hits {
+                let Some(account) = group.iter().find(|account| account.account_id == account_id) else { continue };
                 let (mailbox, local_only, _) =
                     crate::handlers::mail_search::mailbox_for_vault_dir(&vault_dir, &account.known_mailboxes);
                 // A local-only (or ambiguous) folder is not on the list it
@@ -753,13 +763,14 @@ fn picker_members(
     let mut found: BTreeMap<String, BTreeMap<String, BTreeMap<String, BTreeSet<u32>>>> = BTreeMap::new();
     for view in all {
         let per_view = keys.get(&view.id).unwrap_or(&empty);
-        for account in accounts.iter().filter(|account| view.def.accounts.is_empty() || view.def.accounts.contains(&account.account_id)) {
-            let request = request_for(&view.def, account, per_view, now);
+        // One probe per group of accounts the view filters alike, as above.
+        for (request, group) in mailvault_core::view_eval::batches(&view.def, accounts, per_view, now) {
             let hits = match crate::search_index::member_keys(&state.search_index, &request)? {
                 Ok(hits) => hits,
                 Err(_) => return Ok(unavailable()),
             };
-            for (_, vault_dir, uid) in hits {
+            for (account_id, vault_dir, uid) in hits {
+                let Some(account) = group.iter().find(|account| account.account_id == account_id) else { continue };
                 let (mailbox, local_only, _) =
                     crate::handlers::mail_search::mailbox_for_vault_dir(&vault_dir, &account.known_mailboxes);
                 if local_only {
@@ -1777,6 +1788,51 @@ mod tests {
         assert_eq!(out["members"]["v1"], json!({ "a": { "INBOX": [1], "Work": [4] } }), "{out}");
         assert_eq!(out["members"]["v2"], json!({ "a": { "INBOX": [3] } }), "{out}");
         assert!(out["members"].get("v3").is_none(), "{out}");
+    }
+
+    /// The app sends an account's folders only once it has shown them (its
+    /// folder cache holds eight). An account it sends none for still has its
+    /// mail counted and hidden, by the daemon's own cached folder list.
+    #[tokio::test]
+    async fn picker_and_hide_name_folders_from_the_cached_list_when_the_app_sends_none() {
+        let s = st();
+        two_folders(&s).await;
+        crate::custody::with_conn(&s, |conn| {
+            mailvault_core::custody::cache::save_mailboxes(
+                conn, "a",
+                &json!({ "mailboxes": [{ "path": "INBOX", "specialUse": "\\Inbox" }, { "path": "Work" }] }).to_string(),
+            )
+        })
+        .unwrap();
+        let bare = json!([{ "accountId": "a", "address": "me@x.test" }]);
+        let out = call(&s, "views.picker_members", json!({ "accounts": bare })).await;
+        assert_eq!(out["members"]["v1"], json!({ "a": { "INBOX": [1], "Work": [4] } }), "{out}");
+        let out = call(&s, "views.hidden_members", json!({ "accounts": bare, "viewIds": ["v1"] })).await;
+        assert_eq!(out["members"]["a"]["INBOX"]["uids"], json!([1]), "{out}");
+        assert_eq!(out["members"]["a"]["Work"]["uids"], json!([4]), "{out}");
+    }
+
+    /// Every index probe is a scan the next click waits behind: accounts a
+    /// view filters alike share one, as `views.counts` does, instead of one
+    /// per account (19 accounts made the picker take seconds).
+    #[tokio::test]
+    async fn picker_and_hide_probe_the_index_once_per_view_not_per_account() {
+        let s = st();
+        two_folders(&s).await;
+        let many = json!([
+            { "accountId": "a", "knownMailboxes": ["INBOX", "Work"] },
+            { "accountId": "b", "knownMailboxes": ["INBOX"] },
+            { "accountId": "c", "knownMailboxes": ["INBOX"] },
+        ]);
+        let probes = || s.search_index.search_scopes.lock().unwrap().len();
+        let before = probes();
+        let out = call(&s, "views.picker_members", json!({ "accounts": many })).await;
+        assert_eq!(out["members"]["v1"], json!({ "a": { "INBOX": [1], "Work": [4] } }), "{out}");
+        assert_eq!(probes() - before, 2, "two views, one probe each");
+        let before = probes();
+        let out = call(&s, "views.hidden_members", json!({ "accounts": many })).await;
+        assert_eq!(out["members"]["a"]["INBOX"]["uids"], json!([1, 3]), "{out}");
+        assert_eq!(probes() - before, 2, "two views, one probe each");
     }
 
     #[tokio::test]

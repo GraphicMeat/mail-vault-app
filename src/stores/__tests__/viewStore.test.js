@@ -742,6 +742,18 @@ describe('mail the views hold, hidden from the mailbox lists', () => {
     expect(await useViewStore.getState().loadPickerMembers()).toBeNull();
   });
 
+  it('keeps the last known picker numbers for the next open; an unknown answer does not blank them', async () => {
+    const MEMBERS = { v1: { 'acct-1': { INBOX: [4] } } };
+    harness.daemonCall.mockImplementation(method => Promise.resolve(
+      method === 'views.picker_members' ? { available: true, members: MEMBERS } : {}));
+    await useViewStore.getState().loadPickerMembers();
+    expect(useViewStore.getState().pickerMembers).toEqual(MEMBERS);
+    harness.daemonCall.mockImplementation(method => Promise.resolve(
+      method === 'views.picker_members' ? { available: false, members: {} } : {}));
+    await useViewStore.getState().loadPickerMembers();
+    expect(useViewStore.getState().pickerMembers).toEqual(MEMBERS);
+  });
+
   it('folders that only hide nothing, over an empty pick, ask nothing', async () => {
     fill();
     useSettingsStore.setState({ hideViewMail: true, hideViewMailViews: [], hideViewMailByMailbox: { 'acct-1': { INBOX: [] } } });
@@ -756,6 +768,20 @@ describe('mail the views hold, hidden from the mailbox lists', () => {
     await refreshHiddenMembers();
     expect(hiddenCalls()).toHaveLength(0);
     expect(useViewHideStore.getState().keys).toBeNull();
+  });
+
+  it('the first count warms the picker numbers once, so the first open shows them at once', async () => {
+    useViewStore.setState({ pickerMembers: null });
+    const MEMBERS = { v1: { 'acct-1': { INBOX: [4] } } };
+    harness.daemonCall.mockImplementation(method => Promise.resolve(method === 'views.counts' ? { v1: 2 }
+      : method === 'views.picker_members' ? { available: true, members: MEMBERS } : {}));
+    const pickerCalls = () => harness.daemonCall.mock.calls.filter(([method]) => method === 'views.picker_members');
+    await useViewStore.getState().refreshCounts();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(useViewStore.getState().pickerMembers).toEqual(MEMBERS);
+    await useViewStore.getState().refreshCounts();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(pickerCalls()).toHaveLength(1);
   });
 
   it('a count while the setting is off asks nothing about membership', async () => {

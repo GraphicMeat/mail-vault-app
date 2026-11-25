@@ -365,7 +365,20 @@ fn emit_progress(state: &DaemonState, run: &SearchRun, mut frame: MailSearchProg
     }
 }
 
-async fn run_search(state: Arc<DaemonState>, request: MailSearchStart, guard: SearchRunGuard) {
+async fn run_search(state: Arc<DaemonState>, mut request: MailSearchStart, guard: SearchRunGuard) {
+    // The app sends the folders of only the accounts it showed lately; the
+    // daemon's cached folder list names the rest, or their server mail would
+    // read as local-only.
+    for target in &mut request.targets {
+        if let Some(listing) = cached_folder_listing(&state, &target.account_id) {
+            let mut account = mailvault_core::view_eval::ViewAccount {
+                known_mailboxes: std::mem::take(&mut target.known_mailboxes),
+                ..Default::default()
+            };
+            account.fill_from_listing(&listing);
+            target.known_mailboxes = account.known_mailboxes;
+        }
+    }
     let run = Arc::clone(&guard.run);
     let started = Instant::now();
     let local_enabled = !request.targets.is_empty() && request.location != SearchLocation::Server;
@@ -1341,6 +1354,12 @@ fn unique_vault_dirs(mailboxes: &[String]) -> HashSet<String> {
         .iter()
         .map(|mailbox| core_search::text::vault_dir_name(mailbox))
         .collect()
+}
+
+/// The account's cached folder list (`custody::cache::load_mailboxes`), or
+/// None when there is none or custody cannot be read.
+pub(crate) fn cached_folder_listing(state: &DaemonState, account_id: &str) -> Option<String> {
+    crate::custody::with_conn(state, |conn| mailvault_core::custody::cache::load_mailboxes(conn, account_id)).ok().flatten()
 }
 
 pub(crate) fn mailbox_for_vault_dir(vault_dir: &str, known_mailboxes: &[String]) -> (String, bool, bool) {
@@ -2907,6 +2926,35 @@ mod tests {
             assert_eq!(row["_mailbox"], mailbox);
             assert_eq!(row["vaultDir"], mailbox);
         }
+    }
+
+    /// The app sends the folders of only the accounts it showed lately (its
+    /// folder cache holds eight). An account it sends none for is named from
+    /// the daemon's own cached folder list: its server mail is not "a folder
+    /// nothing knows".
+    #[tokio::test]
+    async fn a_target_sent_without_folders_is_named_from_the_cached_folder_list() {
+        let (tmp, state) = state();
+        write_mail(tmp.path(), "acct", "Archive", 1, "server copy", "body");
+        crate::custody::with_conn(&state, |conn| {
+            mailvault_core::custody::cache::save_mailboxes(
+                conn, "acct", &json!({ "mailboxes": [{ "path": "INBOX" }, { "path": "Archive" }] }).to_string(),
+            )
+        })
+        .unwrap();
+        let mut req = request("bare-known", 1);
+        req["targets"][0]["localMailboxes"] = Value::Null;
+        req["targets"][0]["knownMailboxes"] = json!([]);
+        let mut rx = state.events.subscribe();
+        call(&state, "mail_search_start", req).await;
+        let frames = collect_until_terminal(&mut rx, "bare-known").await;
+        let row = frames
+            .iter()
+            .flat_map(|frame| frame["rows"].as_array().unwrap())
+            .find(|row| row["subject"] == "server copy")
+            .unwrap();
+        assert_eq!(row["_mailbox"], "Archive", "{row}");
+        assert!(row.get("_localOnlyFolder").is_none(), "{row}");
     }
 
     /// A folder kept only on this computer (MBOX import mode 3) that the app
