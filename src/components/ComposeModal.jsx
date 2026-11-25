@@ -63,6 +63,9 @@ const SEND_SETTING_KEYS = ['aliases', 'sendAsAddresses', 'displayNames', 'attach
 
 export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initialData = null, templateBody = null, onClose, onMinimize, onSaveState, onDetach, onAttach, detached = false, onContextVisibleChange, onDiscard, snapshotRef, onAddTemplate, onQueueSend, onSchedule, onUpgrade, onOpenAliases, onSend, onDraftCleanup, acknowledgePreparation, prepareSendCheck, finalizeSendCheck, invalidateSendCheck, sendInvalidationRef, preparedQuote = null }) {
   const sendGeneration = useRef(0);
+  // Invalidations that came from outside this editor (a token refresh, a
+  // settings push): a send they cut short re-checks; an edit's does not.
+  const externalInvalidations = useRef(0);
   const submission = useRef(null);
   const confirmation = useRef(null);
   const nextAttempt = useRef(0);
@@ -304,10 +307,10 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
   }, [invalidate]);
   useEffect(() => {
     const stopSettings = useSettingsStore.subscribe?.((state, previous) => {
-      if (SEND_SETTING_KEYS.some(key => state[key] !== previous[key])) invalidate();
+      if (SEND_SETTING_KEYS.some(key => state[key] !== previous[key])) { externalInvalidations.current++; invalidate(); }
     });
     const stopAccounts = useMailStore.subscribe?.((state, previous) => {
-      if (state.accounts !== previous.accounts) invalidate();
+      if (state.accounts !== previous.accounts) { externalInvalidations.current++; invalidate(); }
     });
     return () => { stopSettings?.(); stopAccounts?.(); };
   }, [invalidate]);
@@ -731,7 +734,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
 
   const latestSnapshotRef = useRef(composeSnapshot);
   latestSnapshotRef.current = composeSnapshot;
-  const { handleSend } = useComposeSend({ submission, detaching, terminalIntentRef, aliveRef, preparationReadyRef, needsPreparation, preparedContext, currentPreparation, setError, sendGeneration, confirmation, nextAttempt, latestSnapshotRef, selectedAccount, senderNameFor, setShowAttachmentReminder, setSizeWarningLimit, setSending, saveChainRef, prepareSendCheck, mode, finalizeSendCheck, onSchedule, onDraftCleanup, onSend, onClose, onQueueSend, actionReplyTo, initialData, selectedAccountId, initialSnapshot, invalidate });
+  const { handleSend } = useComposeSend({ externalInvalidations, submission, detaching, terminalIntentRef, aliveRef, preparationReadyRef, needsPreparation, preparedContext, currentPreparation, setError, sendGeneration, confirmation, nextAttempt, latestSnapshotRef, selectedAccount, senderNameFor, setShowAttachmentReminder, setSizeWarningLimit, setSending, saveChainRef, prepareSendCheck, mode, finalizeSendCheck, onSchedule, onDraftCleanup, onSend, onClose, onQueueSend, actionReplyTo, initialData, selectedAccountId, initialSnapshot, invalidate });
   if (snapshotRef) snapshotRef.current = async () => {
     await saveChainRef.current.catch(() => {});
     return latestSnapshotRef.current();
@@ -1330,18 +1333,18 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
 
           </div>
 
-          {/* Error */}
+          </div>
+          
+          {/* Error: pinned above the footer, never scrolled out of view. */}
           {(error || draftSaveError || draftOmitted || terminalState) && (
             <div data-testid="compose-error" role="alert"
                  className="px-4 py-2 bg-mail-danger/10 border-t border-mail-danger/20
-                           text-mail-danger text-sm">
+                           text-mail-danger text-sm shrink-0">
               {terminalState === 'working' ? t('compose.draftCleanupWorking') : error || draftSaveError || t('compose.draftAttachmentsOmitted', { names: draftOmitted })}
               {!terminalState && preparationFailed && <button type="button" className="ml-3 underline" onClick={() => { setError(null); setPreparationRetry(value => value + 1); }}>{t('common.retry')}</button>}
               {!terminalState && draftSaveError && <button type="button" className="ml-3 underline" onClick={() => setDraftRetry(value => value + 1)}>{t('common.retry')}</button>}
             </div>
           )}
-          </div>
-          
           {/* Footer */}
           <div className="compose-footer flex items-center justify-between gap-3 px-5 py-3 border-t border-mail-border shrink-0">
             <div className="flex items-center gap-2">

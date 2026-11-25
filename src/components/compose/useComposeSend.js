@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { tErr, useT } from '../../i18n/index.js';
 import { composeSnapshotForTransfer } from '../../services/composeWindow';
 import { htmlToText } from '../RichTextEditor';
@@ -7,11 +8,18 @@ import { isGraphAccount } from '../../services/graphConfig';
 import { hasPremiumAccess, useSettingsStore } from '../../stores/settingsStore';
 import { createComposeSend, scheduleCompose } from '../../services/composeSend';
 
-export function useComposeSend({ submission, detaching, terminalIntentRef, aliveRef, preparationReadyRef, needsPreparation, preparedContext, currentPreparation, setError, sendGeneration, confirmation, nextAttempt, latestSnapshotRef, selectedAccount, senderNameFor, setShowAttachmentReminder, setSizeWarningLimit, setSending, saveChainRef, prepareSendCheck, mode, finalizeSendCheck, onSchedule, onDraftCleanup, onSend, onClose, onQueueSend, actionReplyTo, initialData, selectedAccountId, initialSnapshot, invalidate }) {
+// A send cut short by a change from outside the editor re-checks the clicked
+// content this many times before it says it could not.
+const EXTERNAL_RECHECKS = 3;
+
+export function useComposeSend({ externalInvalidations, submission, detaching, terminalIntentRef, aliveRef, preparationReadyRef, needsPreparation, preparedContext, currentPreparation, setError, sendGeneration, confirmation, nextAttempt, latestSnapshotRef, selectedAccount, senderNameFor, setShowAttachmentReminder, setSizeWarningLimit, setSending, saveChainRef, prepareSendCheck, mode, finalizeSendCheck, onSchedule, onDraftCleanup, onSend, onClose, onQueueSend, actionReplyTo, initialData, selectedAccountId, initialSnapshot, invalidate }) {
   const t = useT();
+  const latest = useRef(null);
   // Send and Shift+Enter both land here; the armed plan picks the path.
   // "Send anyway" on the attachment reminder comes back with `sendAnyway`.
-  const handleSend = async (event, sendAnyway = false) => {
+  // `recheck` carries the clicked snapshot into a re-check after an outside
+  // change (account refresh, settings push) retired the attempt.
+  const handleSend = async (event, sendAnyway = false, recheck = null) => {
     event?.preventDefault();
     if (submission.current || detaching || terminalIntentRef.current || !aliveRef.current) return;
     if (!preparationReadyRef.current || needsPreparation && (preparedContext.current?.source !== currentPreparation.current.source || preparedContext.current?.identityGeneration !== currentPreparation.current.identityGeneration)) { setError(t('compose.preparationUnavailable')); return; }
@@ -21,8 +29,13 @@ export function useComposeSend({ submission, detaching, terminalIntentRef, alive
     const claim = { attempt, generation };
     submission.current = claim;
     const current = () => aliveRef.current && !terminalIntentRef.current && submission.current === claim && sendGeneration.current === generation;
+    // Retired only by outside changes: no edit, close or second submission.
+    const external = externalInvalidations.current;
+    const retiredFromOutside = () => aliveRef.current && !terminalIntentRef.current && submission.current === claim
+      && sendGeneration.current - generation === externalInvalidations.current - external;
+    let again = false;
     // composeSnapshot/captureDraft synchronously pins the issued content and cleanup bound.
-    const snapshot = composeSnapshotForTransfer(confirmed?.snapshot || latestSnapshotRef.current());
+    const snapshot = composeSnapshotForTransfer(recheck?.snapshot || confirmed?.snapshot || latestSnapshotRef.current());
     const accountSource = selectedAccount;
     const account = composeSnapshotForTransfer(accountSource);
     const senderSettings = { displayName: senderNameFor(accountSource, snapshot._fromAddress) };
@@ -45,13 +58,13 @@ export function useComposeSend({ submission, detaching, terminalIntentRef, alive
     setError(null);
     try {
       await saveChainRef.current.catch(() => {});
-      if (!current()) return;
+      if (!current()) { again = retiredFromOutside(); return; }
       const result = prepareSendCheck
         ? await prepareSendCheck({ attempt, editorGeneration: generation, ...(confirmed
           ? { confirmationAttempt: confirmed.attempt }
           : { snapshot, authoredBodyText: htmlToText(snapshot.body), timeZone }) })
         : await checkCompose(composeCheckInput({ snapshot, mode, authoredBodyText: htmlToText(snapshot.body), timeZone, sendAnyway: !!confirmed }), { isCurrent: current });
-      if (!current()) return;
+      if (!current()) { again = retiredFromOutside(); return; }
       if (!outcome(result)) return;
       // Preserve moved-schedule failure recovery through detached finalization.
       draft = result.route.draft;
@@ -83,7 +96,7 @@ export function useComposeSend({ submission, detaching, terminalIntentRef, alive
         onSend?.(); onClose();
       }
     } catch (err) {
-      if (!current()) return;
+      if (!current()) { again = retiredFromOutside(); return; }
       confirmation.current = null;
       if (draft && initialData?._editScheduledId && initialData._editScheduledRow?.accountId !== selectedAccountId) initialSnapshot.current = null;
       setError(err?.message ? tErr(err) : t('scheduled.errors.scheduleFailed'));
@@ -91,8 +104,15 @@ export function useComposeSend({ submission, detaching, terminalIntentRef, alive
     } finally {
       if (submission.current === claim) submission.current = null;
       if (aliveRef.current) setSending(false);
+      if (again) {
+        const count = (recheck?.count || 0) + 1;
+        // The next render's handler: it holds the refreshed account.
+        if (count <= EXTERNAL_RECHECKS) setTimeout(() => latest.current?.(null, false, { snapshot, count }), 0);
+        else setError(t('compose.preparationUnavailable'));
+      }
     }
   };
+  latest.current = handleSend;
 
   return { handleSend };
 }

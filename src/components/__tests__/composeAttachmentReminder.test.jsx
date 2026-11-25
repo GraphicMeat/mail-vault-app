@@ -233,6 +233,17 @@ describe('current compose validation order', () => {
     expect(screen.queryByTestId('compose-attachment-reminder')).toBeNull();
     expect(queueSend).not.toHaveBeenCalled();
   });
+  // A long body or signature scrolled the error out of view: Send looked
+  // like it did nothing. It sits pinned above the footer, outside the scroll.
+  it('shows a send error above Discard and Send, outside the scrolling content', async () => {
+    open('<p>Body</p>', { to: '' });
+    fireEvent.click(screen.getByTestId('compose-send'));
+    const error = await screen.findByTestId('compose-error');
+    expect(error.textContent).toContain('Please enter at least one recipient');
+    expect(error.closest('.compose-scroll')).toBeNull();
+    expect(error.nextElementSibling?.classList.contains('compose-footer')).toBe(true);
+    expect(error.nextElementSibling.contains(screen.getByTestId('compose-send'))).toBe(true);
+  });
   it('requires an account before asking about attachment or an expired plan', async () => {
     const { t } = await import('../../i18n');
     mail.accounts = [];
@@ -331,7 +342,75 @@ describe('external authority and save boundaries', () => {
     });
     expect(queueSend).not.toHaveBeenCalled();
   });
-  it('waits the existing save without recapturing or checking changed content', async () => {
+  // An account refresh or a settings push from main lands mid-send all the
+  // time (18 accounts refresh tokens and sync). It used to retire the attempt
+  // silently: spinner, then an idle Send button, no error, nothing sent.
+  it.each(['settings', 'account'])('re-checks and sends the clicked content after a %s change mid-send', async change => {
+    let finish;
+    checkCompose.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const { onClose } = open('<p>Clicked body</p>');
+    fireEvent.click(screen.getByTestId('compose-send'));
+    await waitFor(() => expect(finish).toBeTypeOf('function'));
+    await act(async () => {
+      if (change === 'settings') {
+        const previous = { ...settings }; settings.billingProfile = { hasSubscription: true, status: 'active' };
+        settingListeners.forEach(callback => callback(settings, previous));
+      }
+      if (change === 'account') {
+        const previous = { ...mail }; mail.accounts = [{ ...account, oauth2AccessToken: 'fresh' }];
+        accountListeners.forEach(callback => callback(mail, previous));
+      }
+      finish({ kind: 'ready', route: { delay: null } });
+    });
+    await waitFor(() => expect(queueSend).toHaveBeenCalledTimes(1));
+    expect(checkCompose).toHaveBeenCalledTimes(2);
+    expect(checkCompose.mock.calls[1][0].authoredBodyText).toBe('Clicked body\n');
+    expect(queueSend.mock.calls[0][0].initialData.body).toBe('<p>Clicked body</p>');
+    expect(onClose).toHaveBeenCalled();
+    expect(screen.queryByTestId('compose-error')).toBeNull();
+  });
+  it('says so instead of going quiet when changes keep landing mid-send', async () => {
+    checkCompose.mockImplementation(async () => {
+      const previous = { ...mail }; mail.accounts = [{ ...account }];
+      accountListeners.forEach(callback => callback(mail, previous));
+      return { kind: 'ready', route: { delay: null } };
+    });
+    open('<p>Body</p>');
+    fireEvent.click(screen.getByTestId('compose-send'));
+    expect((await screen.findByTestId('compose-error')).textContent).toContain('Could not prepare this message');
+    expect(queueSend).not.toHaveBeenCalled();
+    expect(screen.getByTestId('compose-send').disabled).toBe(false);
+  });
+  it('a detached window re-checks after a main push mid-send instead of going quiet', async () => {
+    let calls = 0;
+    const prepareSendCheck = vi.fn(async () => {
+      if (++calls === 1) {
+        const previous = { ...mail }; mail.accounts = [{ ...account }];
+        accountListeners.forEach(callback => callback(mail, previous));
+      }
+      return { kind: 'ready', route: { delay: null } };
+    });
+    const finalizeSendCheck = vi.fn(async () => undefined);
+    render(<ComposeModal detached mode="new" initialData={{ to: 'them@example.test', subject: 'Hi', body: '<p>Body</p>' }}
+      onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}}
+      prepareSendCheck={prepareSendCheck} finalizeSendCheck={finalizeSendCheck} />);
+    fireEvent.click(screen.getByTestId('compose-send'));
+    await waitFor(() => expect(finalizeSendCheck).toHaveBeenCalledTimes(1));
+    expect(prepareSendCheck).toHaveBeenCalledTimes(2);
+    expect(prepareSendCheck.mock.calls[1][0].snapshot.body).toBe('<p>Body</p>');
+  });
+  it('an edit mid-send still cancels that send, keeping the edit', async () => {
+    let finish;
+    checkCompose.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    open('<p>Complete body</p>');
+    fireEvent.click(screen.getByTestId('compose-send'));
+    await waitFor(() => expect(finish).toBeTypeOf('function'));
+    fireEvent.change(screen.getByTestId('compose-subject'), { target: { value: 'Changed' } });
+    await act(async () => finish({ kind: 'ready', route: { delay: null } }));
+    expect(checkCompose).toHaveBeenCalledTimes(1);
+    expect(queueSend).not.toHaveBeenCalled();
+  });
+  it('waits the existing save, then checks the clicked content under the new settings', async () => {
     const { saveLocalDraft } = await import('../../services/localDrafts');
     let finish;
     const { savedDraftReply } = await import('../../test/draftReply');
@@ -343,9 +422,9 @@ describe('external authority and save boundaries', () => {
     const previous = { ...settings }; settings.sendDelay = 60;
     settingListeners.forEach(callback => callback(settings, previous));
     await act(async () => finish(undefined));
-    expect(checkCompose).not.toHaveBeenCalled();
-    expect(queueSend).not.toHaveBeenCalled();
-    expect(screen.getByTestId('editor-stub').value).toBe('<p>Before save</p>');
+    await waitFor(() => expect(queueSend).toHaveBeenCalledTimes(1));
+    expect(checkCompose).toHaveBeenCalledTimes(1);
+    expect(checkCompose.mock.calls[0][0].authoredBodyText).toBe('Before save\n');
   });
   it('uses the returned route on a handoff copy without raising the issued cleanup bound', async () => {
     checkCompose.mockResolvedValue({ kind: 'ready', route: { delay: 300 } });

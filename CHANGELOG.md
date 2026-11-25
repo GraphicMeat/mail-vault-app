@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Fixed: when Send could not send, for example because no recipient was entered, the reason could appear below a long message or signature, out of view, so Send looked like it did nothing. The message now shows above Discard and Send, where it is always visible.
+- Fixed: Send no longer stops without sending or explaining why when an account refreshes its sign-in or a setting changes in the main window during the send. It checks the message you sent again and sends it. If changes keep arriving, it says it could not prepare the message. An edit you make while it is sending still cancels the send.
 - Added: removing a Gmail account signed in with MailVault's own Google sign-in offers "Also end MailVault's access in your Google account". Ticked, MailVault asks Google to revoke its access as well as deleting the tokens from this computer; MailVault on your other devices with that account then has to sign in again, so it is off unless you tick it. Accounts signed in with Thunderbird's shared Google sign-in do not offer it, since revoking would sign you out of Thunderbird too. The phone app offers the same choice when you remove an account.
 - Security: signing in to Premium on the computer now emails a 6-digit code to the address, as on the phone. Before, typing a subscriber's address was enough to turn Premium on and take one of their device seats. Older MailVault versions must update to sign in to Premium; devices already signed in stay signed in.
 - Security: updated third-party libraries with published security fixes, among them the SMTP library (STARTTLS reply injection, dot-stuffing), the bundled SQLite, HTTP/2 and the root certificate list.
