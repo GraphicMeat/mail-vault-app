@@ -9,6 +9,7 @@ import { formatEmailDate, MOBILE_DATE_SETTINGS } from '../format.js';
 import { formatEmailDateWith } from '../../utils/emailDateCore.js';
 import { t, getMobileLocale } from '../i18n.js';
 import en from '../../i18n/locales/en.json';
+import { revealSide } from './fixtures/swipe.js';
 
 afterEach(cleanup);
 
@@ -96,7 +97,7 @@ describe('MessageRow', () => {
     expect(container.querySelector('.mv-row--unread')).toBeTruthy();
     expect(container.querySelector('.mv-row__flag')).toBeTruthy();
     // The read swipe marks the conversation read (every message: App.jsx sends `threadUids`).
-    fireEvent.click(container.querySelector('[data-mv-swipe-action="leading"]'));
+    fireEvent.click(revealSide(container, 'leading'));
     expect(onSwipe).toHaveBeenCalledWith('seen', expect.objectContaining({ uid: 7, threadUids: [7, 5, 2] }));
     // Its height is every row's.
     expect(container.querySelector('[data-index="3"]').style.height).toBe(`${ROW_HEIGHT}px`);

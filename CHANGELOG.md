@@ -10,6 +10,7 @@
 - Changed: Settings > Appearance > Quick actions is one short page. Your actions are chips you drag to reorder or remove with ×, and + opens one searchable list of every action, which asks for the folder, label or template when an action needs one. Layout and colors are small tiles, the options of the wheel, the favorite and the selection bar appear only for the layout that uses them, and one switch gives rows, the selection bar and the reader the same look. Local labels and their delete buttons moved to Settings > Auto Tags.
 - Changed: Settings now says that downloading a font from Google Fonts connects to Google, which sees your IP address and the time of the download and can use them to track you. The bundled fonts never connect to Google.
 - Changed: Settings > Accounts lists accounts in their sidebar groups. Move a group up or down from its header and the sidebar follows. Drag the line between the account list and the account's settings to make the list wider.
+- Fixed: on the phone, scrolling the mail list fast could flash red and purple at the bottom of the screen. A row's swipe action now exists only while you swipe that row.
 
 ## [2.25.1] - 2026-11-26
 

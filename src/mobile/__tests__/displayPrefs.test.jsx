@@ -7,6 +7,7 @@ import React from 'react';
 import { render, cleanup } from '@testing-library/react';
 import MessageRow, { ROW_HEIGHT } from '../MessageRow.jsx';
 import { useMobileStore } from '../store.js';
+import { revealSide } from './fixtures/swipe.js';
 import {
   PREF_DEFAULTS, TEXT_SCALES, APP_FONTS, rowHeight, fontStack, applyLook, afterDeletePick, afterDeleteRow,
 } from '../prefs.js';
@@ -78,12 +79,16 @@ describe('list rows', () => {
   });
 
   it('swipes off: the row reveals no action either way', () => {
-    let { container } = renderRow();
-    expect(container.querySelectorAll('[data-mv-swipe-action]')).toHaveLength(2);
-    cleanup();
+    const revealed = (side) => {
+      const { container } = renderRow();
+      revealSide(container, side);
+      const n = container.querySelectorAll(`[data-mv-swipe-action="${side}"]`).length;
+      cleanup();
+      return n;
+    };
+    expect([revealed('leading'), revealed('trailing')]).toEqual([1, 1]);
     withPrefs({ trackpadSwipeEnabled: false });
-    ({ container } = renderRow());
-    expect(container.querySelectorAll('[data-mv-swipe-action]')).toHaveLength(0);
+    expect([revealed('leading'), revealed('trailing')]).toEqual([0, 0]);
   });
 });
 

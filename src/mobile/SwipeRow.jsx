@@ -3,6 +3,11 @@
 // open on that button (44pt and up, tap it to act); let go past FULL_SWIPE of the row's width and
 // the action runs at once. The drag writes the row's transform straight to the element (no React
 // render, no layout per frame); the snap is a CSS transition, off under reduced motion.
+// An action is in the DOM only for the side being dragged open, open, or still sliding closed
+// (`revealed`, also the root's `data-side`, which makes the row a layer of its own in mobile.css).
+// A resting row has neither: WKWebView painted their coloured fills at the list's edge during a
+// fast scroll. A closing row drops its action when the slide ends (`transitionend`, or a timer
+// in case the slide never reports), and at once when nothing slides.
 // `touch-action: pan-y` leaves vertical scrolling to the browser, which cancels the pointer once
 // a scroll starts. A side given as null (its swipe set to "none") does not move that way.
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -13,8 +18,13 @@ export const SWIPE_OPEN = 88;
 export const FULL_SWIPE = 0.55;
 /** Movement (px) before a drag picks an axis. */
 const SLOP = 10;
+/** How long a closing row waits for its slide to report its end (the slide is 0.22s). */
+const CLOSE_FALLBACK_MS = 400;
 
-const isRtl = (el) => typeof getComputedStyle === 'function' && el && getComputedStyle(el).direction === 'rtl';
+const isRtl = (el) => typeof window !== 'undefined' && typeof window.getComputedStyle === 'function' && el
+  && window.getComputedStyle(el).direction === 'rtl';
+const reducedMotion = () => typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+  && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /**
  * @param {{ leading: {label: string, className?: string, icon?: any},
@@ -27,24 +37,68 @@ export default function SwipeRow({ leading, trailing, onAction, initialOpen = nu
   const content = useRef(null);
   const drag = useRef(null);
   const swiped = useRef(false); // a drag happened: the click that follows is not a tap
+  const rtl = useRef(null); // the layout's direction, read once per drag (not per frame)
   const [open, setOpen] = useState(initialOpen);
   const openRef = useRef(open);
   openRef.current = open;
+  // The side whose action is in the DOM.
+  const [revealed, setRevealedState] = useState(initialOpen);
+  const revealedRef = useRef(revealed);
+  const closeTimer = useRef(null);
+
+  const setRevealed = useCallback((side) => {
+    clearTimeout(closeTimer.current);
+    closeTimer.current = null;
+    if (revealedRef.current === side) return;
+    revealedRef.current = side;
+    setRevealedState(side);
+  }, []);
+
+  const rtlNow = useCallback(() => {
+    if (rtl.current === null) rtl.current = isRtl(root.current);
+    return rtl.current;
+  }, []);
 
   // Physical offset for a side: the leading side is on the right in a right-to-left layout.
   const offsetFor = useCallback((side) => {
     if (!side) return 0;
     const sign = side === 'leading' ? 1 : -1;
-    return sign * (isRtl(root.current) ? -1 : 1) * SWIPE_OPEN;
-  }, []);
+    return sign * (rtlNow() ? -1 : 1) * SWIPE_OPEN;
+  }, [rtlNow]);
 
   const place = useCallback((x, animate) => {
     const el = content.current;
     if (!el) return;
+    const moved = !!el.style.transform;
     el.style.transition = animate ? '' : 'none';
     el.style.transform = x ? `translate3d(${x}px, 0, 0)` : '';
-    if (root.current) root.current.dataset.side = x > 0 ? 'left' : x < 0 ? 'right' : '';
-  }, []);
+    if (x) {
+      // Physical right is the leading side in a left-to-right layout.
+      setRevealed((x > 0) !== rtlNow() ? 'leading' : 'trailing');
+    } else if (!moved || !animate || reducedMotion()) {
+      setRevealed(null);
+    } else if (!closeTimer.current) {
+      // Sliding closed: the action stays under the row until the slide ends.
+      closeTimer.current = setTimeout(() => setRevealed(null), CLOSE_FALLBACK_MS);
+    }
+  }, [rtlNow, setRevealed]);
+
+  // The slide closed: its action goes. Native listener (React's transitionend name is prefixed
+  // where the environment says so).
+  useEffect(() => {
+    const el = content.current;
+    if (!el) return undefined;
+    const done = (e) => {
+      if (e.target === el && !el.style.transform) setRevealed(null);
+    };
+    el.addEventListener('transitionend', done);
+    el.addEventListener('transitioncancel', done);
+    return () => {
+      el.removeEventListener('transitionend', done);
+      el.removeEventListener('transitioncancel', done);
+      clearTimeout(closeTimer.current);
+    };
+  }, [setRevealed]);
 
   // A row at rest mounts with no transform: nothing to write (rows mount on every scroll step).
   const mounted = useRef(false);
@@ -71,9 +125,10 @@ export default function SwipeRow({ leading, trailing, onAction, initialOpen = nu
     swiped.current = false;
     if (e.button > 0 || e.isPrimary === false) return;
     const el = content.current;
+    rtl.current = isRtl(root.current);
     drag.current = {
       id: e.pointerId, x0: e.clientX, y0: e.clientY, axis: null, dx: 0,
-      base: offsetFor(openRef.current), width: (el && el.offsetWidth) || 375, rtl: isRtl(root.current),
+      base: offsetFor(openRef.current), width: (el && el.offsetWidth) || 375, rtl: rtl.current,
     };
   };
 
@@ -129,6 +184,7 @@ export default function SwipeRow({ leading, trailing, onAction, initialOpen = nu
 
   const action = (side, spec) => (
     <button
+      key={side}
       type="button"
       className={`mv-swipe__act mv-swipe__act--${side} ${spec.className || ''}`.trim()}
       data-mv-swipe-action={side}
@@ -142,9 +198,9 @@ export default function SwipeRow({ leading, trailing, onAction, initialOpen = nu
   );
 
   return (
-    <div ref={root} className="mv-swipe">
-      {leading && action('leading', leading)}
-      {trailing && action('trailing', trailing)}
+    <div ref={root} className="mv-swipe" data-side={revealed || undefined}>
+      {revealed === 'leading' && leading && action('leading', leading)}
+      {revealed === 'trailing' && trailing && action('trailing', trailing)}
       {React.cloneElement(children, {
         ref: content,
         onPointerDown,

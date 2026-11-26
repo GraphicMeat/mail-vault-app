@@ -5,6 +5,7 @@ import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import React from 'react';
 import { render, screen, cleanup, fireEvent, waitFor, act, within } from '@testing-library/react';
 import { t } from '../i18n.js';
+import { revealSide } from './fixtures/swipe.js';
 import {
   PREF_DEFAULTS, readPrefs, visibleAccounts, markReadPlan, afterDeleteRow, swipeKind, htmlToText, signatureFor, withSignature, applyLook,
 } from '../prefs.js';
@@ -128,20 +129,29 @@ describe('row swipes follow the preferences', () => {
 
   it('defaults: right reveals read, left reveals delete', () => {
     const { container } = render(<MessageRow row={ROW} index={0} onOpen={() => {}} onSwipe={() => {}} />);
-    expect(sides(container)).toEqual([['leading', t('mobile.actions.markRead')], ['trailing', t('common.delete')]]);
+    expect(sides(container)).toEqual([]); // at rest neither side is in the DOM
+    revealSide(container, 'leading');
+    expect(sides(container)).toEqual([['leading', t('mobile.actions.markRead')]]);
+    cleanup();
+    const r2 = render(<MessageRow row={ROW} index={0} onOpen={() => {}} onSwipe={() => {}} />);
+    revealSide(r2.container, 'trailing');
+    expect(sides(r2.container)).toEqual([['trailing', t('common.delete')]]);
   });
 
   it('flag and move, and none leaves that side out', () => {
     useMobileStore.setState({ prefs: { ...PREF_DEFAULTS, swipeLeftAction: 'flag', swipeRightAction: 'none' } });
     const onSwipe = vi.fn();
     const { container } = render(<MessageRow row={ROW} index={0} onOpen={() => {}} onSwipe={onSwipe} />);
+    revealSide(container, 'leading'); // none: the row does not move that way
+    expect(sides(container)).toEqual([]);
+    revealSide(container, 'trailing');
     expect(sides(container)).toEqual([['trailing', t('mobile.actions.flag')]]);
     fireEvent.click(container.querySelector('[data-mv-swipe-action="trailing"]'));
     expect(onSwipe).toHaveBeenCalledWith('flag', ROW);
     cleanup();
     useMobileStore.setState({ prefs: { ...PREF_DEFAULTS, swipeRightAction: 'move' } });
     const r2 = render(<MessageRow row={ROW} index={0} onOpen={() => {}} onSwipe={onSwipe} />);
-    fireEvent.click(r2.container.querySelector('[data-mv-swipe-action="leading"]'));
+    fireEvent.click(revealSide(r2.container, 'leading'));
     expect(onSwipe).toHaveBeenLastCalledWith('move', ROW);
   });
 

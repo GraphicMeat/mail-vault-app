@@ -194,7 +194,8 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 .mv-list__inner { position: relative; width: 100%; }
 
 /* A row's slot: placed by the virtualizer (translateY), fixed height. The row inside slides over
-   its two swipe actions (SwipeRow.jsx) by transform only. */
+   the swipe action of the side being revealed (SwipeRow.jsx) by transform only; at rest there is
+   no action under it. */
 .mv-row-slot {
   position: absolute;
   top: 0;
@@ -222,15 +223,8 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 .mv-swipe__act--trailing { inset-inline-end: 0; align-items: flex-end; padding-inline-end: calc(var(--mv-safe-right) + 12px); }
 .mv-swipe__act--read { background: var(--mv-swipe-read); }
 .mv-swipe__act--delete { background: var(--mv-swipe-delete); }
-/* The side not being revealed stays out of sight: the row only covers it while at rest. */
-.mv-swipe[data-side="left"] .mv-swipe__act--trailing,
-.mv-swipe[data-side="right"] .mv-swipe__act--leading { visibility: hidden; }
 .mv-swipe__act--flag { background: var(--mv-flag); }
 .mv-swipe__act--move { background: var(--mail-accent); }
-[dir="rtl"] .mv-swipe[data-side="left"] .mv-swipe__act:not(:first-child),
-[dir="rtl"] .mv-swipe[data-side="right"] .mv-swipe__act:first-child { visibility: visible; }
-[dir="rtl"] .mv-swipe[data-side="left"] .mv-swipe__act:first-child,
-[dir="rtl"] .mv-swipe[data-side="right"] .mv-swipe__act:not(:first-child) { visibility: hidden; }
 .mv-swipe__act svg { flex: none; }
 .mv-swipe__label { max-width: 76px; text-align: center; line-height: 1.2; }
 .mv-row {
@@ -239,7 +233,6 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
   width: 100%;
   touch-action: pan-y;
   transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
-  will-change: transform;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -253,6 +246,9 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
   font: inherit;
   text-align: start;
 }
+/* A layer of its own only while a side is revealed (SwipeRow.jsx `data-side`): a resting row
+   stays in the list's layer, so nothing under it can paint ahead of it during a scroll. */
+.mv-swipe[data-side] .mv-row { will-change: transform; }
 @media (prefers-reduced-motion: reduce) {
   .mv-row { transition: none; }
 }

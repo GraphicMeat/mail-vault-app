@@ -6,6 +6,7 @@ import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import React from 'react';
 import { render, cleanup, act, waitFor, screen, fireEvent } from '@testing-library/react';
 import { t } from '../i18n.js';
+import { revealSide } from './fixtures/swipe.js';
 
 const engine = vi.hoisted(() => ({ handlers: new Map(), calls: [], prefs: {} }));
 
@@ -137,7 +138,8 @@ describe('conversations', () => {
     const App = await fresh();
     render(<App />);
     await waitFor(() => expect(listRow()).toBeTruthy());
-    await act(async () => { fireEvent.click(listRow().querySelector('[data-mv-swipe-action="leading"]')); });
+    const leadingAct = revealSide(listRow(), 'leading'); // outside act: the row opens before the tap
+    await act(async () => { fireEvent.click(leadingAct); });
     await waitFor(() => expect(callsOf('mobile.actions.apply')).toHaveLength(1));
     expect(callsOf('mobile.actions.apply')[0]).toEqual({ accountId: 'a1', folder: 'INBOX', uids: [3, 2, 1], kind: 'seen' });
     expect(t('email.thread.messagesInThread', { count: 3 })).not.toBe('email.thread.messagesInThread');
@@ -149,7 +151,8 @@ describe('conversations', () => {
     await waitFor(() => expect(listRow()).toBeTruthy());
     const { useMobileStore } = await import('../store.js');
     // confirmBeforeDelete is off: a conversation asks all the same.
-    await act(async () => { fireEvent.click(listRow().querySelector('[data-mv-swipe-action="trailing"]')); });
+    const trailingAct = revealSide(listRow(), 'trailing'); // outside act: the row opens before the tap
+    await act(async () => { fireEvent.click(trailingAct); });
     const title = t('mobile.confirmConversation.delete', { count: 3 });
     expect(title).not.toBe('mobile.confirmConversation.delete');
     expect(title).toContain('3');
@@ -159,7 +162,8 @@ describe('conversations', () => {
     expect(useMobileStore.getState().undo).toBeNull();
     expect(listRow()).toBeTruthy();
 
-    await act(async () => { fireEvent.click(listRow().querySelector('[data-mv-swipe-action="trailing"]')); });
+    const again = revealSide(listRow(), 'trailing'); // outside act: the row opens before the tap
+    await act(async () => { fireEvent.click(again); });
     await act(async () => { fireEvent.click(screen.getByRole('dialog', { name: title }).querySelector('[data-mv-confirm-run]')); });
     expect(useMobileStore.getState().undo).toMatchObject({ kind: 'delete', count: 3 });
   });
@@ -170,7 +174,8 @@ describe('conversations', () => {
     render(<App />);
     await waitFor(() => expect(listRow()).toBeTruthy());
     const { useMobileStore } = await import('../store.js');
-    await act(async () => { fireEvent.click(listRow().querySelector('[data-mv-swipe-action="trailing"]')); });
+    const trailingAct = revealSide(listRow(), 'trailing'); // outside act: the row opens before the tap
+    await act(async () => { fireEvent.click(trailingAct); });
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Archive' })); });
     const title = t('mobile.confirmConversation.move', { count: 3 });
     expect(title).not.toBe('mobile.confirmConversation.move');
@@ -186,7 +191,8 @@ describe('conversations', () => {
     await act(async () => { fireEvent.click(listRow()); });
     const members = () => document.querySelectorAll('[data-mv-thread] [data-loaded="1"]');
     await waitFor(() => expect(members()).toHaveLength(3));
-    await act(async () => { fireEvent.click(document.querySelector('[data-mv-thread] [data-index="1"] [data-mv-swipe-action="trailing"]')); });
+    const trailingAct = revealSide(document.querySelector('[data-mv-thread] [data-index="1"]'), 'trailing'); // outside act: the row opens before the tap
+    await act(async () => { fireEvent.click(trailingAct); });
     await waitFor(() => expect(members()).toHaveLength(2));
     const senders = [...document.querySelectorAll('[data-mv-thread] .mv-row__sender')].map((e) => e.textContent);
     expect(senders).toEqual(['Ada', 'Bea']);
