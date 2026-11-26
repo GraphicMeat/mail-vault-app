@@ -24,6 +24,7 @@
 - Changed: on the phone, Cc/Bcc sits at the end of the To line, and an empty message says Write your message.
 - Fixed: on the phone, a long From address let the whole new email screen slide sideways. It now fits the screen and is cut short.
 - Fixed: on the phone, an email's labels and fields started further in than its subject and sender. They now line up, in the email and in the labels sheet.
+- Changed: on the phone, a starred email shows the computer's star in the mail list instead of a dot, and an email with attachments shows a paperclip beside its date.
 
 ## [2.25.1] - 2026-11-26
 

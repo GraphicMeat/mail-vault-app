@@ -293,7 +293,11 @@ body {
   text-align: center;
   align-self: center;
 }
-.mv-row__flag { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--mv-flag); align-self: center; }
+/* Desktop's row glyphs (MessageRow.jsx): fixed 14px boxes, so a flag or a paperclip never changes
+   the row's height (The Fixed Row Rule). */
+.mv-row__flag, .mv-row__attach { flex: none; display: inline-flex; width: 14px; height: 14px; align-self: center; }
+.mv-row__flag { color: var(--mv-flag); }
+.mv-row__attach { color: var(--mail-text-muted); }
 .mv-row__top { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
 .mv-row__sender, .mv-row__subject, .mv-row__snippet {
   display: block;

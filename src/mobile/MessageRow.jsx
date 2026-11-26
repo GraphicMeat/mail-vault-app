@@ -12,6 +12,9 @@
 // also scales with the text size). With `trackpadSwipeEnabled` off (desktop's swipe switch) the
 // row does not swipe.
 // The message's tags follow the subject on its line, as on desktop's row (TagChips.jsx).
+// Flagged and attachment indicators are desktop's glyphs at 14px before the date (a filled star in
+// the flag colour, a muted paperclip when the engine's row says `hasAttachments`), fixed boxes, so
+// neither changes the row's height. A conversation's paperclip is its newest message's.
 // Deliberately not built on src/components/EmailRow: that pulls in the desktop stores.
 // `RowFace` is what the row shows; Settings > Appearance > Layout draws its sample with it.
 import React, { forwardRef, memo } from 'react';
@@ -22,7 +25,7 @@ import { t as translate, useT } from './i18n.js';
 import SwipeRow from './SwipeRow.jsx';
 import { accountColor } from './accountColor.js';
 import { initialOf } from './AccountSwitcher.jsx';
-import { EnvelopeIcon, TrashIcon, FlagIcon, MoveIcon } from './icons.jsx';
+import { EnvelopeIcon, TrashIcon, FlagIcon, MoveIcon, PaperclipIcon } from './icons.jsx';
 import { useMobileStore } from './store.js';
 import { swipeKind, rowHeight, PREF_DEFAULTS } from './prefs.js';
 import { accountRowKey } from './messagePages.js';
@@ -37,7 +40,7 @@ function senderOf(row, t = translate) {
 }
 
 /**
- * What a row shows, at `prefs`' density and preview lines: sender, conversation count, flag, date,
+ * What a row shows, at `prefs`' density and preview lines: sender, conversation count, flag, paperclip, date,
  * subject (then `tags`), the message's text. `shown`: the row as it reads (a conversation's unread
  * and flag); `as`: the element (a button in the list, a plain box in a sample). The rest of the
  * props and the ref go to that element (SwipeRow drives the list's row through them).
@@ -62,7 +65,12 @@ export const RowFace = forwardRef(function RowFace({ row, shown = row, prefs, ac
             {row.threadCount}
           </span>
         )}
-        {shown.flagged && <span className="mv-row__flag" role="img" aria-label={t('mobile.actions.flagged')} />}
+        {shown.flagged && (
+          <span className="mv-row__flag" role="img" aria-label={t('mobile.actions.flagged')}><FlagIcon filled size={14} /></span>
+        )}
+        {row.hasAttachments && (
+          <span className="mv-row__attach" role="img" aria-label={t('chat.topics.hasAttachments')}><PaperclipIcon size={14} /></span>
+        )}
         <span className="mv-row__date">{formatEmailDate(row.dateMs, undefined, prefs)}</span>
       </span>
       <span className="mv-row__line">

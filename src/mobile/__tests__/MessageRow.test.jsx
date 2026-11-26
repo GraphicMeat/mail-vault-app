@@ -106,6 +106,45 @@ describe('MessageRow', () => {
     expect(single.querySelector('[data-mv-thread-count]')).toBeNull();
   });
 
+  it('a flagged row shows desktop\'s filled star, 14px, under the same name', () => {
+    renderRow({ ...base, flagged: true });
+    const flag = screen.getByRole('img', { name: t('mobile.actions.flagged') });
+    expect(flag.classList.contains('mv-row__flag')).toBe(true);
+    const star = flag.querySelector('svg');
+    expect(star.classList.contains('lucide-star')).toBe(true);
+    expect(star.getAttribute('width')).toBe('14');
+    expect(star.getAttribute('fill')).toBe('currentColor');
+    cleanup();
+    renderRow(base);
+    expect(screen.queryByRole('img', { name: t('mobile.actions.flagged') })).toBeNull();
+  });
+
+  it('a row with attachments shows desktop\'s paperclip before the date', () => {
+    const { container } = renderRow({ ...base, hasAttachments: true });
+    const clip = screen.getByRole('img', { name: t('chat.topics.hasAttachments') });
+    const glyph = clip.querySelector('svg');
+    expect(glyph.classList.contains('lucide-paperclip')).toBe(true);
+    expect(glyph.getAttribute('width')).toBe('14');
+    const date = container.querySelector('.mv-row__date');
+    expect(clip.nextElementSibling).toBe(date);
+    // Its height is every row's.
+    expect(container.querySelector('[data-index="3"]').style.height).toBe(`${ROW_HEIGHT}px`);
+    cleanup();
+    renderRow(base);
+    expect(screen.queryByRole('img', { name: t('chat.topics.hasAttachments') })).toBeNull();
+  });
+
+  it('styles: both glyphs are fixed boxes that cannot change the row\'s height', () => {
+    const css = readFileSync(resolve(process.cwd(), 'src/mobile/mobile.css'), 'utf8');
+    const rule = (sel) => css.match(new RegExp(`(?:^|\\n)${sel.replace(/[.]/g, '\\.')} \\{([^}]*)\\}`))?.[1] ?? '';
+    const both = rule('.mv-row__flag, .mv-row__attach');
+    expect(both).toContain('flex: none');
+    expect(both).toContain('width: 14px');
+    expect(both).toContain('height: 14px');
+    expect(rule('.mv-row__flag')).toContain('color: var(--mv-flag)');
+    expect(rule('.mv-row__attach')).toContain('color: var(--mail-text-muted)');
+  });
+
   it('the list sizes rows by estimate only: no measured elements', () => {
     const src = readFileSync(resolve(process.cwd(), 'src/mobile/MessageList.jsx'), 'utf8');
     expect(src).toContain('useVirtualizer');
