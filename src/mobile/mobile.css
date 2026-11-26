@@ -516,6 +516,8 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
   padding: 0 calc(var(--mv-safe-right) + 12px) 0 calc(var(--mv-safe-left) + 12px);
   pointer-events: none;
 }
+/* Above the compose button (.mv-fab: safe + 16px, 56px tall) while it is on the screen, with a 12px gap. */
+.mv-toasts--lifted { bottom: calc(var(--mv-safe-bottom) + 84px); }
 .mv-toast {
   pointer-events: auto;
   box-sizing: border-box;

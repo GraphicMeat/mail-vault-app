@@ -881,6 +881,8 @@ function App() {
       ? t('mobile.confirmConversation.move', { count: askDelete.count })
       : t('mobile.confirmConversation.delete', { count: askDelete.count });
   }
+  // The compose button is on the screen while no message is open; the toasts rise above it then.
+  const fabShown = !open;
   return (
     <div className="mv-kb-layer mv-app">
       <header className="mv-header">
@@ -947,7 +949,7 @@ function App() {
           <Button variant="secondary" size="touch" className="mt-3" onClick={loadList}>{t('common.retry')}</Button>
         </div>
       )}
-      {!open && (
+      {fabShown && (
         <button type="button" className="mv-fab" data-mv-compose aria-label={t('mobile.compose.new')} onClick={onNewMessage}>
           <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
@@ -1061,7 +1063,7 @@ function App() {
           onClose={closeCompose}
         />
       )}
-      <Toasts />
+      <Toasts lifted={fabShown} />
     </div>
   );
 }

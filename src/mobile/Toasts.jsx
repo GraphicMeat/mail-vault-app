@@ -2,6 +2,7 @@
 // which the store clears once the action is sent) and a one-line notice (store `notice`: a dropped
 // action's translated reason, or a failed apply), which goes by itself after NOTICE_MS. A send held
 // back for `sendDelay` (store `undoSend`) offers Undo until it goes out.
+// `lifted`: App's compose button is on the screen, so the stack sits above it instead of over it.
 import React, { useEffect } from 'react';
 import { useMobileStore } from './store.js';
 import { folderLabel } from './folders.js';
@@ -9,7 +10,7 @@ import { useT } from './i18n.js';
 
 export const NOTICE_MS = 6000;
 
-export default function Toasts() {
+export default function Toasts({ lifted = false }) {
   const t = useT();
   const undo = useMobileStore((s) => s.undo);
   const notice = useMobileStore((s) => s.notice);
@@ -33,7 +34,7 @@ export default function Toasts() {
     }
   }
   return (
-    <div className="mv-toasts">
+    <div className={lifted ? 'mv-toasts mv-toasts--lifted' : 'mv-toasts'}>
       {notice && (
         <div className="mv-toast" role="alert">
           <span className="mv-toast__text" dir="auto">{t(notice.key, notice.params)}</span>

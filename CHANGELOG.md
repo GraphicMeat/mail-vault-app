@@ -14,6 +14,7 @@
 - Changed: on the phone, an unread email looks as it does on the computer: a lighter row with bolder text, without the coloured edge, which on the computer means the selected email.
 - Changed: on the phone, filled buttons, badges and avatars use the stronger accent that keeps white text readable, corners follow the computer's sizes, the toast and the compose button lose their shadow, the reader's tools are quiet grey until pressed, and the open folder in the folder list is marked as in the computer's sidebar.
 - Changed: the phone's buttons are the computer's buttons, at a size a finger can hit: filled for the main action, outlined for Cancel and the other choices, red to confirm a delete, and plain grey icons in the toolbars.
+- Fixed: on the phone, a notice or Undo at the bottom of the mail list covered the compose button. It now sits just above the button.
 
 ## [2.25.1] - 2026-11-26
 
