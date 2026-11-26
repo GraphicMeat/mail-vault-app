@@ -20,6 +20,9 @@
 - Changed: on the phone, every icon is the one the computer uses for the same action, starred mail shows the computer's star, and every full screen starts with the same back arrow in place of the word Back.
 - Changed: on the phone, search's This folder and All accounts choices are small chips as on the computer, still easy to tap.
 - Fixed: on the phone, a tapped button no longer stays highlighted after your finger lifts.
+- Changed: on the phone, a new email's top bar holds only Back, the title and Send. Attach, Send later, Templates, AI and Remind me if no reply are icons in a bar at the bottom of the screen, right above the keyboard, and the bell turns to the accent colour while a reminder is set.
+- Changed: on the phone, Cc/Bcc sits at the end of the To line, and an empty message says Write your message.
+- Fixed: on the phone, a long From address let the whole new email screen slide sideways. It now fits the screen and is cut short.
 
 ## [2.25.1] - 2026-11-26
 

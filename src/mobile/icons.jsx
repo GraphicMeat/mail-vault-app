@@ -4,9 +4,9 @@
 // otherwise. `BackButton` is the back control every full-screen layer starts with.
 import React from 'react';
 import {
-  Bell, BookmarkCheck, BookmarkPlus, Check, ChevronDown, ChevronLeft, Clock, Eye, EyeOff, FileText,
-  FolderInput, Forward, Inbox, Mail, MailOpen, Menu, MoreHorizontal, Paperclip, PenSquare, Plus,
-  RefreshCw, Reply, ReplyAll, Search, Send, ShieldAlert, Star, Trash2, X,
+  Bell, BookTemplate, BookmarkCheck, BookmarkPlus, Check, ChevronDown, ChevronLeft, Clock, Eye, EyeOff,
+  FileText, FolderInput, Forward, Inbox, Mail, MailOpen, Menu, MoreHorizontal, Paperclip, PenSquare,
+  Plus, RefreshCw, Reply, ReplyAll, Search, Send, ShieldAlert, Sparkles, Star, Trash2, X,
 } from 'lucide-react';
 import { Button } from '../components/ui/Button.jsx';
 import { useT } from './i18n.js';
@@ -72,6 +72,10 @@ export const RetryIcon = glyph(RefreshCw, 20);
 export const AllInboxesIcon = glyph(Inbox, 18);
 /** Follow-up reminders. */
 export const BellIcon = glyph(Bell, 16);
+/** Compose templates: desktop compose's glyph for them. */
+export const TemplateIcon = glyph(BookTemplate);
+/** Compose's AI actions: desktop's AiComposeActions glyph. */
+export const AiIcon = glyph(Sparkles);
 
 /**
  * The back control every full-screen layer starts with: a 44px ghost icon button with a chevron

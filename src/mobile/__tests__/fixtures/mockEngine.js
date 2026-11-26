@@ -58,6 +58,11 @@ export function installMockEngine(SHOT = { theme: 'light', palette: 'indigo' }) 
   let prefs = { theme: SHOT.theme, palette: SHOT.palette, templates: [{ name: 'Thanks', body: 'Thank you, I will get back to you tomorrow.' }, { name: 'Out of office', body: 'I am away until Monday.' }], aiEnabled: true, aiEndpointUrl: 'https://ai.example.test/v1', aiEndpointModel: 'local-model' };
   let settings = { notifications: 'on', notificationPreview: true, backgroundDownload: true };
   const acctSettings = {};
+  // The long account has an alias too, so compose shows its From picker at its widest.
+  const ALIASES = {
+    a1: [{ address: 'ada.alias@example.test', name: 'Ada (alias)' }],
+    a3: [{ address: 'b.fitzgerald-longname.support@mail.subdomain.example-company.test', name: 'Bartholomew Fitzgerald-Longname (Support desk)' }],
+  };
   const NO_LIMIT = { limitBytes: null, isProviderDefault: false, defaultCapOn: null, defaultCapOff: null };
   const usageEntry = (id, over = {}) => ({
     accountId: id, measured: true, today: { down: 90 * MB, up: 1 * MB }, week: { down: 300 * MB, up: 5 * MB }, month: { down: 900 * MB, up: 9 * MB }, year: { down: 2000 * MB, up: 20 * MB },
@@ -99,7 +104,7 @@ export function installMockEngine(SHOT = { theme: 'light', palette: 'indigo' }) 
       case 'mobile.settings.set': settings = { ...settings, ...p }; return { ...settings };
       case 'mobile.accountSettings.get': {
         const a = ACCOUNTS.find((x) => x.id === p.accountId) || {};
-        return { accountId: p.accountId, notify: true, displayName: a.displayName || '', hidden: false, signature: null, sendAs: '', aliases: p.accountId === 'a1' ? [{ address: 'ada.alias@example.test', name: 'Ada (alias)' }] : [], sentFolder: null, color: null, ...(acctSettings[p.accountId] || {}) };
+        return { accountId: p.accountId, notify: true, displayName: a.displayName || '', hidden: false, signature: null, sendAs: '', aliases: ALIASES[p.accountId] || [], sentFolder: null, color: null, ...(acctSettings[p.accountId] || {}) };
       }
       case 'mobile.accountSettings.set': acctSettings[p.accountId] = { ...(acctSettings[p.accountId] || {}), ...(p.values || {}) }; return rpc('mobile.accountSettings.get', p);
       case 'mobile.app.state': return {};

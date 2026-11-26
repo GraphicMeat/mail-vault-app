@@ -988,7 +988,8 @@ body {
 .mv-sheet__action:active { background: var(--mail-surface-hover); }
 .mv-sheet__action--danger { color: var(--mv-danger); }
 
-/* Compose: a bar, then the fields and the body scrolling above the keyboard (an .mv-kb-layer). */
+/* Compose: a bar (Back, title, Send), then the fields and the body scrolling, then the toolbar,
+   the layer's footer and so right above the keyboard while it is up (an .mv-kb-layer). */
 .mv-compose {
   z-index: 15;
   display: flex;
@@ -1013,11 +1014,64 @@ body {
   overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
-  padding: 0 calc(var(--mv-safe-right) + 16px) calc(var(--mv-safe-bottom) + 16px) calc(var(--mv-safe-left) + 16px);
+  padding: 0 calc(var(--mv-safe-right) + 16px) 16px calc(var(--mv-safe-left) + 16px);
   scroll-padding-bottom: 24px;
 }
+/* The tools (Attach, Send later, Templates, AI, Remind): 44px ghost icon buttons on a hairline,
+   clear of the home indicator while the keyboard is down. */
+.mv-compose__tools {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  padding: 0 calc(var(--mv-safe-right) + 8px) var(--mv-safe-bottom) calc(var(--mv-safe-left) + 8px);
+  border-top: 1px solid var(--mail-border);
+  background: var(--mail-bg);
+}
 /* The keyboard covers the home indicator: no safe-area gap above it. */
-.mv-compose[data-mv-keyboard] .mv-compose__scroll { padding-bottom: 16px; }
+.mv-compose[data-mv-keyboard] .mv-compose__tools { padding-bottom: 0; }
+/* Remind: the native select laid invisibly over a ghost icon button's face (the bell, and the
+   Premium badge without Premium). Active, in the accent, while a reminder is set. */
+.mv-compose__remind {
+  position: relative;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 11px;
+  border-radius: 8px;
+  color: var(--mail-text-muted);
+  transition: color 150ms, background-color 150ms;
+}
+.mv-compose__remind[data-mv-active] { color: var(--mail-accent-text); }
+.mv-compose__remind:active { background: var(--mail-surface-hover); color: var(--mail-text); }
+@media (hover: hover) {
+  .mv-compose__remind:hover { background: var(--mail-surface-hover); color: var(--mail-text); }
+}
+.mv-compose__remind:has(select:focus-visible) { outline: 2px solid var(--mail-accent); outline-offset: 2px; }
+.mv-compose__remind:has(select:disabled) { opacity: 0.5; }
+.mv-compose__remind .mv-schedule__premium { padding: 1px 6px; font-size: 0.6875rem; }
+.mv-compose__remind-select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  /* 16px keeps iOS from zooming in when the picker opens. */
+  font-size: 16px;
+  appearance: none;
+  -webkit-appearance: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .mv-compose__remind { transition: none; }
+}
 .mv-compose__error { margin: 12px 0 0; padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, var(--mv-danger) 14%, transparent); color: var(--mv-danger); }
 .mv-compose__line {
   display: flex;
@@ -1030,9 +1084,12 @@ body {
 .mv-compose__line--recipients .mv-compose__label { line-height: 48px; }
 .mv-compose__label { flex: none; min-width: 3.5rem; color: var(--mail-text-muted); font-size: 0.875rem; }
 .mv-compose__from { min-width: 0; overflow-wrap: anywhere; }
-/* "Remind me if no reply" (Compose.jsx). */
-.mv-compose__remind-label { display: inline-flex; flex: 1; align-items: center; gap: 6px; flex-wrap: wrap; }
-.mv-compose__select { flex: none; min-height: 44px; padding: 0 8px; border: 0; border-radius: 8px; background: var(--mail-surface-hover); color: var(--mail-text); font: inherit; font-size: 16px; }
+/* The From picker takes the line's remaining width and never more: a select is as wide as its
+   longest option, which pushed the form sideways. A long address is cut short. */
+.mv-compose__select { flex: 1; min-width: 0; max-width: 100%; min-height: 44px; padding: 0 8px; border: 0; border-radius: 8px; background: var(--mail-surface-hover); color: var(--mail-text); font: inherit; font-size: 16px; text-overflow: ellipsis; }
+/* The To line's Cc/Bcc toggle, at the line's end, centred on its first 48px line. Its text lines
+   up with the form's edge; the padding stays in its 44px target. */
+.mv-compose__cc-toggle { flex: none; margin-block-start: 2px; margin-inline-end: -8px; padding-inline: 8px; }
 .mv-compose__input, .mv-compose__chip-input input {
   flex: 1;
   min-width: 0;

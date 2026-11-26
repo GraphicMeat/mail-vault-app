@@ -19,24 +19,34 @@
 // (TOO_LARGE, ATTACHMENT_MISSING, INVALID) stays on the screen with its reason and autosave runs
 // again. A queued send leaves at once: the outbox (store `outbox`) takes it from there.
 //
-// Send later (plan 4 Task 8): the clock beside Send opens the time sheet (SendLater.jsx); the
+// Layout: the top bar holds Back, the title and Send, nothing else. The tools live in a toolbar
+// that is the screen's footer, so it sits right above the keyboard while it is up: Attach, Send
+// later, Templates (when there are any), AI (when it is on) and Remind (when offered), each a 44 pt
+// icon button. From, To (its Cc/Bcc toggle at the end of the line), Cc, Bcc and Subject are 48 pt
+// lines with a hairline under each; the body follows.
+//
+// Send later (plan 4 Task 8): the clock in the toolbar opens the time sheet (SendLater.jsx); the
 // chosen time goes with the send as `sendAtMs` and the message waits in the outbox's Scheduled
 // section. A time past 5 minutes without Premium opens the paywall instead; the engine's refusal
 // (PREMIUM_REQUIRED, SCHEDULE_TOO_FAR) is shown in place like any other.
 //
-// Follow-up reminder (plan 4 Task 9): "Remind me if no reply" under the subject (off, 1 day, 3 days,
-// 1 week) goes with the send as `remindAfterDays`; the engine records the reminder once the message
-// went out. A choice without Premium opens the paywall instead and stays off. Not offered on a
-// Graph account (desktop parity). The engine's refusal (PREMIUM_REQUIRED) is shown in place.
+// Follow-up reminder (plan 4 Task 9): the bell in the toolbar is "Remind me if no reply" (off, 1 day,
+// 3 days, 1 week), a native select laid invisibly over the bell so the picker stays the system's;
+// the bell reads active while a reminder is set. The choice goes with the send as `remindAfterDays`;
+// the engine records the reminder once the message went out. A choice without Premium opens the
+// paywall instead and stays off. Not offered on a Graph account (desktop parity). The engine's
+// refusal (PREMIUM_REQUIRED) is shown in place.
 //
 // From: an account with aliases (or a `sendAs` other than its login) shows a picker of them all,
 // starting at its `sendAs`, else the login (`identitiesOf`); the pick goes with the send and the
-// draft as `from`, and the engine checks it is the account's. One address shows as plain text.
+// draft as `from`, and the engine checks it is the account's. One address shows as plain text. The
+// picker takes the line's remaining width and never more: a long address is cut short, it never
+// widens the form.
 //
-// Templates (Settings > Mail preferences, pref `templates`): "Templates" under the subject lists
-// them; one picked goes in where the caret last was, else at the top of the body.
+// Templates (Settings > Mail preferences, pref `templates`): the Templates tool lists them; one
+// picked goes in where the caret last was, else at the top of the body.
 //
-// AI (Settings > AI on): "AI" under the subject offers desktop's compose actions: Shorten and Tone
+// AI (Settings > AI on): the AI tool offers desktop's compose actions: Shorten and Tone
 // over what the user wrote (the body above the quote), and, answering a message, Draft reply,
 // Action items and Summarize over it. Each is reviewed first (AiActions.jsx). A rewrite or a
 // drafted reply takes the place of what the user wrote; action items and a summary go on top.
@@ -49,7 +59,7 @@
 //
 // Keyboard: the screen is laid on the visible part of the screen above the keyboard and only its
 // fields scroll (keyboardViewport.js); targets are 44 pt.
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useKeyboardViewport } from './keyboardViewport.js';
 import { displayText } from '../utils/bidiText.js';
 import { daemonCall, pickFiles } from './transport.js';
@@ -67,7 +77,7 @@ import { useMobileStore } from './store.js';
 import { useT } from './i18n.js';
 import { useAiAction } from './AiActions.jsx';
 import { Button } from '../components/ui/Button.jsx';
-import { BackButton, ClockIcon, CloseIcon, PaperclipIcon } from './icons.jsx';
+import { AiIcon, BackButton, BellIcon, ClockIcon, CloseIcon, PaperclipIcon, TemplateIcon } from './icons.jsx';
 
 /** Quiet time after the last edit before the draft is saved. */
 export const AUTOSAVE_MS = 1500;
@@ -160,6 +170,7 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
   const quote = useRef(''); // the quote prepare put under the body: not the user's words
   const sigBlock = useRef(''); // the signature put above the quote ("\n\n-- \n..."): not theirs either
   const premium = usePremium();
+  const premiumBadge = useId();
   const remindOffered = useMobileStore((s) => s.accounts.find((a) => a.id === accountId)?.kind !== 'graph');
   const [edits, setEdits] = useState(0);
 
@@ -635,12 +646,6 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
       <header className="mv-compose__bar">
         <BackButton data-mv-compose-close onClick={requestLeave} />
         <h1 className="mv-compose__title">{title}</h1>
-        <Button variant="ghost" size="touch" icon aria-label={t('mobile.compose.attach')} disabled={locked.current} onClick={() => setAttaching(true)}>
-          <PaperclipIcon />
-        </Button>
-        <Button variant="ghost" size="touch" icon data-mv-send-later-open aria-label={t('mobile.compose.sendLater')} disabled={!canSend} onClick={() => trySend(true)}>
-          <ClockIcon />
-        </Button>
         <Button
           variant="primary"
           size="touch"
@@ -677,14 +682,21 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
             <span className="mv-compose__from" dir="auto">{fromEmail}</span>
           </div>
         )}
-        <RecipientField label={t('common.to')} entries={to.entries} text={to.text} readOnly={loading || locked.current} onChange={(v) => { if (!locked.current) { setTo(v); edit('to'); } }} />
-        {showCc ? (
+        <RecipientField
+          label={t('common.to')}
+          entries={to.entries}
+          text={to.text}
+          readOnly={loading || locked.current}
+          onChange={(v) => { if (!locked.current) { setTo(v); edit('to'); } }}
+          trailing={showCc ? null : (
+            <Button variant="link" size="touch" className="mv-compose__cc-toggle" onClick={() => setShowCc(true)}>{t('mobile.compose.showCc')}</Button>
+          )}
+        />
+        {showCc && (
           <>
             <RecipientField label={t('mobile.compose.cc')} entries={cc.entries} text={cc.text} readOnly={loading || locked.current} onChange={(v) => { if (!locked.current) { setCc(v); edit('cc'); } }} />
             <RecipientField label={t('mobile.compose.bcc')} entries={bcc.entries} text={bcc.text} readOnly={loading || locked.current} onChange={(v) => { if (!locked.current) { setBcc(v); edit('bcc'); } }} />
           </>
-        ) : (
-          <Button variant="link" size="touch" className="self-start mv-btn-flush" onClick={() => setShowCc(true)}>{t('mobile.compose.showCc')}</Button>
         )}
         {hint && <p className="mv-compose__hint">{hint}</p>}
         <div className="mv-compose__line">
@@ -698,41 +710,6 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
             onChange={(e) => { if (!locked.current) { setSubject(e.target.value); edit('subject'); } }}
           />
         </div>
-        {templates.length > 0 && (
-          <Button variant="link" size="touch" className="self-start mv-btn-flush" data-mv-templates-open disabled={loading || locked.current} onClick={() => setPicking(true)}>
-            {t('compose.templates')}
-          </Button>
-        )}
-        {aiEnabled && (
-          <Button variant="link" size="touch" className="self-start mv-btn-flush" data-mv-ai-open disabled={loading || locked.current || ai.busy} onClick={() => setAiPicking(true)}>
-            {t('settings.tab.aiProviders')}
-          </Button>
-        )}
-        {remindOffered && (
-          <div className="mv-compose__line" data-mv-remind>
-            <label className="mv-compose__label mv-compose__remind-label" htmlFor="mv-compose-remind">
-              {t('compose.remind.title')}
-              {!premium && <span className="mv-schedule__premium">{t('common.premium')}</span>}
-            </label>
-            <select
-              id="mv-compose-remind"
-              className="mv-compose__select"
-              value={remind}
-              disabled={locked.current}
-              onChange={(e) => {
-                const days = Number(e.target.value) || 0;
-                if (days > 0 && !premium) {
-                  setRemind(0);
-                  openPaywall('followUp');
-                  return;
-                }
-                setRemind(days);
-              }}
-            >
-              {REMIND_CHOICES.map(([days, key]) => <option key={days} value={days}>{t(key)}</option>)}
-            </select>
-          </div>
-        )}
         {(attachments.length > 0 || fetching.length > 0) && (
           <ul className="mv-compose__files" aria-label={t('common.attachmentCount', { count: attachments.length + fetching.length })}>
             {attachments.map((a, i) => (
@@ -768,10 +745,54 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
           dir="auto"
           value={text}
           readOnly={loading || locked.current}
-          placeholder={loading ? t('mobile.drafts.loading') : undefined}
+          placeholder={loading ? t('mobile.drafts.loading') : t('compose.writeMessage')}
           onChange={(e) => { if (!locked.current) { setText(e.target.value); edit('text'); } }}
           onSelect={(e) => { caret.current = e.target.selectionStart; }}
         />
+      </div>
+      <div className="mv-compose__tools" role="toolbar" aria-label={t('mobile.actions.toolbar')}>
+        <Button variant="ghost" size="touch" icon aria-label={t('mobile.compose.attach')} disabled={locked.current} onClick={() => setAttaching(true)}>
+          <PaperclipIcon />
+        </Button>
+        <Button variant="ghost" size="touch" icon data-mv-send-later-open aria-label={t('mobile.compose.sendLater')} disabled={!canSend} onClick={() => trySend(true)}>
+          <ClockIcon />
+        </Button>
+        {templates.length > 0 && (
+          <Button variant="ghost" size="touch" icon data-mv-templates-open aria-label={t('compose.templates')} disabled={loading || locked.current} onClick={() => setPicking(true)}>
+            <TemplateIcon />
+          </Button>
+        )}
+        {aiEnabled && (
+          <Button variant="ghost" size="touch" icon data-mv-ai-open aria-label={t('settings.tab.aiProviders')} disabled={loading || locked.current || ai.busy} onClick={() => setAiPicking(true)}>
+            <AiIcon />
+          </Button>
+        )}
+        {remindOffered && (
+          // The native picker, laid invisibly over the bell (desktop's RemindIfNoReply glyph).
+          <span className="mv-compose__remind" data-mv-remind data-mv-active={remind > 0 ? '' : undefined}>
+            <BellIcon size={22} />
+            {!premium && <span id={premiumBadge} className="mv-schedule__premium">{t('common.premium')}</span>}
+            <select
+              id="mv-compose-remind"
+              className="mv-compose__remind-select"
+              aria-label={t('compose.remind.title')}
+              aria-describedby={premium ? undefined : premiumBadge}
+              value={remind}
+              disabled={locked.current}
+              onChange={(e) => {
+                const days = Number(e.target.value) || 0;
+                if (days > 0 && !premium) {
+                  setRemind(0);
+                  openPaywall('followUp');
+                  return;
+                }
+                setRemind(days);
+              }}
+            >
+              {REMIND_CHOICES.map(([days, key]) => <option key={days} value={days}>{t(key)}</option>)}
+            </select>
+          </span>
+        )}
       </div>
       {confirming && (
         <Sheet kind="sheet" label={t('mobile.compose.leaveTitle')} onClose={keepEditing}>

@@ -2,7 +2,8 @@
 // an input. What is typed becomes chips on a comma, a space, Enter or leaving the field; Backspace
 // in an empty input takes the last chip back into it. A chip whose address does not read is marked
 // (and the screen keeps Send off until it is fixed); its × removes it. The typed text is the
-// parent's (`text`), so a send can commit what is still in the input.
+// parent's (`text`), so a send can commit what is still in the input. `trailing` goes at the end of
+// the line (the To line's Cc/Bcc toggle).
 import React, { useId } from 'react';
 import { displayText } from '../utils/bidiText.js';
 import { addressOf, isValidEntry, nameOf, splitTyped } from './compose.js';
@@ -37,7 +38,7 @@ export function commitText(entries, text, { all = false } = {}) {
   return { entries: done.length ? [...entries, ...done] : entries, text: raw.slice(cut).replace(/^[,;\s]+/, '') };
 }
 
-export default function RecipientField({ label, entries, text, onChange, onFocus, readOnly = false }) {
+export default function RecipientField({ label, entries, text, onChange, onFocus, readOnly = false, trailing = null }) {
   const t = useT();
   const id = useId();
 
@@ -99,6 +100,7 @@ export default function RecipientField({ label, entries, text, onChange, onFocus
           />
         </li>
       </ul>
+      {trailing}
     </div>
   );
 }

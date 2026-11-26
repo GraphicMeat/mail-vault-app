@@ -4,7 +4,7 @@
 // place, and the outbox row with its Retry and Discard sheet.
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import React from 'react';
-import { render, screen, cleanup, fireEvent, act, waitFor } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, act, waitFor, within } from '@testing-library/react';
 import { t } from '../i18n.js';
 import { formatFullDate } from '../format.js';
 
@@ -1094,5 +1094,122 @@ describe('Compose with AI (Settings > AI)', () => {
     expect(callsOf('mobile.ai.run')[0]).toEqual({ action: 'shorten', accountId: 'a1', text: 'a long note', confirmed: true });
     expect(body().value).toBe('AI shorten\n\n-- \nAnn');
     useMobileStore.setState((st) => ({ prefs: { ...st.prefs, aiEnabled: false } }));
+  });
+});
+
+describe('layout: the bar, the toolbar above the keyboard, the fields', () => {
+  const premiumOn = () => useMobileStore.setState({ premium: { premium: true, source: 'apple', expiresMs: Date.now() + 30 * 86_400_000 } });
+  const toolbar = () => screen.getByRole('toolbar');
+  const toolNames = () => Array.from(toolbar().querySelectorAll('button, select')).map((el) => el.getAttribute('aria-label'));
+  afterEach(() => {
+    useMobileStore.setState((st) => ({ prefs: { ...st.prefs, templates: [], aiEnabled: false }, accounts: [] }));
+  });
+
+  it('the top bar holds only Back, the title and Send', async () => {
+    renderCompose();
+    await flush();
+    const bar = document.querySelector('.mv-compose__bar');
+    const names = within(bar).getAllByRole('button').map((b) => b.getAttribute('aria-label'));
+    expect(names).toEqual([t('common.back'), t('compose.send')]);
+    expect(within(bar).getByRole('heading').textContent).toBe(t('mobile.compose.newTitle'));
+  });
+
+  it('the tools sit in a toolbar under the form, Templates and AI only when there are any and it is on', async () => {
+    renderCompose();
+    await flush();
+    const bar = toolbar();
+    // A footer of the screen itself, not part of what scrolls.
+    expect(bar.parentElement).toBe(screen.getByRole('dialog'));
+    expect(bar.closest('.mv-compose__scroll')).toBeNull();
+    expect(document.querySelector('.mv-compose__scroll').nextElementSibling).toBe(bar);
+    expect(toolNames()).toEqual([t('mobile.compose.attach'), t('mobile.compose.sendLater'), t('compose.remind.title')]);
+    expect(bar.querySelector('[data-mv-send-later-open]')).toBeTruthy();
+    expect(bar.querySelector('[data-mv-templates-open]')).toBeNull();
+    expect(bar.querySelector('[data-mv-ai-open]')).toBeNull();
+    cleanup();
+    useMobileStore.setState((st) => ({ prefs: { ...st.prefs, templates: [{ name: 'Thanks', body: 'Thank you!' }], aiEnabled: true } }));
+    renderCompose();
+    await flush();
+    expect(toolNames()).toEqual([
+      t('mobile.compose.attach'), t('mobile.compose.sendLater'), t('compose.templates'), t('settings.tab.aiProviders'), t('compose.remind.title'),
+    ]);
+    expect(toolbar().querySelector('[data-mv-templates-open]')).toBeTruthy();
+    expect(toolbar().querySelector('[data-mv-ai-open]')).toBeTruthy();
+    // Send later waits for a To, as Send does.
+    expect(toolbar().querySelector('[data-mv-send-later-open]').disabled).toBe(true);
+    typeInto(toInput(), 'bob@example.test,');
+    expect(toolbar().querySelector('[data-mv-send-later-open]').disabled).toBe(false);
+  });
+
+  it('a Graph account has no Remind tool', async () => {
+    useMobileStore.setState({ accounts: [{ id: 'g1', email: 'g@example.test', kind: 'graph' }] });
+    renderCompose({ accountId: 'g1' });
+    await flush();
+    expect(toolNames()).toEqual([t('mobile.compose.attach'), t('mobile.compose.sendLater')]);
+  });
+
+  it('Remind is the native select laid over its bell, marked while a reminder is set', async () => {
+    premiumOn();
+    renderCompose();
+    await flush();
+    const select = document.getElementById('mv-compose-remind');
+    expect(select.tagName).toBe('SELECT');
+    const tool = select.closest('[data-mv-remind]');
+    expect(tool.closest('[role="toolbar"]')).toBe(toolbar());
+    expect(tool.querySelector('svg[aria-hidden="true"]')).toBeTruthy();
+    expect(tool.textContent).not.toContain(t('common.premium'));
+    expect(tool.hasAttribute('data-mv-active')).toBe(false);
+    typeInto(select, '3');
+    expect(tool.hasAttribute('data-mv-active')).toBe(true);
+    typeInto(select, '0');
+    expect(tool.hasAttribute('data-mv-active')).toBe(false);
+  });
+
+  it('without Premium the Remind tool carries the Premium badge and a pick stays off', async () => {
+    renderCompose();
+    await flush();
+    const select = document.getElementById('mv-compose-remind');
+    const tool = select.closest('[data-mv-remind]');
+    expect(tool.textContent).toContain(t('common.premium'));
+    typeInto(select, '1');
+    expect(useMobileStore.getState().paywall).toMatchObject({ feature: 'followUp' });
+    expect(select.value).toBe('0');
+    expect(tool.hasAttribute('data-mv-active')).toBe(false);
+  });
+
+  it('the Cc/Bcc toggle sits at the end of the To line', async () => {
+    renderCompose();
+    await flush();
+    const toLine = toInput().closest('.mv-compose__line');
+    const toggle = within(toLine).getByRole('button', { name: t('mobile.compose.showCc') });
+    fireEvent.click(toggle);
+    expect(screen.getByLabelText(t('mobile.compose.cc'))).toBeTruthy();
+    expect(screen.getByLabelText(t('mobile.compose.bcc'))).toBeTruthy();
+    expect(screen.queryByRole('button', { name: t('mobile.compose.showCc') })).toBeNull();
+  });
+
+  it('the body says what to write there', async () => {
+    renderCompose();
+    await flush();
+    expect(body().getAttribute('placeholder')).toBe(t('compose.writeMessage'));
+  });
+
+  it('styles: the toolbar is a footer above the keyboard, and From never outgrows its line', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+    const css = readFileSync(resolve(process.cwd(), 'src/mobile/mobile.css'), 'utf8');
+    const rule = (sel) => css.match(new RegExp(`(?:^|\\n)${sel.replace(/[.[\]]/g, '\\$&')} \\{([^}]*)\\}`))?.[1] ?? '';
+    const tools = rule('.mv-compose__tools');
+    expect(tools).toContain('flex: none');
+    expect(tools).toContain('border-top: 1px solid var(--mail-border)');
+    expect(tools).toContain('var(--mv-safe-bottom)');
+    expect(tools).not.toMatch(/(^|[\s;])(position|transform)\s*:/);
+    // The keyboard covers the home indicator: no safe-area gap above it.
+    expect(rule('.mv-compose[data-mv-keyboard] .mv-compose__tools')).toContain('padding-bottom: 0');
+    // The cause of the sideways scroll was a select sized to its longest option.
+    const select = rule('.mv-compose__select');
+    expect(select).toMatch(/(^|[\s;])flex: 1[;\s]/);
+    expect(select).toContain('min-width: 0');
+    expect(rule('.mv-compose__scroll')).not.toContain('overflow-x');
   });
 });
