@@ -126,7 +126,7 @@ body {
   height: 44px;
   padding: 0;
   border: 0;
-  border-radius: 10px;
+  border-radius: 8px;
   background: none;
   color: var(--mail-text);
 }
@@ -140,14 +140,14 @@ body {
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: var(--mail-accent);
+  background: var(--mail-accent-fill);
   color: #fff;
   font-weight: 600;
   font-size: 0.9375rem;
   line-height: 1;
 }
 .mv-avatar--small { width: 20px; height: 20px; font-size: 0.6875rem; }
-.mv-avatar--all { background: var(--mail-accent); color: #fff; }
+.mv-avatar--all { background: var(--mail-accent-fill); color: #fff; }
 .mv-avatar--add { background: var(--mail-surface-hover); color: var(--mail-accent-text); font-size: 1.25rem; font-weight: 500; }
 
 /* Sync progress: a chip, never a modal. */
@@ -224,7 +224,7 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 .mv-swipe__act--read { background: var(--mv-swipe-read); }
 .mv-swipe__act--delete { background: var(--mv-swipe-delete); }
 .mv-swipe__act--flag { background: var(--mv-flag); }
-.mv-swipe__act--move { background: var(--mail-accent); }
+.mv-swipe__act--move { background: var(--mail-accent-fill); }
 .mv-swipe__act svg { flex: none; }
 .mv-swipe__label { max-width: 76px; text-align: center; line-height: 1.2; }
 .mv-row {
@@ -273,7 +273,7 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
   flex: none;
   min-width: 20px;
   padding: 0 6px;
-  border-radius: 10px;
+  border-radius: 999px;
   background: var(--mail-surface-hover, rgba(127, 127, 127, 0.16));
   color: var(--mail-text-muted);
   font-size: 0.6875rem;
@@ -327,7 +327,8 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 .mv-row__snippet--lines { display: -webkit-box; -webkit-box-orient: vertical; white-space: normal; }
 .mv-row--compact { padding-top: 4px; padding-bottom: 4px; }
 .mv-row--unread .mv-row__sender, .mv-row--unread .mv-row__subject { font-weight: 600; }
-.mv-row--unread { box-shadow: inset 2px 0 0 var(--mail-accent); }
+/* Unread is desktop's: the surface ground plus the heavier weight. (The accent edge means selected.) */
+.mv-row--unread { background: var(--mail-surface); }
 
 /* The viewer: the header block on top, the mail frame filling the rest and scrolling itself (a
    sandboxed frame without scripts cannot be measured, so it cannot grow to its content). */
@@ -375,7 +376,7 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 .mv-linksheet__url { font-family: ui-monospace, Menlo, monospace; font-size: 0.8125rem; }
 .mv-linksheet__open {
   display: flex; align-items: center; justify-content: center; min-height: 44px; margin-top: 8px;
-  border-radius: 10px; border: 1px solid currentColor; color: var(--mail-danger, #ef4444);
+  border-radius: 8px; border: 1px solid currentColor; color: var(--mail-danger, #ef4444);
   font-weight: 600; text-decoration: none;
 }
 .mv-trackers { list-style: none; margin: 0; padding: 0 8px; overflow-y: auto; max-height: 40vh; }
@@ -433,7 +434,7 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
   margin: 0;
   padding: 0 12px;
   border: 1px solid var(--mail-border);
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--mail-surface);
   color: inherit;
   font: inherit;
@@ -473,7 +474,7 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
   gap: 12px;
   margin: 8px calc(var(--mv-safe-right) + 16px) 0 calc(var(--mv-safe-left) + 16px);
   padding: 0 4px 0 12px;
-  border-radius: 10px;
+  border-radius: 12px;
   background: var(--mail-surface);
   font-size: 0.8125rem;
   color: var(--mail-text-muted);
@@ -514,11 +515,13 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
   align-items: center;
   justify-content: center;
   border: 0;
-  border-radius: 12px;
+  border-radius: 8px;
   background: none;
-  color: var(--mail-accent-text);
+  color: var(--mail-text-muted);
 }
+/* Desktop's ghost tool: muted at rest, full text on the hover ground while pressed. */
 .mv-tool:active { background: var(--mail-surface-hover); }
+.mv-tool:active:not(.mv-tool--danger):not([aria-pressed="true"]) { color: var(--mail-text); }
 .mv-tool[aria-pressed="true"] { color: var(--mv-flag); }
 .mv-tool--danger { color: var(--mv-danger); }
 /* actionButtonDisplay "icon-label" / "text-only": the label under the icon, or alone. Five share
@@ -553,7 +556,6 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
   border-radius: 12px;
   background: var(--mv-toast-bg);
   color: var(--mv-toast-text);
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
   animation: mv-rise-small 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .mv-toast__text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
@@ -663,7 +665,7 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 }
 
 .mv-acct-list, .mv-folders { list-style: none; margin: 0; padding: 0; }
-.mv-acct { display: flex; align-items: center; border-radius: 12px; }
+.mv-acct { display: flex; align-items: center; border-radius: 8px; }
 .mv-acct__main {
   flex: 1;
   min-width: 0;
@@ -673,7 +675,7 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
   min-height: 56px;
   padding: 6px 8px;
   border: 0;
-  border-radius: 12px;
+  border-radius: 8px;
   background: none;
   color: inherit;
   font: inherit;
@@ -695,7 +697,7 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
   min-width: 20px;
   padding: 1px 7px;
   border-radius: 999px;
-  background: var(--mail-accent);
+  background: var(--mail-accent-fill);
   color: #fff;
   font-size: 0.75rem;
   font-weight: 600;
@@ -735,7 +737,9 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
   text-align: start;
 }
 .mv-folder__name { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.mv-folder--active { background: var(--mail-surface-hover); box-shadow: inset 3px 0 0 var(--mail-accent); font-weight: 600; }
+/* Desktop's active folder: the accent tint with the readable accent (FolderTree.jsx `bg-mail-accent/10`). */
+.mv-folder--active { background: color-mix(in srgb, var(--mail-accent) 10%, transparent); color: var(--mail-accent-text); font-weight: 600; }
+.mv-folder--active .mv-folder__icon, .mv-folder--active .mv-folder__count { color: inherit; }
 .mv-folder--heading { min-height: 36px; color: var(--mail-text-muted); font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
 
 /* Text buttons and the primary action. */
@@ -743,7 +747,7 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
   min-height: 44px;
   padding: 0 12px;
   border: 0;
-  border-radius: 10px;
+  border-radius: 8px;
   background: none;
   color: var(--mail-accent-text);
   font: inherit;
@@ -756,8 +760,8 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
   min-height: 48px;
   margin-top: 8px;
   border: 0;
-  border-radius: 12px;
-  background: var(--mail-accent);
+  border-radius: 8px;
+  background: var(--mail-accent-fill);
   color: #fff;
   font: inherit;
   font-weight: 600;
@@ -780,9 +784,9 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 .mv-add__section { margin: 8px 0 0; font-size: 0.8125rem; font-weight: 600; color: var(--mail-text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
 .mv-add__row { display: grid; grid-template-columns: 7rem 1fr; gap: 12px; }
 .mv-add__hint { margin: -6px 0 0; font-size: 0.875rem; color: var(--mail-text-muted); }
-.mv-add__confirm { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 10px; background: color-mix(in srgb, var(--mail-text-muted) 12%, transparent); overflow-wrap: anywhere; }
+.mv-add__confirm { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 12px; background: color-mix(in srgb, var(--mail-text-muted) 12%, transparent); overflow-wrap: anywhere; }
 .mv-add__confirm p { margin: 0; }
-.mv-add__error { margin: 0; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--mv-danger) 14%, transparent); color: var(--mv-danger); }
+.mv-add__error { margin: 0; padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, var(--mv-danger) 14%, transparent); color: var(--mv-danger); }
 /* The provider picker: one full-width row per provider. */
 .mv-providers { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 .mv-provider {
@@ -791,7 +795,7 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
   min-height: 52px;
   padding: 12px 16px;
   border: 1px solid var(--mail-border);
-  border-radius: 12px;
+  border-radius: 8px;
   background: var(--mail-surface);
   color: var(--mail-text);
   font: inherit;
@@ -858,7 +862,7 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
   min-height: 48px;
   padding: 8px 12px;
   border: 1px solid var(--mail-border);
-  border-radius: 12px;
+  border-radius: 8px;
   background: var(--mail-surface);
   color: var(--mail-text);
   font: inherit;
@@ -879,7 +883,7 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 /* Import from computer: the steps, two pictures of the computer, the FAQ entry. */
 .mv-import__steps { margin: 0; padding-inline-start: 1.4em; display: flex; flex-direction: column; gap: 8px; line-height: 1.4; }
 .mv-import__shots { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.mv-import__shot { width: 100%; height: auto; border: 1px solid var(--mail-border); border-radius: 10px; background: var(--mail-surface); }
+.mv-import__shot { width: 100%; height: auto; border: 1px solid var(--mail-border); border-radius: 12px; background: var(--mail-surface); }
 .mv-import__faq { align-self: flex-start; min-height: 44px; display: inline-flex; align-items: center; color: var(--mail-accent-text); font-weight: 500; }
 .mv-import__secret { display: flex; gap: 8px; align-items: center; }
 .mv-import__secret .mv-input { flex: 1; }
@@ -920,7 +924,7 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
   min-height: 48px;
   padding: 0 12px;
   border: 1px solid var(--mail-border);
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--mail-surface);
   color: var(--mail-text);
   /* 16px keeps iOS from zooming into a focused field. */
@@ -944,9 +948,8 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
   padding: 0;
   border: 0;
   border-radius: 16px;
-  background: var(--mail-accent);
+  background: var(--mail-accent-fill);
   color: #fff;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
 }
 .mv-fab:active { transform: scale(0.96); }
 [dir="rtl"] .mv-fab { right: auto; left: calc(var(--mv-safe-left) + 16px); }
@@ -1007,7 +1010,7 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
   min-height: 44px;
   padding: 0 16px;
   border: 1px solid var(--mail-border);
-  border-radius: 10px;
+  border-radius: 8px;
   background: none;
   color: var(--mail-accent-text);
   font: inherit;
@@ -1021,7 +1024,7 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
   min-height: 52px;
   padding: 0 12px;
   border: 0;
-  border-radius: 12px;
+  border-radius: 8px;
   background: none;
   color: var(--mail-text);
   font: inherit;
@@ -1062,8 +1065,8 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
   min-width: 64px;
   padding: 0 16px;
   border: 0;
-  border-radius: 999px;
-  background: var(--mail-accent);
+  border-radius: 8px;
+  background: var(--mail-accent-fill);
   color: #fff;
   font: inherit;
   font-weight: 600;
@@ -1084,7 +1087,7 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 }
 /* The keyboard covers the home indicator: no safe-area gap above it. */
 .mv-compose[data-mv-keyboard] .mv-compose__scroll { padding-bottom: 16px; }
-.mv-compose__error { margin: 12px 0 0; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--mv-danger) 14%, transparent); color: var(--mv-danger); }
+.mv-compose__error { margin: 12px 0 0; padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, var(--mv-danger) 14%, transparent); color: var(--mv-danger); }
 .mv-compose__line {
   display: flex;
   align-items: center;
@@ -1144,7 +1147,7 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 .mv-compose__hint { margin: 6px 0 0; font-size: 0.8125rem; color: var(--mv-danger); }
 .mv-compose__note { margin: 6px 0 0; font-size: 0.8125rem; color: var(--mail-text-muted); }
 .mv-compose__files { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-.mv-compose__file { display: flex; align-items: center; gap: 8px; min-height: 44px; padding-inline-start: 12px; border: 1px solid var(--mail-border); border-radius: 10px; }
+.mv-compose__file { display: flex; align-items: center; gap: 8px; min-height: 44px; padding-inline-start: 12px; border: 1px solid var(--mail-border); border-radius: 12px; }
 .mv-compose__file--pending { color: var(--mail-text-muted); padding-inline-end: 12px; }
 .mv-compose__file-name { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .mv-compose__file-size { flex: none; font-size: 0.8125rem; color: var(--mail-text-muted); }
@@ -1376,7 +1379,7 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
   padding: 0 12px;
   padding-inline-start: 38px;
   border: 1px solid var(--mail-border);
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--mail-surface);
   color: var(--mail-text);
   font: inherit;
@@ -1395,7 +1398,7 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
   font-size: 0.875rem;
   font-weight: 500;
 }
-.mv-search__chip[aria-pressed='true'] { background: var(--mail-accent); border-color: var(--mail-accent); color: #fff; }
+.mv-search__chip[aria-pressed='true'] { background: var(--mail-accent-fill); border-color: var(--mail-accent-fill); color: #fff; }
 .mv-search__results {
   flex: 1;
   min-height: 0;
@@ -1427,7 +1430,7 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 .mv-search__server-btn {
   min-height: 48px;
   border: 1px solid var(--mail-border);
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--mail-surface);
   color: var(--mail-accent-text);
   font: inherit;
@@ -1463,8 +1466,8 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 .mv-premium__row { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 12px; }
 .mv-premium__row--stack { flex-direction: column; align-items: stretch; justify-content: flex-start; }
 .mv-premium__primary {
-  min-height: 48px; padding: 0 20px; border: 0; border-radius: 12px;
-  background: var(--mail-accent); color: #fff; font: inherit; font-weight: 600;
+  min-height: 48px; padding: 0 20px; border: 0; border-radius: 8px;
+  background: var(--mail-accent-fill); color: #fff; font: inherit; font-weight: 600;
 }
 .mv-premium__primary:disabled { opacity: 0.5; }
 .mv-premium__disclosure { margin-top: 20px; font-size: 0.8125rem; color: var(--mail-text-muted); }
@@ -1473,7 +1476,7 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 .mv-premium__linkbtn { display: block; width: 100%; min-height: 48px; margin-top: 20px; padding: 0; border: 0; background: none; color: var(--mail-accent-text); font: inherit; text-align: start; }
 .mv-premium__web { margin-top: 20px; }
 .mv-premium__field { display: flex; flex-direction: column; gap: 4px; font-size: 0.875rem; }
-.mv-premium__field input { min-height: 44px; padding: 0 12px; border: 1px solid var(--mail-border); border-radius: 10px; background: var(--mail-bg); color: inherit; font: inherit; font-size: 1rem; }
+.mv-premium__field input { min-height: 44px; padding: 0 12px; border: 1px solid var(--mail-border); border-radius: 8px; background: var(--mail-bg); color: inherit; font: inherit; font-size: 1rem; }
 
 
 /* Send later (SendLater.jsx) and the outbox's Scheduled section. */
@@ -1487,7 +1490,7 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
   min-height: 44px;
   padding: 0 10px;
   border: 1px solid var(--mail-border);
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--mail-bg);
   color: var(--mail-text);
   font: inherit;
@@ -1514,7 +1517,7 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
   max-width: 80vw;
   padding: 0 14px;
   border: 1px solid var(--mail-border);
-  border-radius: 18px;
+  border-radius: 8px;
   background: var(--mail-surface);
   color: var(--mail-text);
   font: inherit;
@@ -1541,7 +1544,7 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
   overflow-y: auto;
   padding: 12px;
   border: 1px solid var(--mail-border);
-  border-radius: 8px;
+  border-radius: 12px;
   background: var(--mail-surface);
   font: inherit;
   font-size: 0.875rem;
