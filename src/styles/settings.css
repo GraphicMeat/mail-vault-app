@@ -215,7 +215,8 @@
   .appearance-settings .setting-row-copy { padding-top: 0; }
   .settings-preference-group + .settings-preference-group { margin-top: 20px; padding-top: 20px; }
 }
-.account-settings-layout { display: flex; height: 100%; min-width: 0; min-height: 0; }
+/* Always two columns: list and settings, each at least 260px; a narrower page scrolls sideways. */
+.account-settings-layout { display: flex; height: 100%; min-width: 521px; min-height: 0; }
 .account-settings-list { width: var(--account-list-width, 260px); min-width: 260px; max-width: calc(100% - 261px); flex-shrink: 0; overflow-y: auto; }
 .account-settings-detail { flex: 1; min-width: 260px; overflow-y: auto; container-type: inline-size; }
 .account-settings-resizer { position: relative; flex: 0 0 1px; background: var(--mail-border); cursor: col-resize; outline: none; }
@@ -228,12 +229,6 @@ body.is-resizing-columns { cursor: col-resize; user-select: none; }
 .account-settings-group-move { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 6px; color: var(--mail-text-muted); }
 .account-settings-group-move:hover:not(:disabled) { background: var(--mail-surface-hover); color: var(--mail-text); }
 .account-settings-group-move:disabled { opacity: .3; cursor: default; }
-@container (max-width: 820px) {
-  .account-settings-layout { flex-direction: column; }
-  .account-settings-list { width: 100%; min-width: 0; max-width: none; max-height: 200px; border-bottom: 1px solid var(--mail-border); }
-  .account-settings-detail { min-width: 0; }
-  .account-settings-resizer { display: none; }
-}
 @container (max-width: 520px) {
   .settings-form { padding: 20px 16px; }
   .settings-section { padding: 16px; }

@@ -84,3 +84,12 @@ it('drags the separator to widen the list', () => {
   fireEvent.mouseUp(document, { clientX: 460 });
   expect(useSettingsStore.getState().accountListWidth).toBe(360);
 });
+
+it('keeps the list and settings side by side at any width, each column at least 260px', async () => {
+  const { readFileSync } = await import('node:fs');
+  const css = readFileSync(`${process.cwd()}/src/styles/settings.css`, 'utf8');
+  expect(css).not.toMatch(/\.account-settings-layout\s*\{[^}]*flex-direction:\s*column/);
+  expect(css).toMatch(/\.account-settings-list\s*\{[^}]*min-width:\s*260px/);
+  expect(css).toMatch(/\.account-settings-detail\s*\{[^}]*min-width:\s*260px/);
+  expect(css).not.toMatch(/\.account-settings-resizer\s*\{[^}]*display:\s*none/);
+});

@@ -1263,7 +1263,8 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 }
 /* Settings > Accounts (desktop's account views): the list over the selected account, both in the
    page's one scroll, instead of desktop's two columns that scroll on their own. */
-.mv-settings .account-settings-layout { flex-direction: column; height: auto; }
+.mv-settings .account-settings-layout { flex-direction: column; height: auto; min-width: 0; }
+.mv-settings .account-settings-resizer { display: none; }
 .mv-settings .account-settings-list { width: auto; min-width: 0; max-width: none; max-height: none; overflow: visible; border-right: 0; border-bottom: 1px solid var(--mail-border); }
 .mv-settings .account-settings-layout .account-settings-detail { overflow: visible; min-width: 0; }
 .mv-settings .account-settings-detail [role="tabpanel"] { overflow: visible; }
