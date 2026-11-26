@@ -230,7 +230,7 @@ describe('Sidebar layouts', () => {
       expect(screen.getAllByTestId('folder-selector')).toHaveLength(1);
     });
 
-    it('keeps the selector and New folder under the header when the active account's group is collapsed', () => {
+    it("keeps the selector and New folder under the header when the active account's group is collapsed", () => {
       useSettingsStore.setState({ sidebarLayout: 'nested', accountGroups: { studio: 'Work' }, collapsedAccountGroups: { Work: true } });
       render(<Sidebar />);
       const group = screen.getByRole('group', { name: 'Work' });
