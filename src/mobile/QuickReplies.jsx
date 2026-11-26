@@ -11,6 +11,7 @@ import { useMobileStore } from './store.js';
 import { useT } from './i18n.js';
 import { QUICK_REPLY_KEYS } from './AiActions.jsx';
 import { Button } from '../components/ui/Button.jsx';
+import { CloseIcon } from './icons.jsx';
 
 export default function QuickReplies({ accountId, folder, uid, onReply }) {
   const t = useT();
@@ -54,9 +55,7 @@ export default function QuickReplies({ accountId, folder, uid, onReply }) {
         </button>
       ))}
       <Button variant="ghost" size="touch" icon aria-label={t('ai.quickReply.dismiss')} onClick={dismiss}>
-        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" focusable="false">
-          <path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-        </svg>
+        <CloseIcon />
       </Button>
     </div>
   );

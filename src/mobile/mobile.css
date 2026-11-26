@@ -360,6 +360,10 @@ body {
   border-bottom: 1px solid var(--mail-border);
 }
 .mv-viewer__bar { padding-top: var(--mv-safe-top); margin: 0 -8px; display: flex; align-items: center; justify-content: space-between; }
+/* BackButton (icons.jsx): every full-screen layer's back control. Its chevron points to where
+   the layer came from, so it mirrors right to left. */
+.mv-back { flex: none; }
+[dir="rtl"] .mv-back__glyph { transform: scaleX(-1); }
 .mv-viewer__bar > .mv-viewer__back + * { margin-inline-start: auto; } /* the trailing tools (shield, keep) sit together at the end */
 .mv-viewer__bar [data-mv-keep][aria-pressed='true'] { color: var(--mail-accent-text); }
 .mv-viewer__shield {
@@ -394,14 +398,6 @@ body {
 .mv-trackers__item { display: flex; flex-direction: column; padding: 8px 0; border-top: 1px solid var(--mail-border); }
 .mv-trackers__vendor { font-weight: 600; }
 .mv-trackers__domain { font-size: 0.75rem; color: var(--mail-text-muted); overflow-wrap: anywhere; }
-.mv-viewer__back {
-  border: 0;
-  background: none;
-  color: var(--mail-accent-text);
-  font: inherit;
-  font-weight: 500;
-  padding: 0 8px;
-}
 /* At most four lines: a hostile subject must not push the sender and the body off the screen. */
 .mv-viewer__subject {
   margin: 4px 0 8px;
@@ -679,7 +675,7 @@ body {
 .mv-acct__name { font-weight: 600; }
 .mv-acct__email { font-weight: 500; }
 .mv-acct__email--sub { font-weight: 400; font-size: 0.8125rem; color: var(--mail-text-muted); }
-.mv-acct__check { flex: none; width: 20px; color: var(--mail-accent-text); font-weight: 700; text-align: center; }
+.mv-acct__check { flex: none; display: inline-flex; justify-content: center; width: 20px; color: var(--mail-accent-text); }
 .mv-acct--confirm { flex-direction: column; align-items: stretch; padding: 8px; background: var(--mail-surface-hover); }
 .mv-acct__question { margin: 0 0 4px; overflow-wrap: anywhere; }
 .mv-acct__actions { display: flex; justify-content: flex-end; gap: 8px; }
@@ -1006,16 +1002,6 @@ body {
   gap: 4px;
   padding: calc(var(--mv-safe-top) + 4px) calc(var(--mv-safe-right) + 8px) 4px calc(var(--mv-safe-left) + 8px);
   border-bottom: 1px solid var(--mail-border);
-}
-.mv-compose__back {
-  min-height: 44px;
-  min-width: 44px;
-  padding: 0 8px;
-  border: 0;
-  background: none;
-  color: var(--mail-accent-text);
-  font: inherit;
-  font-weight: 500;
 }
 .mv-compose__title { flex: 1; min-width: 0; margin: 0; font-size: 1rem; font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 /* Sending: a spinner and its own label, at full strength (not the dimmed "can't send" look). */

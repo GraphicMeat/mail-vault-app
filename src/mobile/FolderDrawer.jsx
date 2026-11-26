@@ -22,7 +22,8 @@ import { Bell, File, Pencil, Plus, Settings } from 'lucide-react';
 import Sheet from './Sheet.jsx';
 import { useT } from './i18n.js';
 import { folderLabel, iconMailbox, ALL_INBOXES } from './folders.js';
-import { AllInboxesIcon, Avatar } from './AccountSwitcher.jsx';
+import { Avatar } from './AccountSwitcher.jsx';
+import { AllInboxesIcon, ChevronDownIcon } from './icons.jsx';
 import { getMailboxIcon } from '../utils/mailboxIcon.js';
 import { ViewIcon } from '../components/ViewIcon.jsx';
 import { viewLabel } from '../utils/viewLabel.js';
@@ -51,9 +52,7 @@ function DrawerHead({ account, allInboxes, onSwitchAccount }) {
         <Avatar account={account} small />
       )}
       <span className="mv-header__email" dir="auto">{allInboxes ? t('sidebar.allInboxes') : name}</span>
-      <svg className="mv-header__chevron" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-        <path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
+      <ChevronDownIcon className="mv-header__chevron" />
     </Button>
   );
 }

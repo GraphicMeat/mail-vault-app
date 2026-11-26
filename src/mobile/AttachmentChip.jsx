@@ -16,6 +16,7 @@ import { daemonCall, openFile, shareFile } from './transport.js';
 import { ensureAttachmentEvents, watchJob } from './attachmentJobs.js';
 import { formatPercent, formatSize } from './format.js';
 import { useT } from './i18n.js';
+import { FileIcon, PaperclipIcon, RetryIcon } from './icons.jsx';
 
 /** Held this long, a press on a ready chip shares instead of opening. */
 export const LONG_PRESS_MS = 500;
@@ -74,17 +75,9 @@ function ChipIcon({ phase, fraction }) {
       </svg>
     );
   }
-  const stroke = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round' };
-  if (phase === 'ready') {
-    // A page with a folded corner: the file is on the device.
-    return <svg {...common}><path {...stroke} d="M7 3h7l5 5v12a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" /><path {...stroke} d="M14 3v5h5" /><path {...stroke} d="M9 14h6M9 17h4" /></svg>;
-  }
-  if (phase === 'failed') {
-    // Try again.
-    return <svg {...common}><path {...stroke} d="M20 12a8 8 0 1 1-2.3-5.6" /><path {...stroke} d="M20 4v5h-5" /></svg>;
-  }
-  // A paper clip: on the server, not on the device yet.
-  return <svg {...common}><path {...stroke} d="m20 11-8.5 8.5a5 5 0 0 1-7-7L13 4a3.3 3.3 0 0 1 4.7 4.7L9.2 17.2a1.7 1.7 0 0 1-2.4-2.4L14.5 7" /></svg>;
+  if (phase === 'ready') return <FileIcon />; // the file is on the device
+  if (phase === 'failed') return <RetryIcon />; // try again
+  return <PaperclipIcon size={20} />; // on the server, not on the device yet
 }
 
 export default function AttachmentChip(props) {

@@ -12,6 +12,7 @@ import { rowHeight } from './prefs.js';
 import { daemonCall } from './transport.js';
 import { formatEmailDate } from './format.js';
 import { useT } from './i18n.js';
+import { BackButton } from './icons.jsx';
 import { useMobileStore } from './store.js';
 import { useBackLayer } from './backStack.js';
 
@@ -123,9 +124,7 @@ export default function ChatView({ accountId, folder, list, onOpen, onSwipe }) {
     return (
       <div className="mv-list-wrap" data-mv-chat="topics">
         <header className="mv-compose__bar">
-          <button type="button" className="mv-compose__back" data-mv-chat-back style={{ minHeight: '44px' }} onClick={back}>
-            {t('common.back')}
-          </button>
+          <BackButton data-mv-chat-back onClick={back} />
           <h1 className="mv-compose__title" dir="auto">{displayText(person.name, person.email)}</h1>
         </header>
         <div className="mv-list">

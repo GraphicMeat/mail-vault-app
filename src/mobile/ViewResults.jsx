@@ -10,6 +10,7 @@ import { useMobileStore } from './store.js';
 import MessageRow from './MessageRow.jsx';
 import { rowHeight } from './prefs.js';
 import { useT } from './i18n.js';
+import { BackButton } from './icons.jsx';
 import { viewLabel } from '../utils/viewLabel.js';
 import { Button } from '../components/ui/Button.jsx';
 
@@ -99,7 +100,7 @@ export default function ViewResults({ view, onOpen, onSwipe: swipeAction, onClos
   return (
     <section className="mv-drafts mv-view" role="dialog" aria-modal="true" aria-label={name} data-mv-view={view.id}>
       <header className="mv-compose__bar">
-        <button type="button" className="mv-compose__back" onClick={onClose}>{t('common.back')}</button>
+        <BackButton onClick={onClose} />
         <h1 className="mv-compose__title" dir="auto">{name}</h1>
       </header>
       <p className="mv-search__note mv-view__note" data-mv-view-note>{t('mobile.views.offlineNote')}</p>

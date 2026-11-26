@@ -19,6 +19,7 @@ import { useT, getMobileLocale } from './i18n.js';
 import { errorKey } from './errors.js';
 import { PREMIUM_FEATURES, MANAGE_URL, storeOf, premiumSummary, introText } from './premium.js';
 import { Button } from '../components/ui/Button.jsx';
+import { BackButton } from './icons.jsx';
 
 const APP_VERSION = import.meta.env?.MV_APP_VERSION || '';
 const TERMS_URL = 'https://mailvaultapp.com/terms.html';
@@ -365,7 +366,7 @@ export default function Premium({ feature = null, signIn = false, onClose }) {
   return (
     <KeyboardLayer as="section" className="mv-settings mv-premium" scroll=".mv-settings__body" role="dialog" aria-modal="true" aria-label={t('mobile.premium.title')} data-mv-sign-in={signIn ? 'true' : undefined}>
       <header className="mv-compose__bar">
-        <button type="button" className="mv-compose__back" onClick={onClose}>{t('common.back')}</button>
+        <BackButton onClick={onClose} />
         <h1 className="mv-compose__title">{t('mobile.premium.title')}</h1>
       </header>
       <div className="mv-settings__body mv-premium__body">{body}</div>

@@ -111,12 +111,14 @@ function MessageRow({ row, index, start = 0, onOpen, onSwipe, initialSwipe = nul
         return {
           label: shown.seen ? t('mobile.actions.markUnread') : t('mobile.actions.markRead'),
           className: 'mv-swipe__act--read',
-          icon: <EnvelopeIcon open={!shown.seen} />,
+          // Desktop's glyphs show the state the message is in (quickActionIcon): open while read,
+          // a filled star while starred.
+          icon: <EnvelopeIcon open={shown.seen} />,
         };
       case 'delete':
         return { label: t('common.delete'), className: 'mv-swipe__act--delete', icon: <TrashIcon /> };
       case 'flag':
-        return { label: shown.flagged ? t('mobile.actions.unflag') : t('mobile.actions.flag'), className: 'mv-swipe__act--flag', icon: <FlagIcon filled={!shown.flagged} /> };
+        return { label: shown.flagged ? t('mobile.actions.unflag') : t('mobile.actions.flag'), className: 'mv-swipe__act--flag', icon: <FlagIcon filled={shown.flagged} /> };
       case 'move':
         return { label: t('mobile.actions.move'), className: 'mv-swipe__act--move', icon: <MoveIcon /> };
       default:

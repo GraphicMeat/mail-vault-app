@@ -16,6 +16,7 @@ import { useMobileStore } from './store.js';
 import { useBackLayer } from './backStack.js';
 import { useT } from './i18n.js';
 import { Button } from '../components/ui/Button.jsx';
+import { SendIcon } from './icons.jsx';
 
 // Literal keys, so the catalog tests can see every one.
 const STATE_KEYS = Object.freeze({
@@ -159,9 +160,7 @@ export default function OutboxRow({ initialOpen = false }) {
   return (
     <>
       <button type="button" className={`mv-outbox-row${attention ? ' mv-outbox-row--alert' : ''}`} data-mv-outbox onClick={() => setOpen(true)}>
-        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M22 2 11 13" /><path d="M22 2 15 22l-4-9-9-4z" />
-        </svg>
+        <SendIcon />
         <span>{label}</span>
       </button>
       {open && <OutboxSheet rows={rows} onClose={close} />}

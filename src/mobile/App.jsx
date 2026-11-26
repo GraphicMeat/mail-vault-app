@@ -82,6 +82,7 @@ import Sheet from './Sheet.jsx';
 import { rowUids } from './prefs.js';
 import { visibleAccounts, markReadPlan, afterDeletePick } from './prefs.js';
 import { Button } from '../components/ui/Button.jsx';
+import { ChevronDownIcon, ComposeIcon, MenuIcon, SearchIcon } from './icons.jsx';
 
 function logLine(payload) {
   const line = `MV_MOBILE ${JSON.stringify(payload)}`;
@@ -248,9 +249,7 @@ function AccountButton({ account, allInboxes, shownAccounts, onOpen }) {
           <span className="mv-header__email" dir="auto">{account.email}</span>
         </>
       )}
-      <svg className="mv-header__chevron" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-        <path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
+      <ChevronDownIcon className="mv-header__chevron" />
     </Button>
   );
 }
@@ -944,9 +943,7 @@ function App() {
     <div className="mv-kb-layer mv-app">
       <header className="mv-header">
         <Button variant="ghost" size="touch" icon aria-label={t('mobile.drawer.open')} onClick={() => { setPanel('drawer'); ensureViews(); useViewStore.getState().loadCounts(); }}>
-          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
-            <path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-          </svg>
+          <MenuIcon />
         </Button>
         <div className="mv-header__titles">
           <div className="mv-header__line">
@@ -960,9 +957,7 @@ function App() {
           )}
         </div>
         <Button variant="ghost" size="touch" icon data-mv-search-open aria-label={t('mobile.search.open')} onClick={() => setSearchOpen(true)}>
-          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="11" cy="11" r="6.5" /><path d="m20 20-4.2-4.2" />
-          </svg>
+          <SearchIcon />
         </Button>
       </header>
       <StatusBar sync={sync} onRetry={onRefresh} />
@@ -997,9 +992,7 @@ function App() {
       )}
       {fabShown && (
         <button type="button" className="mv-fab" data-mv-compose aria-label={t('mobile.compose.new')} onClick={onNewMessage}>
-          <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
-          </svg>
+          <ComposeIcon />
         </button>
       )}
       {panel === 'drawer' && (

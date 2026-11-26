@@ -7,6 +7,7 @@ import React, { useId } from 'react';
 import { displayText } from '../utils/bidiText.js';
 import { addressOf, isValidEntry, nameOf, splitTyped } from './compose.js';
 import { useT } from './i18n.js';
+import { CloseIcon } from './icons.jsx';
 
 /**
  * `text` committed onto `entries`: the new list, and what stays in the input. Without `all`, only
@@ -74,9 +75,7 @@ export default function RecipientField({ label, entries, text, onChange, onFocus
             <li key={`${i}:${entry}`} className={`mv-rcpt${valid ? '' : ' mv-rcpt--invalid'}`} data-mv-chip aria-invalid={valid ? undefined : 'true'} title={entry}>
               <span className="mv-rcpt__text" dir="auto">{shown}</span>
               <button type="button" className="mv-rcpt__remove" disabled={readOnly} aria-label={t('mobile.compose.removeRecipient', { address: address || entry })} onClick={() => remove(i)}>
-                <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" focusable="false">
-                  <path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                </svg>
+                <CloseIcon />
               </button>
             </li>
           );

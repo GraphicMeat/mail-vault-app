@@ -12,6 +12,7 @@ import MessageRow from './MessageRow.jsx';
 import { rowHeight } from './prefs.js';
 import { daemonCall } from './transport.js';
 import { useT } from './i18n.js';
+import { BackButton } from './icons.jsx';
 import { useMobileStore } from './store.js';
 
 /** The conversation's messages, by the first of `uids` that is still listed. */
@@ -69,9 +70,7 @@ export default function ThreadView({ accountId, folder, row, list = null, accoun
   return (
     <section className="mv-thread" role="dialog" aria-modal="true" aria-label={subject} data-mv-thread>
       <header className="mv-compose__bar">
-        <button type="button" className="mv-compose__back" data-mv-thread-close style={{ minHeight: '44px' }} onClick={onClose}>
-          {t('common.back')}
-        </button>
+        <BackButton data-mv-thread-close onClick={onClose} />
         <h1 className="mv-compose__title" dir="auto">{subject}</h1>
       </header>
       <div className="mv-list mv-thread__list" data-mv-thread-list>

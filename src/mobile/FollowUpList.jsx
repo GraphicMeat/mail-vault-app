@@ -9,14 +9,7 @@ import { useMobileStore } from './store.js';
 import { formatEmailDate } from './format.js';
 import { useT } from './i18n.js';
 import { Button } from '../components/ui/Button.jsx';
-
-function CloseIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
-      <path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-    </svg>
-  );
-}
+import { BackButton, CloseIcon } from './icons.jsx';
 
 export default function FollowUpList({ onOpen, onClose }) {
   const t = useT();
@@ -28,7 +21,7 @@ export default function FollowUpList({ onOpen, onClose }) {
   return (
     <section className="mv-drafts" role="dialog" aria-modal="true" aria-label={t('mobile.followUp.title')} data-mv-followups>
       <header className="mv-compose__bar">
-        <button type="button" className="mv-compose__back" onClick={onClose}>{t('common.back')}</button>
+        <BackButton onClick={onClose} />
         <h1 className="mv-compose__title">{t('mobile.followUp.title')}</h1>
       </header>
       {rows.length === 0 ? (
@@ -52,7 +45,7 @@ export default function FollowUpList({ onOpen, onClose }) {
                   aria-label={t('followUp.dismiss')}
                   onClick={() => useMobileStore.getState().dismissFollowUp(f.id)}
                 >
-                  <CloseIcon />
+                  <CloseIcon size={18} />
                 </Button>
               </li>
             );

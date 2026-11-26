@@ -1,64 +1,88 @@
-// The action icons the mobile list and viewer share: 24px line icons in currentColor, hidden from
-// assistive tech (the button carries the label).
+// The phone's icons, one place: each is the lucide glyph desktop draws for the same action or
+// destination (desktop's quick actions in src/utils/quickActionIcons.jsx, its reader, compose and
+// sidebar), hidden from assistive tech (the button carries the name). 22px unless a caller says
+// otherwise. `BackButton` is the back control every full-screen layer starts with.
 import React from 'react';
+import {
+  Bell, BookmarkCheck, BookmarkPlus, Check, ChevronDown, ChevronLeft, Clock, Eye, EyeOff, FileText,
+  FolderInput, Forward, Inbox, Mail, MailOpen, Menu, MoreHorizontal, Paperclip, PenSquare, Plus,
+  RefreshCw, Reply, ReplyAll, Search, Send, ShieldAlert, Star, Trash2, X,
+} from 'lucide-react';
+import { Button } from '../components/ui/Button.jsx';
+import { useT } from './i18n.js';
 
-const svg = (children, size = 22) => (
-  <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true" focusable="false"
-    fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-    {children}
-  </svg>
-);
+const glyph = (Icon, defaultSize = 22, extra = {}) => function PhoneIcon({ size = defaultSize, className }) {
+  return <Icon size={size} className={className} aria-hidden="true" focusable="false" {...extra} />;
+};
 
-/** A closed envelope (mark unread), or an open one (mark read). */
-export function EnvelopeIcon({ open = false }) {
-  return open
-    ? svg(<><path d="M3 10l9-6 9 6v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z" /><path d="m3 10 9 6 9-6" /></>)
-    : svg(<><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></>);
+/**
+ * Read state, as desktop's toggle draws it: an open envelope while the message is read (the
+ * action marks it unread), a closed one while it is unread (the action marks it read).
+ */
+export function EnvelopeIcon({ open = false, size = 22 }) {
+  const Icon = open ? MailOpen : Mail;
+  return <Icon size={size} aria-hidden="true" focusable="false" />;
 }
 
-export function FlagIcon({ filled = false }) {
-  return svg(<><path d="M5 21V4" /><path d="M5 4h11l-2 4 2 4H5" fill={filled ? 'currentColor' : 'none'} /></>);
+/** Desktop's star, filled while the message is starred (flagged). */
+export function FlagIcon({ filled = false, size = 22 }) {
+  return <Star size={size} aria-hidden="true" focusable="false" fill={filled ? 'currentColor' : 'none'} />;
 }
 
-/** A bookmark (keep in bubble), filled once the message is kept. */
-export function BookmarkIcon({ filled = false }) {
-  return svg(<path d="M6 4h12v17l-6-4-6 4z" fill={filled ? 'currentColor' : 'none'} />);
+/** Keep in bubble: desktop's bookmark with a plus, a check once the message is kept. */
+export function BookmarkIcon({ filled = false, size = 22 }) {
+  const Icon = filled ? BookmarkCheck : BookmarkPlus;
+  return <Icon size={size} aria-hidden="true" focusable="false" />;
 }
 
-export function MoveIcon() {
-  return svg(<><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><path d="M10 13h6m-2-2 2 2-2 2" /></>);
+/** Tracking pixels found in a message: desktop's crossed-out eye once they are blocked, an open eye when Premium would block them. */
+export function ShieldIcon({ state = 'blocked', size = 22 }) {
+  const Icon = state === 'blocked' ? EyeOff : Eye;
+  return <Icon size={size} aria-hidden="true" focusable="false" />;
 }
 
-export function TrashIcon() {
-  return svg(<><path d="M4 7h16" /><path d="M10 11v6m4-6v6" /><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" /><path d="M9 7V4h6v3" /></>);
-}
+export const MoveIcon = glyph(FolderInput);
+export const TrashIcon = glyph(Trash2);
+export const ReplyIcon = glyph(Reply);
+export const ReplyAllIcon = glyph(ReplyAll);
+export const ForwardIcon = glyph(Forward);
+/** Move to Junk. */
+export const SpamIcon = glyph(ShieldAlert);
+/** More actions. */
+export const MoreIcon = glyph(MoreHorizontal);
+export const MenuIcon = glyph(Menu);
+export const SearchIcon = glyph(Search);
+/** A new message (the compose button). */
+export const ComposeIcon = glyph(PenSquare, 24);
+export const ChevronDownIcon = glyph(ChevronDown, 14);
+export const PaperclipIcon = glyph(Paperclip);
+/** Send later. */
+export const ClockIcon = glyph(Clock);
+/** Remove or dismiss. */
+export const CloseIcon = glyph(X, 14);
+export const CheckIcon = glyph(Check, 18);
+export const PlusIcon = glyph(Plus, 20);
+/** Unsent mail (the outbox). */
+export const SendIcon = glyph(Send, 18);
+/** A file on the device. */
+export const FileIcon = glyph(FileText, 20);
+/** Try again. */
+export const RetryIcon = glyph(RefreshCw, 20);
+/** All Inboxes: desktop's sidebar glyph for it. */
+export const AllInboxesIcon = glyph(Inbox, 18);
+/** Follow-up reminders. */
+export const BellIcon = glyph(Bell, 16);
 
-/** Three dots: more actions. */
-/** A shield: tracking pixels found in a message (a check inside once they are blocked, a lock when Premium would block them). */
-export function ShieldIcon({ state = 'blocked' }) {
-  return svg(<>
-    <path d="M12 3l7 3v5c0 4.5-3 8.2-7 10-4-1.8-7-5.5-7-10V6z" />
-    {state === 'blocked' ? <path d="m9 12 2 2 4-4" /> : <><rect x="9.5" y="11" width="5" height="4" rx="1" /><path d="M10.5 11V9.8a1.5 1.5 0 0 1 3 0V11" /></>}
-  </>);
-}
-
-export function ReplyIcon() {
-  return svg(<><path d="M9 7 4 12l5 5" /><path d="M4 12h10a6 6 0 0 1 6 6v1" /></>);
-}
-
-export function ReplyAllIcon() {
-  return svg(<><path d="M8 7 3 12l5 5" /><path d="M12 7l-5 5 5 5" /><path d="M7 12h8a6 6 0 0 1 6 6v1" /></>);
-}
-
-export function ForwardIcon() {
-  return svg(<><path d="m15 7 5 5-5 5" /><path d="M20 12H10a6 6 0 0 0-6 6v1" /></>);
-}
-
-/** A stop sign with an exclamation mark: move to Junk. */
-export function SpamIcon() {
-  return svg(<><path d="M8.5 3h7L21 8.5v7L15.5 21h-7L3 15.5v-7z" /><path d="M12 8v5" /><path d="M12 16.5v.01" /></>);
-}
-
-export function MoreIcon() {
-  return svg(<><circle cx="5" cy="12" r="1.2" fill="currentColor" /><circle cx="12" cy="12" r="1.2" fill="currentColor" /><circle cx="19" cy="12" r="1.2" fill="currentColor" /></>);
+/**
+ * The back control every full-screen layer starts with: a 44px ghost icon button with a chevron
+ * pointing to where the layer came from (mirrored right to left), named Back. `data-*`, `onClick`
+ * and `className` pass through.
+ */
+export function BackButton({ className = '', ...rest }) {
+  const t = useT();
+  return (
+    <Button variant="ghost" size="touch" icon className={`mv-back ${className}`} aria-label={t('common.back')} {...rest}>
+      <ChevronLeft size={24} aria-hidden="true" focusable="false" className="mv-back__glyph" />
+    </Button>
+  );
 }

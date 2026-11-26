@@ -546,7 +546,9 @@ describe('Viewer', () => {
     renderViewer({ onClose });
     const back = screen.getByRole('button', { name: t('common.back') });
     expect(back.hasAttribute('data-mv-viewer-close')).toBe(true);
-    expect(parseInt(back.style.minHeight, 10)).toBeGreaterThanOrEqual(44);
+    // BackButton: Button's touch icon size, a 44px square (min-w-11 min-h-11).
+    expect(back.className).toMatch(/(^|\s)min-h-11(\s|$)/);
+    expect(back.className).toMatch(/(^|\s)min-w-11(\s|$)/);
     fireEvent.click(back);
     expect(onClose).toHaveBeenCalled();
   });

@@ -67,6 +67,7 @@ import { useMobileStore } from './store.js';
 import { useT } from './i18n.js';
 import { useAiAction } from './AiActions.jsx';
 import { Button } from '../components/ui/Button.jsx';
+import { BackButton, ClockIcon, CloseIcon, PaperclipIcon } from './icons.jsx';
 
 /** Quiet time after the last edit before the draft is saved. */
 export const AUTOSAVE_MS = 1500;
@@ -87,22 +88,6 @@ const TITLE_KEYS = Object.freeze({
   replyAll: 'emailActionBar.replyAll',
   forward: 'emailActionBar.forward',
 });
-
-function ClockIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
-    </svg>
-  );
-}
-
-function PaperclipIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="m20 11-8.5 8.5a5 5 0 0 1-7-7L13 4a3.3 3.3 0 0 1 4.7 4.7L9.2 17.2a1.7 1.7 0 0 1-2.4-2.4L14.5 7" />
-    </svg>
-  );
-}
 
 /** Waits for one attachment job: true once it is in the cache, false when it failed or stalled. */
 function fetchPart(accountId, folder, uid, section, cancels) {
@@ -648,9 +633,7 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
   return (
     <section ref={sheet} className="mv-kb-layer mv-compose" role="dialog" aria-modal="true" aria-label={title}>
       <header className="mv-compose__bar">
-        <button type="button" className="mv-compose__back" data-mv-compose-close onClick={requestLeave}>
-          {t('common.back')}
-        </button>
+        <BackButton data-mv-compose-close onClick={requestLeave} />
         <h1 className="mv-compose__title">{title}</h1>
         <Button variant="ghost" size="touch" icon aria-label={t('mobile.compose.attach')} disabled={locked.current} onClick={() => setAttaching(true)}>
           <PaperclipIcon />
@@ -757,9 +740,7 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
                 <span className="mv-compose__file-name" dir="auto">{displayText(a.name, '') || t('mobile.viewer.attachment')}</span>
                 <span className="mv-compose__file-size">{formatSize(a.size)}</span>
                 <button type="button" className="mv-rcpt__remove mv-compose__file-remove" aria-label={t('mobile.compose.removeAttachment', { name: a.name || '' })} onClick={() => removeAttachment(i)}>
-                  <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" focusable="false">
-                    <path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                  </svg>
+                  <CloseIcon />
                 </button>
               </li>
             ))}
@@ -770,9 +751,7 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
                   <span className="mv-compose__file-name" dir="auto">{name}</span>
                   <span className="mv-compose__file-size" role="status">{a.failed ? t('mobile.compose.downloadFailed') : t('mobile.compose.downloading')}</span>
                   <button type="button" className="mv-rcpt__remove mv-compose__file-remove" aria-label={t('mobile.compose.removeAttachment', { name })} onClick={() => removeFetching(a)}>
-                    <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" focusable="false">
-                      <path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                    </svg>
+                    <CloseIcon />
                   </button>
                 </li>
               );

@@ -7,7 +7,7 @@ import { displayText } from '../utils/bidiText.js';
 import { useMobileStore } from './store.js';
 import { formatEmailDate } from './format.js';
 import { useT } from './i18n.js';
-import { TrashIcon } from './icons.jsx';
+import { BackButton, TrashIcon } from './icons.jsx';
 import { Button } from '../components/ui/Button.jsx';
 
 export default function DraftsList({ onOpen, onClose }) {
@@ -20,7 +20,7 @@ export default function DraftsList({ onOpen, onClose }) {
   return (
     <section className="mv-drafts" role="dialog" aria-modal="true" aria-label={t('mobile.drafts.title')}>
       <header className="mv-compose__bar">
-        <button type="button" className="mv-compose__back" onClick={onClose}>{t('common.back')}</button>
+        <BackButton onClick={onClose} />
         <h1 className="mv-compose__title">{t('mobile.drafts.title')}</h1>
       </header>
       {drafts.length === 0 ? (

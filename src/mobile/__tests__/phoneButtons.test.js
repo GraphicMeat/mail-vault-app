@@ -21,6 +21,7 @@ const RETIRED = [
   'mv-primary', 'mv-premium__primary', 'mv-compose__send', 'mv-outbox__btn', 'mv-search__server-btn',
   'mv-textbtn', 'mv-reauth__btn', 'mv-search__link', 'mv-compose__more', 'mv-premium__linkbtn',
   'mv-iconbtn', 'mv-qr__dismiss', 'mv-acct__reauth', 'mv-tour__later', 'mv-schedule__confirm',
+  'mv-compose__back',
 ];
 const used = (cls) => new RegExp(`(?<![\\w-])${cls}(?![\\w-])`);
 

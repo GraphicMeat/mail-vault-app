@@ -24,7 +24,7 @@
 // - Cleanup, Backup, Time Capsule and Migration sit in desktop's place with desktop's icon and
 //   name, and open one notice: the feature is in MailVault on desktop (DesktopNoticeView).
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ChevronLeft, CreditCard, Search, X } from 'lucide-react';
+import { CreditCard, Search, X } from 'lucide-react';
 import {
   settingsSections, footerTabs, settingsHosts, hostOf, tabsById, navEntryOnPhone, mobileSearchPages, searchSettings,
   settingText, landOnSetting, MOBILE_PAGES, MOBILE_PAGE_LABELS, onPhoneNotice,
@@ -38,6 +38,7 @@ import { useMobileStore } from './store.js';
 import KeyboardLayer from './KeyboardLayer.jsx';
 import { useBackLayer } from './backStack.js';
 import { useT, getMobileLocale } from './i18n.js';
+import { BackButton } from './icons.jsx';
 import { errorKey } from './errors.js';
 import { premiumSummary } from './premium.js';
 import Storage from './settings/Storage.jsx';
@@ -233,9 +234,7 @@ export default function Settings({ onClose, onReplayTour, onAddAccount, version 
       <SettingsViewProvider t={t} locale={getMobileLocale()}>
         <header className="settings-header mv-settings__header">
           <div className="settings-header-context flex items-center gap-3 min-w-0">
-            <Button variant="ghost" icon size="md" aria-label={t('common.back')} onClick={nav === 'root' ? onClose : headerBack}>
-              <ChevronLeft size={20} className="text-mail-text-muted" aria-hidden="true" />
-            </Button>
+            <BackButton onClick={nav === 'root' ? onClose : headerBack} />
             <div className="settings-header-title min-w-0">
               <h1 className="text-lg font-semibold text-mail-text truncate">{title}</h1>
               {description && <p className="settings-page-description">{description}</p>}

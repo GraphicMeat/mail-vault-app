@@ -5,6 +5,7 @@ import React from 'react';
 import { LOCALES } from '../../i18n/languages.js';
 import { useT, getMobileLocale, loadMobileLocale } from '../i18n.js';
 import { daemonCall } from '../transport.js';
+import { CheckIcon } from '../icons.jsx';
 
 export default function LanguageStep() {
   const t = useT();
@@ -41,9 +42,7 @@ export default function LanguageStep() {
               <span className="mv-tour__flag" aria-hidden="true">{l.flag}</span>
               <span className="mv-tour__native">{l.native}</span>
               {selected && (
-                <svg className="mv-tour__check" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-                  <path d="m5 12.5 4.5 4.5L19 7.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
+                <CheckIcon className="mv-tour__check" />
               )}
             </button>
           );

@@ -46,7 +46,7 @@ import FieldStrip from './FieldStrip.jsx';
 import Sheet from './Sheet.jsx';
 import AttachmentChip from './AttachmentChip.jsx';
 import { useBackLayer } from './backStack.js';
-import { EnvelopeIcon, FlagIcon, ForwardIcon, MoreIcon, MoveIcon, ReplyAllIcon, ReplyIcon, ShieldIcon, SpamIcon, TrashIcon } from './icons.jsx';
+import { BackButton, EnvelopeIcon, FlagIcon, ForwardIcon, MoreIcon, MoveIcon, ReplyAllIcon, ReplyIcon, ShieldIcon, SpamIcon, TrashIcon } from './icons.jsx';
 import { junkFolder, splitReader } from './quickActions.js';
 import { openPaywall } from './premium.js';
 import { useInlineImages, withInlineImages } from './inlineImages.js';
@@ -502,9 +502,7 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
     <section className="mv-viewer" aria-modal="true" role="dialog" aria-label={displayText(row.subject, t('common.noSubject'))}>
       <div className="mv-viewer__top">
         <header className="mv-viewer__bar">
-          <button type="button" className="mv-viewer__back" data-mv-viewer-close style={{ minHeight: '44px', minWidth: '44px' }} onClick={onClose}>
-            {t('common.back')}
-          </button>
+          <BackButton className="mv-viewer__back" data-mv-viewer-close onClick={onClose} />
           {trackerCount > 0 && <TrackerShield count={trackerCount} stripped={Boolean(body.trackersStripped)} onOpen={() => setTrackerList(true)} />}
           <KeepButton accountId={accountId} folder={folder} row={row} />
         </header>

@@ -25,6 +25,7 @@ import { useT } from './i18n.js';
 import { useKeyboardViewport } from './keyboardViewport.js';
 import { parseSearchQuery } from '../utils/searchQuery.js';
 import { Button } from '../components/ui/Button.jsx';
+import { SearchIcon } from './icons.jsx';
 
 /** Quiet time after the last keystroke before the search runs. */
 export const SEARCH_DEBOUNCE_MS = 250;
@@ -37,14 +38,6 @@ export const SERVER_AUTO_DELAY_MS = 1000;
 export const AUTO_ROWS = 300;
 
 const keyOf = (r) => `${r.accountId}/${r.folder}/${r.uid}`;
-
-function SearchIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="11" cy="11" r="6.5" /><path d="m20 20-4.2-4.2" />
-    </svg>
-  );
-}
 
 export default function Search({ onOpen, onSwipe: swipeAction, onClose, initialQuery = '' }) {
   const t = useT();
@@ -236,7 +229,7 @@ export default function Search({ onOpen, onSwipe: swipeAction, onClose, initialQ
             onChange={(e) => setQuery(e.target.value)}
           />
         </form>
-        <button type="button" className="mv-compose__back" onClick={onClose}>{t('common.cancel')}</button>
+        <Button variant="link" size="touch" className="flex-none font-semibold" onClick={onClose}>{t('common.cancel')}</Button>
       </header>
       <div className="mv-search__scopes" role="group" aria-label={t('mobile.search.scope')}>
         {folder && (
