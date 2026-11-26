@@ -9,6 +9,7 @@ import { Check, Columns, Rows } from 'lucide-react';
 import { SettingRow } from '../../ui/SettingRow';
 import { ToggleSwitch } from '../../ui/ToggleSwitch';
 import { SidebarLayoutPreview, WorkspacePreviewView } from './PreviewViews';
+import { SIDEBAR_LAYOUTS } from '../../../stores/settingsStore';
 import { useT } from './viewContext';
 
 const PREVIEW_LINE_CHOICES = [[0, 'listPreview.off'], [1, 'listPreview.one'], [2, 'listPreview.two'], [3, 'listPreview.three']];
@@ -74,7 +75,7 @@ export function WorkspaceView({ values, onChange, rows = WORKSPACE_ROWS, windowI
         return key === 'sidebarLayout' ? (
           <SettingRow key={key} label={t('workspace.sidebarLayout')} className="sidebar-layout-setting">
             <div role="group" className="sidebar-layout-choices">
-              {['stacked', 'split', 'switcher'].map(value => {
+              {SIDEBAR_LAYOUTS.map(value => {
                 const suffix = value[0].toUpperCase() + value.slice(1);
                 const label = t(`workspace.sidebarLayout${suffix}`);
                 const hintId = `${choiceId}-${value}-hint`;

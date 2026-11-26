@@ -228,4 +228,19 @@ describe('appearance step', () => {
     expect(onContinue).toHaveBeenCalledOnce();
     expect(useSettingsStore.getState()).toMatchObject({ sidebarStyle: 'tagcloud', afterDeleteSelect: 'next', emailRowHighlight: 'selection' });
   });
+  it('offers every sidebar layout on the Layout tab, folders under the account included', () => {
+    useSettingsStore.setState({ viewStyle: 'chat' });
+    render(<AppearanceStep onContinue={() => {}} />);
+    fireEvent.click(tab('layout'));
+    const group = screen.getByTestId('appearance-control-sidebar-layout');
+    expect(within(group).getAllByRole('button').map(b => b.dataset.testid))
+      .toEqual(['appearance-sidebar-layout-stacked', 'appearance-sidebar-layout-split', 'appearance-sidebar-layout-switcher', 'appearance-sidebar-layout-nested']);
+    for (const button of within(group).getAllByRole('button')) expect(button.disabled).toBe(false);
+    fireEvent.click(screen.getByTestId('appearance-sidebar-layout-nested'));
+    expect(useSettingsStore.getState().sidebarLayout).toBe('nested');
+    expect(screen.getByTestId('appearance-sidebar-layout-nested').getAttribute('aria-pressed')).toBe('true');
+    expect(within(group).getByText(t('workspace.sidebarLayoutNestedHint'))).toBeTruthy();
+    fireEvent.click(screen.getByTestId('appearance-recommended'));
+    expect(useSettingsStore.getState().sidebarLayout).toBe('stacked');
+  });
 });

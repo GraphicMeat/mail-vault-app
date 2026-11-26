@@ -3822,6 +3822,8 @@
   "workspace.listDensityComfortableHint": "Righe dei messaggi più alte, con più spazio intorno a ogni riga.",
   "workspace.listDensityCompactHint": "Righe dei messaggi più basse, così sullo schermo sta una parte maggiore dell’elenco.",
   "workspace.sidebarLayout": "Layout della barra laterale",
+  "workspace.sidebarLayoutNested": "Cartelle sotto l’account",
+  "workspace.sidebarLayoutNestedHint": "Le cartelle si aprono subito sotto l’account selezionato.",
   "workspace.sidebarLayoutSplit": "Sezioni separate",
   "workspace.sidebarLayoutSplitHint": "Scorri account e cartelle separatamente. Entrambi restano visibili.",
   "workspace.sidebarLayoutStacked": "In colonna",

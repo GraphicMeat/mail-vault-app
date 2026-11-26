@@ -3822,6 +3822,8 @@
   "workspace.listDensityComfortableHint": "Filas de mensajes más altas, con más espacio alrededor de cada línea.",
   "workspace.listDensityCompactHint": "Filas de mensajes más bajas, para que quepa más de la lista en la pantalla.",
   "workspace.sidebarLayout": "Diseño de la barra lateral",
+  "workspace.sidebarLayoutNested": "Carpetas bajo la cuenta",
+  "workspace.sidebarLayoutNestedHint": "Las carpetas se abren justo debajo de la cuenta seleccionada.",
   "workspace.sidebarLayoutSplit": "Secciones separadas",
   "workspace.sidebarLayoutSplitHint": "Desplaza cuentas y carpetas por separado. Ambas siguen visibles.",
   "workspace.sidebarLayoutStacked": "Apilado",

@@ -14,12 +14,12 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-it('shows all three structural examples before any choice is changed', () => {
+it('shows all four structural examples before any choice is changed', () => {
   render(<WorkspaceSettings windowIsNarrow={false} />);
   const group = screen.getByRole('group', { name: 'workspace.sidebarLayout' });
   const buttons = within(group).getAllByRole('button');
-  expect(buttons).toHaveLength(3);
-  for (const layout of ['stacked', 'split', 'switcher']) {
+  expect(buttons).toHaveLength(4);
+  for (const layout of ['stacked', 'split', 'switcher', 'nested']) {
     const sample = group.querySelector(`[data-sidebar-layout-preview="${layout}"]`);
     expect(sample).not.toBeNull();
     expect(sample.querySelectorAll('.sidebar-layout-sample-row').length).toBeGreaterThan(3);
@@ -30,7 +30,7 @@ it('shows all three structural examples before any choice is changed', () => {
 it('changes the saved layout while leaving folder style and reading preferences alone', () => {
   render(<WorkspaceSettings windowIsNarrow={false} />);
   const group = screen.getByRole('group', { name: 'workspace.sidebarLayout' });
-  for (const [name, value] of [['workspace.sidebarLayoutSplit', 'split'], ['workspace.sidebarLayoutSwitcher', 'switcher'], ['workspace.sidebarLayoutStacked', 'stacked']]) {
+  for (const [name, value] of [['workspace.sidebarLayoutSplit', 'split'], ['workspace.sidebarLayoutSwitcher', 'switcher'], ['workspace.sidebarLayoutNested', 'nested'], ['workspace.sidebarLayoutStacked', 'stacked']]) {
     fireEvent.click(within(group).getByRole('button', { name }));
     expect(useSettingsStore.getState().sidebarLayout).toBe(value);
     expect(within(group).getByRole('button', { name }).getAttribute('aria-pressed')).toBe('true');
@@ -46,7 +46,7 @@ it('keeps sidebar alternatives usable in Chat and explains every option', () => 
   useSettingsStore.setState({ viewStyle: 'chat' });
   render(<WorkspaceSettings windowIsNarrow />);
   const group = screen.getByRole('group', { name: 'workspace.sidebarLayout' });
-  for (const label of ['Stacked', 'Split', 'Switcher']) {
+  for (const label of ['Stacked', 'Split', 'Switcher', 'Nested']) {
     const button = within(group).getByRole('button', { name: `workspace.sidebarLayout${label}` });
     expect(button.disabled).toBe(false);
     const hint = document.getElementById(button.getAttribute('aria-describedby'));

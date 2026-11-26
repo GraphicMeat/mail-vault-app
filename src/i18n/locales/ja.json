@@ -3822,6 +3822,8 @@
   "workspace.listDensityComfortableHint": "メッセージの行を高めにし、各行の周りに余白をとります。",
   "workspace.listDensityCompactHint": "メッセージの行を低くし、一覧をより多く画面に表示します。",
   "workspace.sidebarLayout": "サイドバーのレイアウト",
+  "workspace.sidebarLayoutNested": "アカウントの下にフォルダ",
+  "workspace.sidebarLayoutNestedHint": "選択したアカウントのすぐ下にフォルダが開きます。",
   "workspace.sidebarLayoutSplit": "セクション分割",
   "workspace.sidebarLayoutSplitHint": "アカウントとフォルダを別々にスクロールし、両方を常に表示します。",
   "workspace.sidebarLayoutStacked": "縦並び",

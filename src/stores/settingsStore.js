@@ -67,7 +67,9 @@ export const DEFAULT_SHORTCUTS = {
 //
 // Exported (test-only name) so a spec can exercise the shortcut-merge
 // behaviour directly, without standing up zustand/persist's storage plumbing.
-const normalizeSidebarLayout = layout => ['split', 'switcher'].includes(layout) ? layout : 'stacked';
+// Settings and onboarding list them in this order.
+export const SIDEBAR_LAYOUTS = ['stacked', 'split', 'switcher', 'nested'];
+const normalizeSidebarLayout = layout => SIDEBAR_LAYOUTS.includes(layout) ? layout : 'stacked';
 const normalizeSidebarDensity = density => density === 'compact' ? 'compact' : 'comfortable';
 // The message list's rows, the same two choices apart from the sidebar's.
 const normalizeListDensity = density => density === 'compact' ? 'compact' : 'comfortable';
@@ -629,7 +631,7 @@ export const useSettingsStore = create(
       recentSearchesCollapsed: false, // Whether the search box's recent searches are folded away
       sidebarAccountsRatio: 0.4, // Maximum account share of the navigation area (0.1 - 0.85)
       sidebarStyle: 'list', // 'list' | 'tagcloud' — folder rows or wrapped bubble tags
-      sidebarLayout: 'stacked', // 'stacked' | 'split' | 'switcher' — account and folder arrangement
+      sidebarLayout: 'stacked', // 'stacked' | 'split' | 'switcher' | 'nested' (folders under the selected account)
       sidebarDensity: 'comfortable', // 'comfortable' | 'compact' — independent of layout and folder style
       folderIconStyle: 'colorful', // 'colorful' | 'theme' — a colour per folder role, or the one theme accent
       folderIconColors: {}, // `${accountId}|${path}` -> '#rrggbb', a colour picked for one folder

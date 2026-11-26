@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ArrowRight, Moon, Sun } from 'lucide-react';
-import { useSettingsStore } from '../../stores/settingsStore';
+import { useSettingsStore, SIDEBAR_LAYOUTS } from '../../stores/settingsStore';
 import { useThemeStore, PALETTES } from '../../stores/themeStore';
 import { useT } from '../../i18n/index.js';
 import { Button } from '../ui/Button';
@@ -68,6 +68,11 @@ export function AppearanceStep({ onContinue }) {
   const groups = section === 'layout' ? [
     { id: 'view', key: 'viewStyle', setter: 'setViewStyle', label: 'workspace.mailExperience', options: [['list', 'workspace.emailView', 'workspace.emailViewHint'], ['chat', 'workspace.chatView', 'workspace.chatViewHint']] },
     { id: 'layout', key: 'layoutMode', setter: 'setLayoutMode', label: 'workspace.readingPane', disabled: chat, options: [['three-column', 'workspace.besideList', 'workspace.besideListHint'], ['two-column', 'workspace.belowList', 'workspace.belowListHint']] },
+    // Same choices as Settings; the sidebar works the same in the chat view.
+    { id: 'sidebar-layout', key: 'sidebarLayout', setter: 'setSidebarLayout', label: 'workspace.sidebarLayout', options: SIDEBAR_LAYOUTS.map(value => {
+      const suffix = value[0].toUpperCase() + value.slice(1);
+      return [value, `workspace.sidebarLayout${suffix}`, `workspace.sidebarLayout${suffix}Hint`];
+    }) },
   ] : section === 'reading' ? [
     { id: 'density', key: 'emailListStyle', setter: 'setEmailListStyle', label: 'workspace.messageRows', disabled: chat, options: [['compact', 'workspace.twoLineRows', 'workspace.twoLineRowsHint'], ['default', 'workspace.singleLineRows', 'workspace.singleLineRowsHint']] },
     { id: 'threads', key: 'threadMode', setter: 'setThreadMode', label: 'settings.appearance.threadMode', disabled: chat, options: [['grouped', 'settings.appearance.threadModeGrouped', 'settings.appearance.threadModeGroupedHint'], ['expandable', 'settings.appearance.threadModeExpandable', 'settings.appearance.threadModeExpandableHint'], ['flat', 'onboarding.separateMessages', 'settings.appearance.threadModeFlatHint']] },

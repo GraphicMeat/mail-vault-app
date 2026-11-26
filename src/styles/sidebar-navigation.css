@@ -67,8 +67,8 @@
 .sidebar-navigation-scroll[data-sidebar-layout="switcher"] { display: flex; flex-direction: column; overflow: hidden; gap: 16px; scrollbar-gutter: auto; }
 .sidebar-navigation-scroll[data-sidebar-layout="split"] .sidebar-account-section { display: flex; flex-direction: column; flex: 0 1 auto; min-height: 76px; max-height: 35%; }
 .sidebar-navigation-scroll[data-sidebar-layout="split"] .sidebar-account-list { min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; overscroll-behavior: contain; }
-.sidebar-navigation-scroll:not([data-sidebar-layout="stacked"]) .sidebar-folder-section { display: flex; flex-direction: column; flex: 1; min-height: 0; margin-top: 0; }
-.sidebar-navigation-scroll:not([data-sidebar-layout="stacked"]) .sidebar-folder-list { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; overscroll-behavior: contain; }
+.sidebar-navigation-scroll:is([data-sidebar-layout="split"], [data-sidebar-layout="switcher"]) .sidebar-folder-section { display: flex; flex-direction: column; flex: 1; min-height: 0; margin-top: 0; }
+.sidebar-navigation-scroll:is([data-sidebar-layout="split"], [data-sidebar-layout="switcher"]) .sidebar-folder-list { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; overscroll-behavior: contain; }
 .sidebar-navigation-scroll .sidebar-section-heading, .sidebar-navigation-scroll .sidebar-source-filter, .sidebar-navigation-scroll .sidebar-find-field { flex-shrink: 0; }
 .sidebar-switcher-section { flex-shrink: 0; }
 .sidebar-account-switcher { display: flex; flex: 1; align-items: center; min-width: 0; width: 100%; min-height: 48px; gap: 8px; padding: 8px; border: 1px solid var(--mail-border); border-radius: 8px; color: var(--mail-text); text-align: left; }
@@ -119,10 +119,10 @@
 
 /* In exceptionally short browser windows, keep every folder reachable. */
 @media (max-height: 520px) {
-  .sidebar-navigation-scroll:not([data-sidebar-layout="stacked"]) { display: block; overflow-y: auto; }
+  .sidebar-navigation-scroll:is([data-sidebar-layout="split"], [data-sidebar-layout="switcher"]) { display: block; overflow-y: auto; }
   .sidebar-navigation-scroll[data-sidebar-layout="split"] .sidebar-account-section { max-height: 160px; }
-  .sidebar-navigation-scroll:not([data-sidebar-layout="stacked"]) .sidebar-folder-section { margin-top: 16px; }
-  .sidebar-navigation-scroll:not([data-sidebar-layout="stacked"]) .sidebar-folder-list { flex: none; overflow: visible; }
+  .sidebar-navigation-scroll:is([data-sidebar-layout="split"], [data-sidebar-layout="switcher"]) .sidebar-folder-section { margin-top: 16px; }
+  .sidebar-navigation-scroll:is([data-sidebar-layout="split"], [data-sidebar-layout="switcher"]) .sidebar-folder-list { flex: none; overflow: visible; }
 }
 
 /* Density changes spacing without changing the account/folder arrangement.
@@ -135,7 +135,7 @@
 [data-sidebar-density="compact"] .sidebar-section-heading { min-height: 24px; margin-bottom: 2px; }
 [data-sidebar-density="compact"] .sidebar-folder-section > .sidebar-section-heading { min-height: 28px; }
 [data-sidebar-density="compact"] .sidebar-folder-section { margin-top: 8px; }
-[data-sidebar-density="compact"] .sidebar-navigation-scroll:not([data-sidebar-layout="stacked"]) .sidebar-folder-section { margin-top: 0; }
+[data-sidebar-density="compact"] .sidebar-navigation-scroll:is([data-sidebar-layout="split"], [data-sidebar-layout="switcher"]) .sidebar-folder-section { margin-top: 0; }
 [data-sidebar-density="compact"] .sidebar-navigation-scroll[data-sidebar-layout="split"] .sidebar-account-section { min-height: 60px; }
 [data-sidebar-density="compact"] .sidebar-account-row { --sidebar-avatar-size: 22px; min-height: 32px; margin-bottom: 0; border-radius: 6px; }
 [data-sidebar-density="compact"] .sidebar-account-open { min-height: 32px; gap: 8px; padding: 4px 8px; border-radius: 6px; }
@@ -165,7 +165,7 @@
 [data-sidebar-density="compact"] .sidebar-footer { padding: 4px 8px 6px; }
 
 @media (max-height: 520px) {
-  [data-sidebar-density="compact"] .sidebar-navigation-scroll:not([data-sidebar-layout="stacked"]) .sidebar-folder-section { margin-top: 8px; }
+  [data-sidebar-density="compact"] .sidebar-navigation-scroll:is([data-sidebar-layout="split"], [data-sidebar-layout="switcher"]) .sidebar-folder-section { margin-top: 8px; }
 }
 
 /* The unread filter went on in a folder that holds no unread mail: the open
@@ -194,3 +194,9 @@
 .sidebar-collapsed-group { position: relative; display: grid; place-items: center; flex: none; width: 36px; min-height: 32px; margin: 2px auto; border-radius: 8px; color: var(--mail-text-muted); font-size: 11px; font-weight: 700; }
 .sidebar-collapsed-group-count { position: absolute; inset-block-start: -3px; inset-inline-end: -5px; padding: 1px 3px; border-radius: 8px; background: var(--mail-accent-tint); color: var(--mail-accent-text); font-size: 9px; }
 .sidebar-collapsed-divider { width: 24px; height: 1px; background: var(--mail-border); margin: 4px auto; flex: none; }
+
+/* Folders under the selected account: the selector sits in the account list,
+   full width, between the selected row and the next one. */
+.sidebar-folder-selector-nested { margin: 6px 0 10px; }
+.sidebar-folder-selector-nested .sidebar-folder-list { overflow: visible; }
+[data-sidebar-density="compact"] .sidebar-folder-selector-nested { margin: 4px 0 6px; }

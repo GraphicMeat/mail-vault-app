@@ -36,10 +36,10 @@ beforeEach(() => {
     displayNames: { studio: 'Design studio' }, hiddenAccounts: { hidden: true },
     accountOrder: [], accountColors: {}, unreadPerAccount: { personal: 3 },
     expandedFolders: {}, transferHoverEnabled: false, billingProfile: null,
-    lastMailboxPerAccount: { personal: 'Archive' },
+    lastMailboxPerAccount: { personal: 'Archive' }, accountGroups: {},
   });
   useMailStore.setState({
-    accounts, activeAccountId: 'studio', activeMailbox: 'INBOX', unifiedInbox: false,
+    accounts, activeAccountId: 'studio', activeMailbox: 'INBOX', unifiedInbox: false, unifiedGroup: null,
     mailboxes, emails: [], localEmails: [], connectionStatus: 'connected',
     connectionError: null, connectionErrorType: null, suspectEmptyServerData: null,
     loading: false, loadingMore: false, totalEmails: 0, viewMode: 'all', folderStatus: {},
@@ -156,7 +156,7 @@ describe('Sidebar layouts', () => {
     expect(screen.getAllByRole('button', { name: t('sidebar.enterPassword') })).toHaveLength(1);
   });
 
-  it.each(['stacked', 'split', 'switcher'])('clears folder search when the account changes in %s', layout => {
+  it.each(['stacked', 'split', 'switcher', 'nested'])('clears folder search when the account changes in %s', layout => {
     useSettingsStore.setState({ sidebarLayout: layout });
     render(<Sidebar />);
     const search = screen.getByRole('searchbox', { name: t('sidebar.findFolder') });
@@ -166,6 +166,76 @@ describe('Sidebar layouts', () => {
     expect(screen.getByTestId('folder-row').dataset.path).toBe('INBOX');
   });
 
+
+  describe('folders under the account', () => {
+    const selector = () => screen.getByTestId('folder-selector');
+    const before = (a, b) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    const row = name => screen.getByRole('button', { name: new RegExp(`^${name}`) }).closest('.sidebar-account-row');
+
+    it('saves the layout through the store', () => {
+      useSettingsStore.getState().setSidebarLayout('nested');
+      expect(useSettingsStore.getState().sidebarLayout).toBe('nested');
+    });
+
+    it('opens the folder selector right below the selected account, with no Folders section', () => {
+      useSettingsStore.setState({ sidebarLayout: 'nested' });
+      render(<Sidebar />);
+      const list = screen.getByTestId('sidebar-account-list');
+      expect(list.contains(selector())).toBe(true);
+      expect(screen.getAllByTestId('folder-selector')).toHaveLength(1);
+      expect(screen.queryByRole('heading', { name: t('sidebar.folders') })).toBeNull();
+      expect(before(row('Design studio'), selector())).toBe(true);
+      expect(before(selector(), row('Personal'))).toBe(true);
+      expect(within(selector()).getByRole('group', { name: t('sidebar.mailSource') })).toBeTruthy();
+      expect(within(selector()).getByRole('searchbox', { name: t('sidebar.findFolder') })).toBeTruthy();
+      expect(within(selector()).getByText('Project 11')).toBeTruthy();
+    });
+
+    it('puts New folder on the selected account row', () => {
+      useSettingsStore.setState({ sidebarLayout: 'nested' });
+      render(<Sidebar />);
+      const button = screen.getByTestId('new-folder-btn');
+      expect(row('Design studio').contains(button)).toBe(true);
+      expect(row('Personal').querySelector('[data-testid="new-folder-btn"]')).toBeNull();
+    });
+
+    it('moves under the next account picked', () => {
+      useSettingsStore.setState({ sidebarLayout: 'nested' });
+      render(<Sidebar />);
+      act(() => useMailStore.setState({ activeAccountId: 'personal', mailboxes: [{ name: 'INBOX', path: 'INBOX' }] }));
+      expect(before(row('Personal'), selector())).toBe(true);
+      expect(before(row('Design studio'), selector())).toBe(true);
+      expect(row('Personal').querySelector('[data-testid="new-folder-btn"]')).toBeTruthy();
+      expect(within(selector()).getByTestId('folder-row').dataset.path).toBe('INBOX');
+    });
+
+    it('opens the All Inboxes folders below the All Inboxes row', () => {
+      useSettingsStore.setState({ sidebarLayout: 'nested' });
+      useMailStore.setState({ unifiedInbox: true, unifiedFolder: 'INBOX' });
+      render(<Sidebar />);
+      expect(before(screen.getByTestId('all-inboxes-btn'), selector())).toBe(true);
+      expect(before(selector(), row('Design studio'))).toBe(true);
+      expect(within(selector()).getByText(t('sidebar.inbox'))).toBeTruthy();
+      expect(screen.queryByTestId('new-folder-btn')).toBeNull();
+    });
+
+    it('opens a group inbox's folders below that group's header', () => {
+      useSettingsStore.setState({ sidebarLayout: 'nested', accountGroups: { studio: 'Work', personal: 'Work' } });
+      useMailStore.setState({ unifiedInbox: true, unifiedGroup: 'Work', unifiedFolder: 'INBOX' });
+      render(<Sidebar />);
+      const group = screen.getByRole('group', { name: 'Work' });
+      expect(group.contains(selector())).toBe(true);
+      expect(before(selector(), row('Design studio'))).toBe(true);
+      expect(before(screen.getByTestId('all-inboxes-btn'), selector())).toBe(true);
+      expect(screen.getAllByTestId('folder-selector')).toHaveLength(1);
+    });
+
+    it('keeps the stacked Folders section for the other layouts', () => {
+      render(<Sidebar />);
+      expect(screen.getByRole('heading', { name: t('sidebar.folders') })).toBeTruthy();
+      expect(screen.getByTestId('sidebar-account-list').contains(selector())).toBe(false);
+    });
+  });
 
   it('finds and opens an exact folder and preserves the query while refreshing a small result list', () => {
     useSettingsStore.setState({ sidebarLayout: 'split' });

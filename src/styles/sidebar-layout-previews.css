@@ -154,3 +154,9 @@
   .sidebar-layout-sample { width: 45%; height: 176px; }
   .sidebar-layout-choice-copy { flex: 1; min-width: 0; }
 }
+
+/* Folders under the account: the selected account's folders follow its row. */
+.sidebar-layout-sample-nested .sidebar-layout-sample-accounts { flex: 1; min-height: 0; overflow: hidden; }
+.sidebar-layout-sample-nested .sidebar-layout-sample-active { background: var(--mail-surface-hover); color: var(--mail-text); }
+.sidebar-layout-sample-nested .sidebar-layout-sample-active .sidebar-layout-sample-avatar { color: inherit; }
+.sidebar-layout-sample-current { border-radius: 4px; background: var(--mail-accent-tint); color: var(--mail-accent-text); }

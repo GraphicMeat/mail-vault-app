@@ -159,7 +159,17 @@ export function SidebarLayoutPreview({ layout }) {
   return <span className={`sidebar-layout-sample sidebar-layout-sample-${layout}`} data-sidebar-layout-preview={layout} aria-hidden="true">
     <span className="sidebar-layout-sample-header">MailVault<span>···</span></span>
     <span className="sidebar-layout-sample-body">
-      {layout === 'switcher' ? <span className="sidebar-layout-sample-switcher">
+      {layout === 'nested' ? <span className="sidebar-layout-sample-accounts sidebar-layout-sample-scroll">
+        <span className="sidebar-layout-sample-heading">{t('workspace.accounts')}</span>
+        {accountRows.slice(0, 3).map((name, index) => <React.Fragment key={name}>
+          <span className={`sidebar-layout-sample-row ${index === 0 ? 'sidebar-layout-sample-active' : ''}`}>
+            <span className="sidebar-layout-sample-avatar">{name[0]}</span><span>{name}</span>
+          </span>
+          {index === 0 && folders.slice(0, 3).map(([Icon, key], folder) => <span className={`sidebar-layout-sample-row sidebar-layout-sample-folder ${folder === 0 ? 'sidebar-layout-sample-current' : ''}`} key={key}>
+            <Icon size={13} /><span>{t(key)}</span>
+          </span>)}
+        </React.Fragment>)}
+      </span> : layout === 'switcher' ? <span className="sidebar-layout-sample-switcher">
         <span className="sidebar-layout-sample-avatar">P</span><span>Prime Cut Studio</span><ChevronDown size={13} />
       </span> : <span className="sidebar-layout-sample-accounts sidebar-layout-sample-scroll">
         <span className="sidebar-layout-sample-heading">{t('workspace.accounts')}</span>
@@ -167,12 +177,12 @@ export function SidebarLayoutPreview({ layout }) {
           <span className="sidebar-layout-sample-avatar">{name[0]}</span><span>{name}</span>
         </span>)}
       </span>}
-      <span className="sidebar-layout-sample-folders sidebar-layout-sample-scroll">
+      {layout !== 'nested' && <span className="sidebar-layout-sample-folders sidebar-layout-sample-scroll">
         <span className="sidebar-layout-sample-heading">{t('sidebar.folders')}</span>
         {folders.map(([Icon, key], index) => <span className={`sidebar-layout-sample-row ${index === 0 ? 'sidebar-layout-sample-active' : ''}`} key={key}>
           <Icon size={13} /><span>{t(key)}</span>
         </span>)}
-      </span>
+      </span>}
     </span>
   </span>;
 }

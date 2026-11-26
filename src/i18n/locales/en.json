@@ -3826,6 +3826,8 @@
   "workspace.listDensityComfortableHint": "Taller message rows with more space around each line.",
   "workspace.listDensityCompactHint": "Shorter message rows, so more of the list fits on screen.",
   "workspace.sidebarLayout": "Sidebar layout",
+  "workspace.sidebarLayoutNested": "Folders under account",
+  "workspace.sidebarLayoutNestedHint": "Folders open right below the selected account.",
   "workspace.sidebarLayoutSplit": "Split sections",
   "workspace.sidebarLayoutSplitHint": "Scroll accounts and folders separately. Both stay in view.",
   "workspace.sidebarLayoutStacked": "Stacked",

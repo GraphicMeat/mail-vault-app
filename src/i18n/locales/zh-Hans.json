@@ -3822,6 +3822,8 @@
   "workspace.listDensityComfortableHint": "邮件行更高，每行周围留出更多空间。",
   "workspace.listDensityCompactHint": "邮件行更矮，屏幕上可显示更多列表内容。",
   "workspace.sidebarLayout": "侧边栏布局",
+  "workspace.sidebarLayoutNested": "账户下方的文件夹",
+  "workspace.sidebarLayoutNestedHint": "文件夹在所选账户正下方展开。",
   "workspace.sidebarLayoutSplit": "分区显示",
   "workspace.sidebarLayoutSplitHint": "账户和文件夹分别滚动，两者始终可见。",
   "workspace.sidebarLayoutStacked": "上下排列",

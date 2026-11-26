@@ -3822,6 +3822,8 @@
   "workspace.listDensityComfortableHint": "메시지 행을 더 높게 하고 각 줄 주위에 여백을 둡니다.",
   "workspace.listDensityCompactHint": "메시지 행을 더 낮게 하여 목록을 화면에 더 많이 표시합니다.",
   "workspace.sidebarLayout": "사이드바 레이아웃",
+  "workspace.sidebarLayoutNested": "계정 아래 폴더",
+  "workspace.sidebarLayoutNestedHint": "선택한 계정 바로 아래에 폴더가 열립니다.",
   "workspace.sidebarLayoutSplit": "영역 분리",
   "workspace.sidebarLayoutSplitHint": "계정과 폴더를 따로 스크롤하며 둘 다 계속 표시합니다.",
   "workspace.sidebarLayoutStacked": "세로 배치",

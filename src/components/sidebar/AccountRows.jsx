@@ -106,7 +106,7 @@ export const CollapsedAccountButton = memo(function CollapsedAccountButton({
 /** Account identity is the same in both navigation styles. Folder style is independent. */
 export const ExpandedAccountRow = memo(function ExpandedAccountRow({
   account, label, isActive, color, initial, unifiedInbox, connectionStatus,
-  unreadCount, onActivate, onActivateInbox, onOpenBackup, insightsOpen = false,
+  unreadCount, onActivate, onActivateInbox, onOpenBackup, insightsOpen = false, trailing = null,
 }) {
   const t = useT();
   const pa = usePrivateAttr();
@@ -136,6 +136,7 @@ export const ExpandedAccountRow = memo(function ExpandedAccountRow({
         </span>
       </button>
       <BackupStatusIcon accountId={account.id} onClick={onOpenBackup} />
+      {trailing}
     </div>
   );
 });

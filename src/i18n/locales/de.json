@@ -3822,6 +3822,8 @@
   "workspace.listDensityComfortableHint": "Höhere Nachrichtenzeilen mit mehr Abstand um jede Zeile.",
   "workspace.listDensityCompactHint": "Niedrigere Nachrichtenzeilen, damit mehr von der Liste auf den Bildschirm passt.",
   "workspace.sidebarLayout": "Seitenleistenlayout",
+  "workspace.sidebarLayoutNested": "Ordner unter dem Konto",
+  "workspace.sidebarLayoutNestedHint": "Ordner öffnen sich direkt unter dem ausgewählten Konto.",
   "workspace.sidebarLayoutSplit": "Getrennte Bereiche",
   "workspace.sidebarLayoutSplitHint": "Konten und Ordner getrennt scrollen. Beide bleiben sichtbar.",
   "workspace.sidebarLayoutStacked": "Untereinander",

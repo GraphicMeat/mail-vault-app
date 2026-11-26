@@ -21,7 +21,8 @@ import { formatBytes } from '../utils/formatBytes';
 import { formatCount } from '../utils/formatCount';
 import { lastDaysSeries } from '../utils/transferSeries';
 import { t as tr, useT } from '../i18n/index.js';
-import { FolderTree, FolderBubbles } from './FolderTree';
+import { FolderTree } from './FolderTree';
+import { FolderSelector, NewFolderButton } from './sidebar/FolderSelector';
 import { AccountChooser } from './sidebar/AccountChooser';
 import { AccountSections } from './sidebar/AccountSections';
 import { UnifiedFolderList } from './sidebar/UnifiedFolderList';
@@ -57,8 +58,6 @@ import {
   Settings,
   Bug,
   HardDrive,
-  Cloud,
-  Layers,
   PenSquare,
   Sun,
   Moon,
@@ -68,7 +67,6 @@ import {
   Loader,
   Gift,
   ChevronDown,
-  Search,
   Clock,
 } from 'lucide-react';
 
@@ -306,7 +304,6 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   // STATUS counts for the folders that are not open. Keyed by account, and
   // `mailboxes` is the ACTIVE account's list, so that is the key to read.
   const folderStatus = useAccountStore(s => s.folderStatus);
-  const viewMode = useUiStore(s => s.viewMode);
   const connectionStatus = useAccountStore(s => s.connectionStatus);
   const connectionError = useAccountStore(s => s.connectionError);
   const connectionErrorType = useAccountStore(s => s.connectionErrorType);
@@ -344,7 +341,6 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
     },
     [activateAccount, onOpenMail],
   );
-  const setViewMode = useUiStore(s => s.setViewMode);
   const retryKeychainAccess = useAccountStore(s => s.retryKeychainAccess);
   const unreadPerAccount = useSettingsStore(s => s.unreadPerAccount);
   const unreadFlash = useUiStore(s => s.unreadFlash);
@@ -366,7 +362,6 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   const hiddenAccounts = useSettingsStore(s => s.hiddenAccounts);
   const sidebarCollapsed = useSettingsStore(s => s.sidebarCollapsed);
   const toggleSidebarCollapsed = useSettingsStore(s => s.toggleSidebarCollapsed);
-  const sidebarStyle = useSettingsStore(s => s.sidebarStyle);
   const sidebarLayout = useSettingsStore(s => s.sidebarLayout) || 'stacked';
   const sidebarDensity = useSettingsStore(s => s.sidebarDensity) || 'comfortable';
   const accountOrder = useSettingsStore(s => s.accountOrder);
@@ -383,7 +378,6 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   // frame becomes a visible flash. Comparing against the current account makes
   // it false in the switching render itself.
   const [errorReadyFor, setErrorReadyFor] = useState(null);
-  const [folderQuery, setFolderQuery] = useState('');
   const [chooserPosition, setChooserPosition] = useState(null);
   const accountTriggerRef = useRef(null);
 
@@ -506,7 +500,6 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   const unifiedGroup = useAccountStore(s => s.unifiedGroup);
   const setUnifiedInbox = useAccountStore(s => s.setUnifiedInbox);
 
-  useEffect(() => { setFolderQuery(''); }, [activeAccountId, unifiedInbox]);
   useEffect(() => { setChooserPosition(null); }, [sidebarLayout, sidebarCollapsed, activeAccountId, unifiedInbox]);
 
   const orderedAccounts = useMemo(
@@ -517,8 +510,6 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   const groupNav = useAccountGroupNav(sections, accounts, mailHidden, onOpenMail);
   const collapsed = sidebarCollapsed;
   const showUnifiedInbox = orderedAccounts.length >= 2;
-  const tagCloud = sidebarStyle === 'tagcloud';
-  const Folders = tagCloud ? FolderBubbles : FolderTree;
   const activeAccount = orderedAccounts.find(a => a.id === activeAccountId);
 
   const folderTree = useMemo(() => buildMailboxTree(mailboxes), [mailboxes]);
@@ -919,6 +910,17 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
     setChooserPosition({ left: rect.left, top: rect.bottom + 6, width: Math.max(280, rect.width) });
   };
   const useSwitcher = sidebarLayout === 'switcher';
+  // Folders under the selected account: the same selector, mounted inside the
+  // account list right below that account (or All Inboxes), not in a section.
+  const nested = sidebarLayout === 'nested';
+  const openNewFolder = () => setNameDialog({ mode: 'create', node: null });
+  const renderFolderSelector = (heading = false) => (
+    <FolderSelector heading={heading} unifiedInbox={unifiedInbox} mailHidden={mailHidden} onOpenMail={onOpenMail}
+      onNewFolder={openNewFolder} accountId={activeAccountId} mailboxes={shownMailboxes}
+      activeMailbox={activeViewId || mailHidden ? null : activeMailbox} expanded={expandedFolders}
+      onToggle={toggleFolder} onSelect={selectFolder} counts={folderStatus?.[activeAccountId]}
+      onContextMenu={onFolderContextMenu} flash={unreadFlash} onFlashEnd={clearUnreadFlash} />
+  );
   const renderUnifiedRow = (chooser = false) => showUnifiedInbox && (
     <button type="button" data-account-choice data-testid="all-inboxes-btn" aria-current={unifiedInbox && !unifiedGroup && !mailHidden && !activeViewId ? 'true' : undefined}
       className={`sidebar-account-row sidebar-unified-row ${unifiedInbox && !unifiedGroup && !mailHidden && !activeViewId ? 'sidebar-account-selected' : ''}`}
@@ -948,7 +950,8 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
           const lastMailbox = useSettingsStore.getState().getLastMailbox(account.id);
           openMailFolder(account.id, lastMailbox || 'INBOX');
         }}
-        onOpenBackup={id => { if (chooser) closeChooser(); onOpenBackup?.(id); }} />
+        onOpenBackup={id => { if (chooser) closeChooser(); onOpenBackup?.(id); }}
+        trailing={nested && !chooser && !unifiedInbox && account.id === activeAccountId ? <NewFolderButton onClick={openNewFolder} /> : null} />
     </div>
   );
   // Keyed by account: switching accounts must swap the notice, not collapse it.
@@ -1070,10 +1073,14 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
             </div>
             <div className="sidebar-account-list" data-testid="sidebar-account-list">
               {renderUnifiedRow()}
+              {nested && unifiedInbox && !unifiedGroup && renderFolderSelector()}
               {insightsEntry}
-              <AccountSections sections={sections} {...groupNav} onOpenGroup={groupNav.openGroup} onToggleGroup={groupNav.toggleGroup} renderAccount={account => <React.Fragment key={account.id}>
+              <AccountSections sections={sections} {...groupNav} onOpenGroup={groupNav.openGroup} onToggleGroup={groupNav.toggleGroup}
+                renderAfterHeader={nested && unifiedInbox && unifiedGroup ? name => name === unifiedGroup && renderFolderSelector() : undefined}
+                renderAccount={account => <React.Fragment key={account.id}>
                 {renderAccount(account)}
                 {account.id === activeAccountId && renderAccountNotice(account)}
+                {nested && !unifiedInbox && account.id === activeAccountId && renderFolderSelector()}
               </React.Fragment>} />
               {orderedAccounts.length === 0 && <Button variant="ghost" fullWidth className="justify-start" size="sm" onClick={onAddAccount} data-testid="add-account-btn"><Plus size={16} />{t('sidebar.addAccount')}</Button>}
               <BackupIndicator onOpenBackup={onOpenBackup} />
@@ -1081,37 +1088,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
           </>}
         </section>
 
-        <section className="sidebar-folder-section" aria-label={t('sidebar.folders')}>
-          <div className="sidebar-section-heading">
-            <h2>{t('sidebar.folders')}</h2>
-            {!unifiedInbox && <Button variant="ghost" icon size="xs" data-testid="new-folder-btn" aria-label={t('sidebar.newFolder')} title={t('sidebar.newFolder')} onClick={() => setNameDialog({ mode: 'create', node: null })}><Plus size={14} /></Button>}
-          </div>
-          <div className="sidebar-source-filter" role="group" aria-label={t('sidebar.mailSource')}>
-            {[
-              { id: 'all', icon: Layers, label: t('sidebar.allMail') },
-              { id: 'server', icon: Cloud, label: t('sidebar.viewServer') },
-              { id: 'local', icon: HardDrive, label: t('sidebar.viewVault') },
-            ].map(mode => (
-              <button key={mode.id} type="button" onClick={() => { onOpenMail?.(); setViewMode(mode.id); }} aria-pressed={viewMode === mode.id}
-                title={t(`workspace.sourceHint.${mode.id}`)}>
-                <mode.icon size={13} aria-hidden="true" /><span>{mode.label}</span>
-              </button>
-            ))}
-          </div>
-          <label className="sidebar-find-field">
-            <Search size={14} aria-hidden="true" />
-            <input type="search" value={folderQuery} onChange={event => setFolderQuery(event.target.value)}
-              aria-label={t('sidebar.findFolder')} placeholder={t('sidebar.findFolder')} />
-          </label>
-          <div className="sidebar-folder-list" data-testid="sidebar-folder-list">
-            {unifiedInbox ? <UnifiedFolderList tagCloud={tagCloud} onOpenMail={onOpenMail} mailHidden={mailHidden} searchQuery={folderQuery} /> : (
-              <Folders accountId={activeAccountId} mailboxes={shownMailboxes} activeMailbox={activeViewId || mailHidden ? null : activeMailbox} expanded={expandedFolders}
-                onToggle={toggleFolder} onSelect={selectFolder} counts={folderStatus?.[activeAccountId]}
-                onContextMenu={onFolderContextMenu} searchQuery={folderQuery}
-                flash={unreadFlash} onFlashEnd={clearUnreadFlash} />
-            )}
-          </div>
-        </section>
+        {!nested && renderFolderSelector(true)}
       </div>
       {chooserPosition && useSwitcher && <AccountChooser position={chooserPosition} onClose={closeChooser}
         sections={sections} displayNames={displayNames}

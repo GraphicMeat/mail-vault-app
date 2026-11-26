@@ -3822,6 +3822,8 @@
   "workspace.listDensityComfortableHint": "Linhas de mensagem mais altas, com mais espaço em volta de cada linha.",
   "workspace.listDensityCompactHint": "Linhas de mensagem mais baixas, para caber mais da lista na tela.",
   "workspace.sidebarLayout": "Layout da barra lateral",
+  "workspace.sidebarLayoutNested": "Pastas abaixo da conta",
+  "workspace.sidebarLayoutNestedHint": "As pastas abrem logo abaixo da conta selecionada.",
   "workspace.sidebarLayoutSplit": "Seções separadas",
   "workspace.sidebarLayoutSplitHint": "Role contas e pastas separadamente. Ambas continuam visíveis.",
   "workspace.sidebarLayoutStacked": "Empilhado",
