@@ -160,3 +160,7 @@
 .sidebar-layout-sample-nested .sidebar-layout-sample-active { background: var(--mail-surface-hover); color: var(--mail-text); }
 .sidebar-layout-sample-nested .sidebar-layout-sample-active .sidebar-layout-sample-avatar { color: inherit; }
 .sidebar-layout-sample-current { border-radius: 4px; background: var(--mail-accent-tint); color: var(--mail-accent-text); }
+
+/* The folder icon choice's sample: a few folders in the chosen colours. */
+.preview-folder-sample { display: grid; gap: 2px; max-width: 220px; padding: 6px 8px; border-radius: 8px; background: var(--mail-surface); }
+.preview-folder-sample-row { display: flex; align-items: center; gap: 8px; min-height: 26px; font-size: 0.8125rem; color: var(--mail-text); }

@@ -8,6 +8,7 @@
 import React from 'react';
 import { AlertCircle, Archive, ArrowLeft, CheckCircle2, ChevronDown, Cloud, FileText, Folder, Inbox, MousePointer2, Reply, Send } from 'lucide-react';
 import { listRowGround } from '../../../utils/listRowGround';
+import { folderIconColor } from '../../../utils/folderIconColor';
 import { AFTER_DELETE_SAMPLE, CONVERSATION_CONTACT, sampleConversation } from '../../../data/previewSamples.js';
 import { useViewEnv, useT } from './viewContext';
 import '../../../styles/sidebar-layout-previews.css';
@@ -82,6 +83,14 @@ function PanePreview({ below = false, chat = false, chatSample = null }) {
   </div>;
 }
 
+/** The folders the folder icon choice draws, as the sidebar and the phone's drawer draw them. */
+const FOLDER_SAMPLE = [
+  [Inbox, 'sidebar.inbox', { path: 'INBOX' }],
+  [Send, 'list.sent', { path: 'Sent', specialUse: '\\Sent' }],
+  [FileText, 'sidebar.drafts', { path: 'Drafts', specialUse: '\\Drafts' }],
+  [Archive, 'common.archive', { path: 'Archive', specialUse: '\\Archive' }],
+];
+
 /**
  * The example beside a Layout choice. `layoutMode`, `sidebarDensity`, `emailListStyle`,
  * `listDensity`, `listPreviewLines`: the other settings it is drawn with; `accounts`: sample
@@ -128,6 +137,13 @@ export function WorkspacePreviewView({ setting, value, label, disabled, layoutMo
     content = <div className={`preview-navigation ${value === 'tagcloud' ? 'preview-navigation-bubbles' : ''}`}>
       <div><span className="preview-pane-label">{t('workspace.accounts')}</span><span className="preview-nav-item preview-nav-active"><span className="preview-account-initial">P</span>Prime Cut Studio</span><span className="preview-nav-item"><span className="preview-account-initial">R</span>Rowan Marsh</span></div>
       <div className="preview-folder-navigation"><span className="preview-pane-label">{t('sidebar.folders')}</span><span className="preview-nav-item preview-nav-active"><Inbox aria-hidden="true" size={13} />{t('sidebar.inbox')}</span><span className="preview-nav-item"><Archive aria-hidden="true" size={13} />{t('common.archive')}</span><span className="preview-nav-item"><Send aria-hidden="true" size={13} />{t('list.sent')}</span></div>
+    </div>;
+  } else if (setting === 'folderIconStyle') {
+    // A few folders drawn as the sidebar and the phone's drawer draw them, in the chosen look.
+    content = <div className="preview-folder-sample" aria-hidden="true">
+      {FOLDER_SAMPLE.map(([Icon, key, node]) => <span key={key} className="preview-folder-sample-row">
+        <Icon size={15} style={{ color: folderIconColor(node, { style: value }) }} /><span>{t(key)}</span>
+      </span>)}
     </div>;
   } else if (setting === 'listPreviewLines' || setting === 'listDensity') {
     // One sample for both, in the row layout the list is set to, and under it (hidden) its tallest

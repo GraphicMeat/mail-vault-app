@@ -122,6 +122,7 @@ export const settingSearchGroups = [
     ['workspace.messageRows', 'message rows density compact single two lines'],
     ['workspace.listDensity', 'message list rows density compact comfortable spacing dense tight'],
     ['listPreview.title', 'preview snippet excerpt body text lines message list rows'],
+    ['workspace.folderIcons', 'folder icons color colorful theme accent drawer sidebar'],
     ['workspace.menuBar', 'menu bar menubar file logs hide linux title bar'],
   ] },
   { id: 'appearance', section: 'reading', sectionKey: 'settings.appearance.section.reading', settings: [
@@ -459,7 +460,7 @@ const ENGINE_GAPS = {
 const ON_PHONE = [
   'settings.appearance.theme', 'settings.colors.palette', 'settings.icons.title', 'settings.appearance.emailViewerTheme',
   'settings.text.size', 'settings.text.font',
-  'workspace.mailExperience', 'workspace.listDensity', 'listPreview.title',
+  'workspace.mailExperience', 'workspace.listDensity', 'listPreview.title', 'workspace.folderIcons',
   'settings.appearance.threadMode', 'settings.appearance.threadSortOrder', 'settings.appearance.signatureDisplay', 'settings.appearance.actionButtonStyle',
   'settings.appearance.dateFormat', 'settings.appearance.timeFormat',
   'quickActions.presets', 'quickActions.surface.reader', 'quickActions.layout', 'quickActions.surface.row', 'quickActions.surface.selection',

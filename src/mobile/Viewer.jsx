@@ -579,7 +579,7 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
         <QuickReplies accountId={accountId} folder={folder} uid={row.uid} onReply={(text) => startCompose('reply', text)} />
       )}
       <Toolbar bar={bar} more={moreActions} seen={seen} flagged={flagged} onRun={run} onMore={() => setMore(true)} />
-      {picking && <MovePicker folders={folders} current={folder} onPick={pick} onClose={closePicker} />}
+      {picking && <MovePicker accountId={accountId} folders={folders} current={folder} onPick={pick} onClose={closePicker} />}
       {trackerList && <TrackerSheet count={trackerCount} list={body?.trackerList || []} onClose={closeTrackers} />}
       {more && <MoreSheet actions={moreActions} seen={seen} flagged={flagged} onPick={run} onClose={closeMore} onSummarize={aiEnabled && hasContent ? summarize : null}
         onTags={() => { setMore(false); setTagging(true); }} />}

@@ -8,7 +8,8 @@
 //   email viewer's theme.
 // - Text: text size and font (prefs.js applyLook). Every font ships with the app; the phone
 //   downloads none, so desktop's "More fonts" is not here.
-// - Layout: mail view (with desktop's sample conversation for the chat view), list density and
+// - Layout: mail view (with desktop's sample conversation for the chat view), folder icons
+//   (colourful or theme; `folderIconStyle`), list density and
 //   preview lines (rowHeight, MessageRow.jsx), the pair sharing one sample drawn with the list's
 //   own row face (MessageRow.jsx RowFace) over sample messages, at the chosen text size.
 // - Reading: conversations, their order, signatures and the viewer toolbar's buttons.
@@ -99,8 +100,11 @@ function Text({ save }) {
   );
 }
 
-/** The layout rows a phone has: the mail view, and the list's density and preview lines. */
-const LAYOUT_ROWS = ['viewStyle', 'listDensity', 'listPreviewLines'];
+/** The layout rows a phone has: the mail view, the list's density and preview lines, and the folder icons. */
+const LAYOUT_ROWS = ['viewStyle', 'listDensity', 'listPreviewLines', 'folderIconStyle'];
+
+/** A folder's own colour is picked by holding it in the drawer, not by a right click. */
+const LAYOUT_HINTS = { 'folderIconStyle.colorful': 'mobile.drawer.folderIconsColorfulHint' };
 
 /** The list's sample: two rows as the list draws them, at `density` and `previewLines`. */
 function ListSample({ density, previewLines }) {
@@ -123,7 +127,7 @@ function ListSample({ density, previewLines }) {
 
 function Layout({ save }) {
   const prefs = useMobileStore((s) => s.prefs);
-  return <WorkspaceView values={prefs} rows={LAYOUT_ROWS} onChange={(key, value) => save({ [key]: value })}
+  return <WorkspaceView values={prefs} rows={LAYOUT_ROWS} hintKeys={LAYOUT_HINTS} onChange={(key, value) => save({ [key]: value })}
     preview={{ chatSample: <SampleConversationView compact />, listSample: (sample) => <ListSample {...sample} /> }} />;
 }
 

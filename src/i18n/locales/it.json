@@ -4355,6 +4355,7 @@
   "mobile.drawer.title": "Cartelle",
   "mobile.drawer.open": "Mostra cartelle",
   "mobile.drawer.empty": "Nessuna cartella per ora. Trascina la lista verso il basso per aggiornare.",
+  "mobile.drawer.folderIconsColorfulHint": "Un colore per ogni tipo di cartella. Tieni premuta una cartella nel pannello per sceglierne uno.",
   "mobile.folder.sent": "Inviati",
   "mobile.folder.junk": "Spam",
   "mobile.folder.trash": "Cestino",

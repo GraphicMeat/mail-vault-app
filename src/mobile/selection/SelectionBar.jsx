@@ -147,6 +147,7 @@ export default function SelectionBar({ confirm }) {
       </div>
       {picking && (
         <MovePicker
+          accountId={accountId}
           folders={folders || EMPTY}
           current={folder}
           onPick={(target) => { setPicking(false); moveTo(target); }}

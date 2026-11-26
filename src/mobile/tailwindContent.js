@@ -14,6 +14,7 @@ export const MOBILE_TAILWIND_CONTENT = Object.freeze([
   './src/components/fields/**/*.{js,jsx}',
   './src/components/transfer/**/*.{js,jsx}',
   './src/components/ViewIcon.jsx',
+  './src/components/FolderColorPalette.jsx',
   './src/components/QuickActionsWheel.jsx',
   './src/components/SelectionBarFrame.jsx',
   './src/hooks/useDialogA11y.js',

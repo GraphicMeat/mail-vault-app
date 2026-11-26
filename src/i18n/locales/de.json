@@ -4355,6 +4355,7 @@
   "mobile.drawer.title": "Ordner",
   "mobile.drawer.open": "Ordner anzeigen",
   "mobile.drawer.empty": "Noch keine Ordner. Zieh die Liste nach unten, um zu aktualisieren.",
+  "mobile.drawer.folderIconsColorfulHint": "Eine Farbe für jede Art von Ordner. Halten Sie einen Ordner in der Seitenleiste gedrückt, um seine eigene zu wählen.",
   "mobile.folder.sent": "Gesendet",
   "mobile.folder.junk": "Spam",
   "mobile.folder.trash": "Papierkorb",

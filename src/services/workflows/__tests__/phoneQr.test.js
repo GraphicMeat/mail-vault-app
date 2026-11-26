@@ -132,6 +132,28 @@ it('sends the row and selection quick actions only once changed, with the scopes
   expect(sent().settings).not.toHaveProperty('quickActions');
 });
 
+it('sends the folder icon look, and each account\'s picked folder colours under its address, not its desktop id', async () => {
+  h.accounts = [
+    { id: 'a', email: 'A@x.test', imapHost: 'imap.x.test', password: 'pw' },
+    { id: 'b', email: 'b@x.test', imapHost: 'imap.x.test', password: 'pw' },
+  ];
+  useSettingsStore.setState({
+    folderIconStyle: 'theme',
+    folderIconColors: { 'a|Work': '#ef4444', 'a|Sent|Odd': '#22c55e', 'b|INBOX': '#3b82f6', 'gone|X': '#a855f7' },
+  });
+  await phoneQr({ password: 'correct horse battery' });
+  expect(sent().settings.folderIconStyle).toBe('theme');
+  expect(sent().settings.folderIconColors).toEqual({
+    'a@x.test|Work': '#ef4444', 'a@x.test|Sent|Odd': '#22c55e', 'b@x.test|INBOX': '#3b82f6',
+  });
+  // No picks: the style goes, no picks with it.
+  mockDaemonCall.mockClear();
+  useSettingsStore.setState({ folderIconColors: {} });
+  await phoneQr({ password: 'correct horse battery' });
+  expect(sent().settings.folderIconStyle).toBe('theme');
+  expect(sent().settings).not.toHaveProperty('folderIconColors');
+});
+
 it('sends an endpoint AI setup without its key or consent, and nothing for an on-device provider', async () => {
   useSettingsStore.setState({ aiSettings: { enabled: true, provider: 'endpoint', endpointUrl: ' https://ai.example.test/v1 ', endpointModel: 'llama3', endpointConsented: true, skipPreview: true } });
   await phoneQr({ password: 'correct horse battery' });

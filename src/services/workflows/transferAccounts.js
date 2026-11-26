@@ -70,7 +70,7 @@ export async function phoneQr({ password }) {
     hidden: !!hiddenAccounts[a.id],
     phoneSettings: phoneAccountSettings(s, a),
   }));
-  return daemonCall('transfer.phone_qr', { password, accounts: shown, settings: phoneGlobalSettings(s, useThemeStore.getState()) });
+  return daemonCall('transfer.phone_qr', { password, accounts: shown, settings: phoneGlobalSettings(s, useThemeStore.getState(), accounts) });
 }
 
 // The desktop settings the phone takes (the phone applies them on its first import that carries
@@ -82,13 +82,13 @@ const PHONE_GLOBAL_KEYS = [
   'markAsReadMode', 'markAsReadDelay', 'confirmBeforeDelete', 'afterDeleteSelect', 'swipeLeftAction', 'swipeRightAction',
   'sendDelay', 'autoSaveDrafts', 'attachmentReminder', 'defaultSignatureEnabled', 'holdExternalContent',
   'linkSafetyEnabled', 'linkSafetyClickConfirm', 'trackerBlockingEnabled',
-  'textScale', 'appFont', 'listDensity', 'listPreviewLines', 'signatureDisplay', 'actionButtonDisplay',
+  'textScale', 'appFont', 'listDensity', 'listPreviewLines', 'folderIconStyle', 'signatureDisplay', 'actionButtonDisplay',
   'trackpadSwipeEnabled', 'refreshOnLaunch', 'autoDownloadAttachments', 'afterDeleteSameAccount',
   'badgeEnabled', 'badgeMode',
   'searchIndexBodies', 'searchIndexAttachments',
 ];
 
-function phoneGlobalSettings(s, theme) {
+function phoneGlobalSettings(s, theme, accounts = []) {
   const out = Object.fromEntries(PHONE_GLOBAL_KEYS.filter(k => s[k] !== undefined && s[k] !== null).map(k => [k, s[k]]));
   if (theme?.theme) out.theme = theme.theme;
   if (theme?.palette) out.palette = theme.palette;
@@ -113,6 +113,10 @@ function phoneGlobalSettings(s, theme) {
   // phone keeps its own wheel.
   const quickActions = phoneQuickActions(s.quickActions);
   if (quickActions) out.quickActions = quickActions;
+  // The colours picked for single folders, with each account named by its address: the phone's
+  // account ids are its own. Only accounts the desktop still has.
+  const folderIconColors = phoneFolderColors(s.folderIconColors, accounts);
+  if (folderIconColors) out.folderIconColors = folderIconColors;
   // AI with an endpoint, the phone's one provider: the switch, URL, model and review choice. Never
   // the key, nor the desktop's consent (the phone reviews its first send itself). The phone leaves
   // out a loopback URL: that server runs on this computer, not on the phone.
@@ -131,6 +135,18 @@ function phoneGlobalSettings(s, theme) {
       .map(tpl => ({ name: String(tpl.name || ''), body: tpl.body }));
   }
   return out;
+}
+
+/** `{ "<address>|<path>": colour }` from desktop's `{ "<account id>|<path>": colour }`, or null with none. */
+function phoneFolderColors(picks, accounts) {
+  const byId = new Map(accounts.filter(a => a?.email).map(a => [a.id, String(a.email).toLowerCase()]));
+  const out = {};
+  for (const [key, color] of Object.entries(picks && typeof picks === 'object' ? picks : {})) {
+    const at = key.indexOf('|');
+    const email = byId.get(key.slice(0, at));
+    if (at > 0 && email && typeof color === 'string') out[`${email}${key.slice(at)}`] = color;
+  }
+  return Object.keys(out).length ? out : null;
 }
 
 /** The row and selection surfaces of `value` the person changed, with the account-free overrides: or null. */

@@ -4355,6 +4355,7 @@
   "mobile.drawer.title": "Carpetas",
   "mobile.drawer.open": "Mostrar carpetas",
   "mobile.drawer.empty": "Aún no hay carpetas. Desliza la lista hacia abajo para actualizar.",
+  "mobile.drawer.folderIconsColorfulHint": "Un color para cada tipo de carpeta. Mantén pulsada una carpeta en el panel para elegir el suyo.",
   "mobile.folder.sent": "Enviados",
   "mobile.folder.junk": "Spam",
   "mobile.folder.trash": "Papelera",

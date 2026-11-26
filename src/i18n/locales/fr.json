@@ -4355,6 +4355,7 @@
   "mobile.drawer.title": "Dossiers",
   "mobile.drawer.open": "Afficher les dossiers",
   "mobile.drawer.empty": "Aucun dossier pour l’instant. Tirez la liste vers le bas pour actualiser.",
+  "mobile.drawer.folderIconsColorfulHint": "Une couleur par type de dossier. Maintenez un dossier dans le tiroir pour choisir la sienne.",
   "mobile.folder.sent": "Envoyés",
   "mobile.folder.junk": "Indésirables",
   "mobile.folder.trash": "Corbeille",

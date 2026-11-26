@@ -116,6 +116,10 @@ pub(crate) const PREFS: &[(&str, Kind, &str)] = &[
     ("listDensity", Kind::OneOf(&["comfortable", "compact"]), "\"comfortable\""),
     // The phone's rows always had one line of the message's text.
     ("listPreviewLines", Kind::Int(0, 3), "1"),
+    // Folder glyph colours (desktop's `folderIconStyle` and `folderIconColors`, src/utils/folderIconColor.js):
+    // one colour per kind of folder, or the theme's accent; picks are `{ "<account id>|<path>": "#rrggbb" }`.
+    ("folderIconStyle", Kind::OneOf(&["colorful", "theme"]), "\"colorful\""),
+    ("folderIconColors", Kind::Object(32 * 1024), "{}"),
     // The phone showed every signature.
     ("signatureDisplay", Kind::OneOf(&["smart", "always-show", "always-hide", "collapsed"]), "\"always-show\""),
     // The phone's toolbar had icons only.

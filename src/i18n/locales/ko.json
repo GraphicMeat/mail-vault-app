@@ -4355,6 +4355,7 @@
   "mobile.drawer.title": "폴더",
   "mobile.drawer.open": "폴더 보기",
   "mobile.drawer.empty": "아직 폴더가 없습니다. 목록을 아래로 당겨 새로 고치세요.",
+  "mobile.drawer.folderIconsColorfulHint": "폴더 종류마다 색을 지정합니다. 서랍에서 폴더를 길게 눌러 그 폴더만의 색을 고르세요.",
   "mobile.folder.sent": "보낸 편지함",
   "mobile.folder.junk": "스팸",
   "mobile.folder.trash": "휴지통",

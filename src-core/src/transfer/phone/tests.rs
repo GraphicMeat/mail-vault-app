@@ -759,6 +759,29 @@ fn quick_actions_stay_while_dropping_templates_is_enough_and_go_right_after() {
     assert_eq!(got.language.as_deref(), Some("de"));
 }
 
+#[test]
+fn the_folder_icon_style_and_picks_are_carried_and_a_bad_shape_loses_only_that_setting() {
+    // Picks are keyed by the account's address, the one name both devices share.
+    let picks = json!({ "ann@example.test|Work": "#ef4444", "ann@example.test|INBOX": "#3B82F6" });
+    let mut s = desktop_settings();
+    s["folderIconStyle"] = json!("theme");
+    s["folderIconColors"] = picks.clone();
+    let (b, _) = phone_bundle_with_settings(&json!([gmail_oauth()]), Some(&s));
+    let got = b.settings.unwrap();
+    assert_eq!(got.folder_icon_style.as_deref(), Some("theme"));
+    assert_eq!(got.folder_icon_colors, Some(picks));
+    // Another shape, or too many picks for a code, loses only the picks.
+    let many: serde_json::Map<String, Value> = (0..2_000).map(|i| (format!("ann@example.test|F{i}"), json!("#ef4444"))).collect();
+    for bad in [json!(["a"]), json!("a"), Value::Object(many)] {
+        s["folderIconColors"] = bad;
+        let (b, _) = phone_bundle_with_settings(&json!([gmail_oauth()]), Some(&s));
+        let got = b.settings.unwrap();
+        assert_eq!(got.folder_icon_colors, None);
+        assert_eq!(got.folder_icon_style.as_deref(), Some("theme"));
+        assert_eq!(got.language.as_deref(), Some("de"));
+    }
+}
+
 // ── tags ────────────────────────────────────────────────────────────────────
 
 fn tag_store() -> rusqlite::Connection {

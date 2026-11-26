@@ -446,12 +446,31 @@ fn apply_settings(engine: &Engine, added: &[(String, &PhoneAccount)], global: Op
             if prefs::get_in(c, prefs::DESKTOP_SETTINGS_APPLIED_AT)?.is_some() {
                 return Ok(false);
             }
-            apply_global(c, global)?;
+            apply_global(c, global, added)?;
             let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as i64);
             put_in(c, prefs::DESKTOP_SETTINGS_APPLIED_AT, &now.to_string())?;
             Ok(true)
         })
         .map_err(|e| RpcError::Internal(e.to_string()))
+}
+
+/// The desktop's folder colour picks (`{ "<address>|<path>": "#rrggbb" }`) as the phone keeps them
+/// (`{ "<account id>|<path>": "#rrggbb" }`): only the accounts added by this import, only a six
+/// digit hex colour, kept lowercase.
+fn phone_folder_colors(picks: &Value, added: &[(String, &PhoneAccount)]) -> serde_json::Map<String, Value> {
+    let mut out = serde_json::Map::new();
+    let Some(picks) = picks.as_object() else { return out };
+    for (key, color) in picks {
+        let Some((address, path)) = key.split_once('|') else { continue };
+        let Some(color) = color.as_str().filter(|c| c.len() == 7 && c.starts_with('#') && c[1..].bytes().all(|b| b.is_ascii_hexdigit())) else { continue };
+        if path.is_empty() {
+            continue;
+        }
+        if let Some((id, _)) = added.iter().find(|(_, a)| a.email.eq_ignore_ascii_case(address)) {
+            out.insert(format!("{id}|{path}"), json!(color.to_ascii_lowercase()));
+        }
+    }
+    out
 }
 
 /// A desktop swipe as the phone has it: star is flag, archive the closest the phone has (move,
@@ -502,7 +521,7 @@ fn phone_after_delete(desktop: &str) -> &'static str {
 }
 
 /// The desktop's global settings into the phone's preference rows, each through its own check.
-fn apply_global(c: &Connection, s: &PhoneSettings) -> rusqlite::Result<()> {
+fn apply_global(c: &Connection, s: &PhoneSettings, added: &[(String, &PhoneAccount)]) -> rusqlite::Result<()> {
     let mut values: Vec<(&str, Value)> = Vec::new();
     let mut text = |key: &'static str, v: &Option<String>| {
         if let Some(v) = v {
@@ -521,6 +540,7 @@ fn apply_global(c: &Connection, s: &PhoneSettings) -> rusqlite::Result<()> {
     // A Google font (`google:<Family>`) is no phone font: the check leaves it out.
     text("appFont", &s.app_font);
     text("listDensity", &s.list_density);
+    text("folderIconStyle", &s.folder_icon_style);
     text("signatureDisplay", &s.signature_display);
     text("actionButtonDisplay", &s.action_button_display);
     text("badgeMode", &s.badge_mode);
@@ -576,6 +596,11 @@ fn apply_global(c: &Connection, s: &PhoneSettings) -> rusqlite::Result<()> {
     // A desktop bar of only actions the phone lacks leaves the phone's own bar, not an empty one.
     if let Some(bar) = s.quick_actions_reader.as_deref().map(phone_reader_actions).filter(|b| !b.is_empty()) {
         values.push(("quickActionsReader", json!(bar)));
+    }
+    // Folder colour picks arrive keyed by the account's address; they become the phone's own
+    // account ids, for the accounts this import added.
+    if let Some(picks) = s.folder_icon_colors.as_ref().map(|p| phone_folder_colors(p, added)).filter(|p| !p.is_empty()) {
+        values.push(("folderIconColors", Value::Object(picks)));
     }
     // The row wheel and selection bar, as the desktop keeps them (the page normalizes).
     if let Some(q) = &s.quick_actions {

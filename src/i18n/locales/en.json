@@ -4355,6 +4355,7 @@
   "mobile.drawer.title": "Folders",
   "mobile.drawer.open": "Show folders",
   "mobile.drawer.empty": "No folders yet. Pull down on the list to refresh.",
+  "mobile.drawer.folderIconsColorfulHint": "A color for each kind of folder. Hold a folder in the drawer to pick its own.",
   "mobile.folder.sent": "Sent",
   "mobile.folder.junk": "Junk",
   "mobile.folder.trash": "Trash",

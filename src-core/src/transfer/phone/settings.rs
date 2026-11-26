@@ -166,6 +166,14 @@ pub struct PhoneSettings {
     /// of at most [`MAX_QUICK_ACTIONS_BYTES`], else none.
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "lenient_object")]
     pub quick_actions: Option<Value>,
+    /// `colorful` | `theme`: desktop's `folderIconStyle`.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
+    pub folder_icon_style: Option<String>,
+    /// Desktop's `folderIconColors` (`{ "<account>|<folder path>": "#rrggbb" }`) with each key's
+    /// account named by its address, the one name both devices share (the desktop's account ids
+    /// mean nothing on the phone). An object of at most [`MAX_FOLDER_COLORS`] picks, else none.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "lenient_object")]
+    pub folder_icon_colors: Option<Value>,
     /// `aiSettings` when its provider is an endpoint ([`PhoneAiEndpoint`]).
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "lenient_object")]
     pub ai_endpoint: Option<PhoneAiEndpoint>,
@@ -258,6 +266,8 @@ impl PhoneAccountSettings {
 
 /// The most templates a code carries.
 pub const MAX_TEMPLATES: usize = 50;
+/// The most folder colour picks a code carries.
+pub const MAX_FOLDER_COLORS: usize = 300;
 /// The most JSON bytes of the quick action configuration a code carries.
 pub const MAX_QUICK_ACTIONS_BYTES: usize = 32 * 1024;
 /// The most characters of one template body or signature html a code carries.
@@ -302,6 +312,9 @@ pub fn global_settings(v: Option<&Value>) -> Option<PhoneSettings> {
     let mut s: PhoneSettings = serde_json::from_value(v.filter(|v| v.is_object())?.clone()).ok()?;
     if s.quick_actions.as_ref().is_some_and(|q| q.to_string().len() > MAX_QUICK_ACTIONS_BYTES) {
         s.quick_actions = None;
+    }
+    if s.folder_icon_colors.as_ref().is_some_and(|c| c.as_object().is_none_or(|o| o.len() > MAX_FOLDER_COLORS)) {
+        s.folder_icon_colors = None;
     }
     if let Some(t) = s.templates.as_mut() {
         t.truncate(MAX_TEMPLATES);
@@ -447,6 +460,7 @@ pub fn fit(bundle: &mut PhoneBundle) -> Degrade {
     // person's own content, not a scalar).
     if let Some(s) = bundle.settings.as_mut() {
         s.quick_actions = None;
+        s.folder_icon_colors = None;
     }
     if fits(bundle) {
         return Degrade::NoTemplates;

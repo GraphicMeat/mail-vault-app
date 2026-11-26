@@ -429,6 +429,38 @@ fn the_row_and_selection_quick_actions_are_an_object_pref_and_import_as_one() {
     assert_eq!(p["quickActionsReader"], json!(["toggleRead", "flag", "move", "delete"]));
 }
 
+#[test]
+fn the_folder_icon_style_and_picks_are_prefs_and_import_keyed_to_the_phone_accounts() {
+    let tmp = tempfile::tempdir().unwrap();
+    let e = open(tmp.path());
+    let p = e.rpc("mobile.prefs.get", json!({})).unwrap();
+    assert_eq!(p["folderIconStyle"], json!("colorful"));
+    assert_eq!(p["folderIconColors"], json!({}));
+    let after = e.rpc("mobile.prefs.set", json!({ "folderIconStyle": "theme", "folderIconColors": { "a1|Work": "#ef4444" } })).unwrap();
+    assert_eq!(after["folderIconStyle"], json!("theme"));
+    assert_eq!(after["folderIconColors"], json!({ "a1|Work": "#ef4444" }));
+    for bad in [json!({ "folderIconStyle": "rainbow" }), json!({ "folderIconColors": ["#ef4444"] }), json!({ "folderIconColors": "red" })] {
+        assert_eq!(e.rpc("mobile.prefs.set", bad).unwrap_err().code(), "INVALID");
+    }
+
+    // A desktop import carries the style, and the picks of the accounts it added, under the
+    // phone's own account ids; a pick of an unknown address or with a bad colour is dropped.
+    let tmp = tempfile::tempdir().unwrap();
+    let e = open(tmp.path());
+    let mut s = desk_settings();
+    s.folder_icon_style = Some("theme".into());
+    s.folder_icon_colors = Some(json!({
+        "ann@example.test|Work": "#EF4444",
+        "ann@example.test|Bad": "red",
+        "gone@example.test|Work": "#00ff00",
+    }));
+    import(&e, &code(vec![imap("ann@example.test")], Some(s)));
+    let id = id_of(&e, "ann@example.test");
+    let p = e.rpc("mobile.prefs.get", json!({})).unwrap();
+    assert_eq!(p["folderIconStyle"], json!("theme"));
+    assert_eq!(p["folderIconColors"], json!({ format!("{id}|Work"): "#ef4444" }));
+}
+
 /// Desktop's AI on an endpoint arrives as the phone's AI settings; never a key or a review (the
 /// bundle has neither), and a loopback URL (the desktop's own computer) not at all.
 #[test]

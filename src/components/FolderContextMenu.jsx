@@ -2,7 +2,7 @@ import React from 'react';
 import { FolderInput, FolderPlus, Pencil, Trash2 } from 'lucide-react';
 import { Popover, MenuItem } from './ui/Popover';
 import { useT } from '../i18n/index.js';
-import { FOLDER_ICON_PALETTE } from '../utils/folderIconColor';
+import { FolderColorPalette } from './FolderColorPalette';
 import { specialOrInbox, trashPathOf, folderDelimiter } from '../services/workflows/folderOps';
 
 /**
@@ -32,20 +32,11 @@ export function FolderContextMenu({ menu, mailboxes, onClose, onNewSubfolder, on
 
   // Any folder, special or local, can take a colour: it is only a label.
   const colors = onSetColor && (
-    <div role="group" aria-label={t('sidebar.folderIconColor')} className="px-3 py-2 border-t border-mail-border">
-      <div className="text-xs text-mail-text-muted mb-1.5">{t('sidebar.folderIconColor')}</div>
-      <div className="flex flex-wrap gap-1.5">
-        {FOLDER_ICON_PALETTE.map(color => (
-          <button key={color} type="button" data-testid="folder-color-swatch" data-color={color}
-            title={color} aria-label={color}
-            onClick={() => { onClose(); onSetColor(node, color); }}
-            className="w-4 h-4 rounded-full border border-mail-border" style={{ background: color }} />
-        ))}
-      </div>
-      <button type="button" data-testid="folder-color-reset"
-        onClick={() => { onClose(); onSetColor(node, null); }}
-        className="mt-1.5 text-xs text-mail-accent-text hover:underline">{t('sidebar.folderIconColorDefault')}</button>
-    </div>
+    <FolderColorPalette label={t('sidebar.folderIconColor')} resetLabel={t('sidebar.folderIconColorDefault')}
+      onPick={color => { onClose(); onSetColor(node, color); }}
+      className="px-3 py-2 border-t border-mail-border"
+      swatchClassName="w-4 h-4 rounded-full border border-mail-border"
+      resetClassName="mt-1.5 text-xs text-mail-accent-text hover:underline" />
   );
 
   if (node.local) return (

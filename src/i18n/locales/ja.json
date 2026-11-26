@@ -4355,6 +4355,7 @@
   "mobile.drawer.title": "フォルダ",
   "mobile.drawer.open": "フォルダを表示",
   "mobile.drawer.empty": "まだフォルダがありません。リストを下に引いて更新してください。",
+  "mobile.drawer.folderIconsColorfulHint": "フォルダの種類ごとに色を付けます。ドロワーでフォルダを長押しすると、そのフォルダの色を選べます。",
   "mobile.folder.sent": "送信済み",
   "mobile.folder.junk": "迷惑メール",
   "mobile.folder.trash": "ゴミ箱",

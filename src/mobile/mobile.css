@@ -1579,6 +1579,20 @@ body {
 .mv-drawer__heading-row { display: flex; align-items: center; padding-inline-end: 8px; }
 .mv-drawer__heading-row .mv-drawer__heading { flex: 1; }
 .mv-folder__icon { display: inline-flex; color: var(--mail-text-muted); }
+/* An account's section in All Inboxes' drawer: its header row, then its folders under it. */
+.mv-drawer__section { margin-top: 4px; }
+.mv-drawer__acct { font-weight: 600; gap: 8px; }
+.mv-drawer__chevron { flex: none; color: var(--mail-text-muted); }
+[dir="rtl"] .mv-drawer__chevron { transform: scaleX(-1); }
+.mv-drawer__section .mv-folders .mv-folder { padding-inline-start: 40px; }
+/* The folder colour palette's swatches (drawer/FolderColorSheet.jsx), 44px to touch. */
+.mv-palette { padding: 8px; }
+.mv-palette > div { gap: 10px; }
+.mv-swatch { width: 44px; height: 44px; border-radius: 50%; border: 2px solid var(--mail-border); }
+.mv-swatch[aria-pressed="true"] { border-color: var(--mail-text); }
+.mv-palette__reset { display: block; min-height: 44px; margin-top: 8px; color: var(--mail-accent-text); font-weight: 600; }
+/* A held folder row neither selects its name nor raises the system callout. */
+.mv-drawer .mv-folder, .mv-drawer .mv-folders > li { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 .mv-view__note { margin: 8px 16px 0; font-size: 0.75rem; }
 /* Under the viewer (z 10), as search is, so a row opens over it. */
 .mv-drafts.mv-view { z-index: 8; }

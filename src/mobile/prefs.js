@@ -59,6 +59,11 @@ export const PREF_DEFAULTS = Object.freeze({
   notificationSound: true,
   badgeEnabled: false,
   badgeMode: 'unread',
+  // Folder glyph colours (drawer/folderColor.js): `colorful` is one colour per kind of folder,
+  // `theme` the one accent; `folderIconColors` maps `<accountId>|<path>` to a colour picked for
+  // that folder (hold a folder in the drawer). Desktop's `folderIconStyle` / `folderIconColors`.
+  folderIconStyle: 'colorful',
+  folderIconColors: Object.freeze({}),
   // The viewer's bar, in order (quickActions.js; Settings > Appearance > Quick actions).
   quickActionsReader: Object.freeze(['toggleRead', 'flag', 'move', 'delete']),
   // The list row's wheel and the selection bar: desktop's `quickActions` object, `{}` until

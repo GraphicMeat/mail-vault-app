@@ -4355,6 +4355,7 @@
   "mobile.drawer.title": "Pastas",
   "mobile.drawer.open": "Mostrar pastas",
   "mobile.drawer.empty": "Ainda não há pastas. Puxe a lista para baixo para atualizar.",
+  "mobile.drawer.folderIconsColorfulHint": "Uma cor para cada tipo de pasta. Mantenha uma pasta pressionada no painel para escolher a dela.",
   "mobile.folder.sent": "Enviados",
   "mobile.folder.junk": "Spam",
   "mobile.folder.trash": "Lixeira",

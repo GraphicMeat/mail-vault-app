@@ -575,19 +575,32 @@ describe('All Inboxes in the app', () => {
     expect(document.querySelector('.mv-header__count').textContent).toBe(t('common.messageCount', { count: 2 }));
   });
 
-  it('the folder drawer shows All Inboxes, not the last account\'s address or folders', async () => {
+  it('the folder drawer shows All Inboxes, then each account collapsed; its folders open that account\'s folder', async () => {
     await mountUnified();
     fireEvent.click(screen.getByRole('button', { name: t('mobile.drawer.open') }));
     const drawer = screen.getByRole('dialog', { name: t('mobile.drawer.title') });
-    expect(drawer.textContent).not.toContain('a1@example.test');
-    // a1's folders (it has a Sent) are not offered: a tap there would leave All Inboxes for a1.
+    // The head names All Inboxes, never one account; folders wait until their account is opened.
+    expect(drawer.querySelector('.mv-drawer__head').textContent).not.toContain('a1@example.test');
     expect(within(drawer).queryByText('Sent')).toBeNull();
-    expect(within(drawer).queryByText(t('sidebar.inbox'))).toBeNull();
     expect(within(drawer).queryByText(t('mobile.drawer.empty'))).toBeNull();
     const entry = within(drawer).getByRole('button', { name: t('sidebar.allInboxes') });
     expect(entry.getAttribute('aria-current')).toBe('true');
     expect(within(drawer).getByRole('button', { name: t('mobile.settings.title') })).toBeTruthy();
-    fireEvent.click(entry);
+    expect([...drawer.querySelectorAll('[data-mv-drawer-account]')].map((h) => h.dataset.mvDrawerAccount)).toEqual(['a1', 'a2']);
+    // Opening a1 lists its folders; a tap leaves All Inboxes for a1's Sent.
+    await act(async () => { fireEvent.click(drawer.querySelector('[data-mv-drawer-account="a1"]')); });
+    const sent = await within(drawer).findByRole('button', { name: new RegExp(`^${t('mobile.folder.sent')}`) });
+    await act(async () => { fireEvent.click(sent); });
+    expect(screen.queryByRole('dialog', { name: t('mobile.drawer.title') })).toBeNull();
+    await waitFor(() => expect(store().activeFolder).toBe('Sent'));
+    expect(store().activeAccountId).toBe('a1');
+  });
+
+  it('All Inboxes in the drawer closes it and stays on All Inboxes', async () => {
+    await mountUnified();
+    fireEvent.click(screen.getByRole('button', { name: t('mobile.drawer.open') }));
+    const drawer = screen.getByRole('dialog', { name: t('mobile.drawer.title') });
+    fireEvent.click(within(drawer).getByRole('button', { name: t('sidebar.allInboxes') }));
     expect(screen.queryByRole('dialog', { name: t('mobile.drawer.title') })).toBeNull();
     expect(store().activeFolder).toBe(storeModule.ALL_INBOXES);
   });

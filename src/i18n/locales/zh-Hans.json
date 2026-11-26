@@ -4355,6 +4355,7 @@
   "mobile.drawer.title": "文件夹",
   "mobile.drawer.open": "显示文件夹",
   "mobile.drawer.empty": "还没有文件夹。下拉列表即可刷新。",
+  "mobile.drawer.folderIconsColorfulHint": "每种文件夹一种颜色。在抽屉中长按某个文件夹,可单独选择它的颜色。",
   "mobile.folder.sent": "已发送",
   "mobile.folder.junk": "垃圾邮件",
   "mobile.folder.trash": "已删除",

@@ -821,6 +821,11 @@ function App() {
     setPanel(null);
     useMobileStore.getState().selectFolder(path);
   }, []);
+  // A folder of an account's section in All Inboxes' drawer: that account's folder.
+  const onSelectFolderIn = useCallback((accountId, path) => {
+    setPanel(null);
+    useMobileStore.getState().openAt(accountId, path);
+  }, []);
   const onAllInboxes = useCallback(() => {
     setPanel(null);
     useMobileStore.getState().selectAllInboxes();
@@ -1035,9 +1040,11 @@ function App() {
       {panel === 'drawer' && (
         <FolderDrawer
           account={account}
+          accounts={shownAccounts}
           folders={folders}
           activeFolder={activeFolder}
           onSelect={onSelectFolder}
+          onSelectIn={onSelectFolderIn}
           onClose={closePanel}
           onSwitchAccount={() => setPanel('switcher')}
           drafts={drafts.length}
@@ -1104,7 +1111,7 @@ function App() {
       )}
       <KeepDock onOpen={setTap} />
       {moving && (
-        <MovePicker folders={moving.folders || []} current={moving.folder} onPick={onSwipeMove} onClose={closeMoving} />
+        <MovePicker accountId={moving.accountId} folders={moving.folders || []} current={moving.folder} onPick={onSwipeMove} onClose={closeMoving} />
       )}
       {askDelete && (
         <Sheet kind="sheet" label={askTitle} onClose={() => setAskDelete(null)}>

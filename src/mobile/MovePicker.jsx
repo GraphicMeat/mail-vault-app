@@ -1,12 +1,14 @@
 // The folder picker for a move: a bottom sheet over the viewer listing the account's folders,
 // depth first as the engine lists them, without the folder the message is in. A folder that
-// cannot hold mail (`noselect`) shows as a heading for its children.
+// cannot hold mail (`noselect`) shows as a heading for its children. Each folder wears its glyph in
+// the drawer's colour (`accountId`: whose folders these are, for the colours picked per folder).
 import React from 'react';
 import Sheet from './Sheet.jsx';
 import { useT } from './i18n.js';
 import { folderLabel } from './folders.js';
+import FolderGlyph from './drawer/FolderGlyph.jsx';
 
-export default function MovePicker({ folders, current, onPick, onClose }) {
+export default function MovePicker({ folders, current, onPick, onClose, accountId = null }) {
   const t = useT();
   const shown = (folders || []).filter((f) => f.path !== current);
   const any = shown.some((f) => !f.noselect);
@@ -26,6 +28,7 @@ export default function MovePicker({ folders, current, onPick, onClose }) {
             return (
               <li key={f.path}>
                 <button type="button" className="mv-folder" style={style} onClick={() => onPick(f.path)}>
+                  <FolderGlyph folder={f} accountId={accountId} />
                   <span className="mv-folder__name" dir="auto">{folderLabel(f)}</span>
                 </button>
               </li>

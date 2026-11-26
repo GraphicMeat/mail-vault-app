@@ -1,7 +1,8 @@
 // Settings > Appearance > Layout as a view. `values`: the layout settings by key; `onChange(key,
 // value)` sets one. `rows`: the keys this app shows (desktop all; the phone those a phone layout
 // has). `preview`: the extra props WorkspacePreviewView draws with (sample accounts, chat sample,
-// the app's own list rows).
+// the app's own list rows). `hintKeys`: catalog keys a host uses in place of an option's own hint
+// (`'<row key>.<value>'` to a key), where desktop's wording names a pointer the host has not got.
 // Message list density and preview lines sit together and share one sample, under the pair. A
 // hint that follows the choice keeps the height of its longest, so a change moves nothing.
 import React, { useId } from 'react';
@@ -44,12 +45,13 @@ function StableHint({ hints, current }) {
   </span>;
 }
 
-export function WorkspaceView({ values, onChange, rows = WORKSPACE_ROWS, windowIsNarrow = false, preview = {} }) {
+export function WorkspaceView({ values, onChange, rows = WORKSPACE_ROWS, windowIsNarrow = false, preview = {}, hintKeys = {} }) {
   const t = useT();
   const choiceId = useId();
   const chat = values.viewStyle === 'chat';
   const previewLines = values.listPreviewLines;
   const shown = new Set(rows);
+  const hintOf = (key, option) => t(hintKeys[`${key}.${option[0]}`] || `workspace.${option[2]}`);
   const previewOf = (key, value, label, disabled) => <WorkspacePreviewView {...preview} setting={key} value={value} label={label}
     disabled={disabled} layoutMode={values.layoutMode} sidebarDensity={values.sidebarDensity} emailListStyle={values.emailListStyle}
     listDensity={values.listDensity} listPreviewLines={previewLines} />;
@@ -95,8 +97,8 @@ export function WorkspaceView({ values, onChange, rows = WORKSPACE_ROWS, windowI
           <SettingRow key={key} label={t(titleKey)} description={
             key === 'layoutMode' && !chat && windowIsNarrow
               ? t('settings.appearance.windowTooNarrowForThreeColumns')
-              : disabled ? undefined : <StableHint hints={options.map(option => t(`workspace.${option[2]}`))}
-                current={t(`workspace.${options.find(([value]) => value === values[key])?.[2] || options[0][2]}`)} />
+              : disabled ? undefined : <StableHint hints={options.map(option => hintOf(key, option))}
+                current={hintOf(key, options.find(([value]) => value === values[key]) || options[0])} />
           } preview={key === 'listDensity' && shown.has('listPreviewLines') ? undefined : previewOf(key, values[key], t(titleKey), disabled)}>
             <div role="group" className="settings-segments">
               {options.map(([value, label, , Icon]) => (
