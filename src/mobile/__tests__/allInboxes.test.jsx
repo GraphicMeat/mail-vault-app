@@ -624,7 +624,7 @@ describe('All Inboxes in the app', () => {
     fireEvent.click(document.querySelector('[data-mv-drafts]'));
     await waitFor(() => expect(screen.getByText('Draft d2')).toBeTruthy());
     fireEvent.click(screen.getByText('Draft d2'));
-    await waitFor(() => expect(document.querySelector('.mv-compose__from')?.textContent).toBe('a2@example.test'));
+    await waitFor(() => expect(document.querySelector('[data-mv-from-chip] .mv-compose__from-address')?.textContent).toBe('a2@example.test'));
   });
 
   it('a lapsed sign-in shows for any account in the list, not only the one in front', async () => {

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// Compose over a fake engine: the From picker (the login, `sendAs` and the account's aliases),
+// Compose over a fake engine: the From chip and its sheet (the login, `sendAs` and the account's aliases),
 // templates inserted into the body, and the attachment reminder before a send.
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import React from 'react';
@@ -71,25 +71,38 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
+const chip = () => document.querySelector('[data-mv-from-chip]');
+const choices = () => [...document.querySelectorAll('[data-mv-from-choice]')];
+
 describe('From', () => {
   it('is plain text for an account with one address, and sends no From', async () => {
     await renderCompose();
-    expect(screen.queryByRole('combobox', { name: t('common.from') })).toBeNull();
+    expect(chip()).toBeNull();
+    expect(document.querySelector('[data-mv-from]').textContent).toContain('ada@example.test');
     await addressed();
     await act(async () => { fireEvent.click(sendButton()); });
     await flush();
     expect(callsOf('mobile.compose.send')[0]).not.toHaveProperty('from');
   });
 
-  it('starts from sendAs, offers every address, and sends the one picked', async () => {
+  it('starts from sendAs, offers every address in a sheet, and sends the one picked', async () => {
     engine.settings.aliases = [{ address: 'hi@example.test', name: 'Ada Hi' }, { address: 'me@example.test', name: '' }];
     engine.settings.sendAs = 'me@example.test';
     await renderCompose();
-    const pick = screen.getByRole('combobox', { name: t('common.from') });
-    expect(pick.value).toBe('me@example.test');
-    expect([...pick.options].map((o) => o.value)).toEqual(['ada@example.test', 'hi@example.test', 'me@example.test']);
-    expect([...pick.options].map((o) => o.textContent)).toEqual(['Ada <ada@example.test>', 'Ada Hi <hi@example.test>', 'me@example.test']);
-    fireEvent.change(pick, { target: { value: 'hi@example.test' } });
+    expect(chip().textContent).toContain('me@example.test');
+    expect(chip().getAttribute('aria-label')).toBe(t('mobile.compose.changeFrom', { address: 'me@example.test' }));
+    await act(async () => { fireEvent.click(chip()); });
+    await flush();
+    expect(screen.getByRole('dialog', { name: t('mobile.compose.fromTitle') })).toBeTruthy();
+    expect(choices().map((o) => o.getAttribute('data-mv-from-choice'))).toEqual(['ada@example.test', 'hi@example.test', 'me@example.test']);
+    // The account's own row first, its aliases indented under it; the open one is marked.
+    expect(choices().map((o) => o.hasAttribute('data-mv-from-alias'))).toEqual([false, true, true]);
+    expect(document.querySelector('[data-mv-from-choice="hi@example.test"]').textContent).toContain('Ada Hi');
+    expect(document.querySelector('[data-mv-from-choice="me@example.test"]').getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(document.querySelector('[data-mv-from-choice="hi@example.test"]'));
+    await flush();
+    expect(screen.queryByRole('dialog', { name: t('mobile.compose.fromTitle') })).toBeNull();
+    expect(chip().textContent).toContain('hi@example.test');
     await addressed();
     await act(async () => { fireEvent.click(sendButton()); });
     await flush();
@@ -101,7 +114,7 @@ describe('From', () => {
     engine.draft = { id: 'drf_0123456789abcdef', accountId: 'a1', to: 'bob@example.test', cc: '', bcc: '', subject: 's', text: 'x', attachments: [], from: 'hi@example.test' };
     await renderCompose({ draftId: 'drf_0123456789abcdef' });
     await flush();
-    expect(screen.getByRole('combobox', { name: t('common.from') }).value).toBe('hi@example.test');
+    expect(chip().textContent).toContain('hi@example.test');
     type(body(), 'x y');
     await act(async () => { fireEvent.click(sendButton()); });
     await flush();
@@ -123,8 +136,7 @@ describe('From of a draft the account no longer sends from', () => {
         await flush();
       }
       await flush();
-      const pick = screen.getByRole('combobox', { name: t('common.from') });
-      expect(pick.value).toBe('hi@example.test');
+      expect(chip().textContent).toContain('hi@example.test');
       type(body(), 'x y');
       await act(async () => { fireEvent.click(sendButton()); });
       await flush();

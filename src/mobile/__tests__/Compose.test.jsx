@@ -697,8 +697,11 @@ describe('Send later', () => {
 });
 
 describe('Follow-up reminder', () => {
-  const remind = () => screen.getByLabelText(t('compose.remind.title'), { exact: false });
   const premiumOn = () => useMobileStore.setState({ premium: { premium: true, source: 'apple', expiresMs: Date.now() + 30 * 86_400_000 } });
+  const openFollowUp = () => fireEvent.click(document.querySelector('[data-mv-followup-open]'));
+  const choice = (days) => document.querySelector(`[data-mv-remind-choice="${days}"]`);
+  const chip = () => document.querySelector('[data-mv-followup-chip]');
+  const setRemind = (days) => { openFollowUp(); fireEvent.click(choice(days)); };
 
   async function ready(props) {
     const out = renderCompose(props);
@@ -707,21 +710,54 @@ describe('Follow-up reminder', () => {
     return out;
   }
 
-  it('with Premium the chosen days go with the send', async () => {
+  it('a labelled Follow up button opens a sheet that says what it does, with Off, 1 day, 3 days and 1 week', async () => {
     premiumOn();
     await ready();
-    expect(remind().value).toBe('0');
-    typeInto(remind(), '3');
+    const button = screen.getByRole('button', { name: t('mobile.compose.followUp') });
+    expect(button.textContent).toContain(t('mobile.compose.followUp'));
+    expect(document.querySelector('select')).toBeNull();
+    fireEvent.click(button);
+    const sheet = screen.getByRole('dialog', { name: t('compose.remind.title') });
+    expect(within(sheet).getByText(t('mobile.compose.followUpHint'))).toBeTruthy();
+    expect([...sheet.querySelectorAll('[role="radio"]')].map((r) => r.textContent)).toEqual([
+      t('compose.remind.off'), t('compose.remind.days1'), t('compose.remind.days3'), t('compose.remind.days7'),
+    ]);
+    expect(choice(0).getAttribute('aria-checked')).toBe('true');
+    expect(chip()).toBeNull();
+  });
+
+  it('with Premium the chosen days go with the send, and a chip above the toolbar says so', async () => {
+    premiumOn();
+    await ready();
+    setRemind(3);
+    // The sheet closes on a pick; the chip sits right above the toolbar.
+    expect(screen.queryByRole('dialog', { name: t('compose.remind.title') })).toBeNull();
+    expect(chip().textContent).toContain(t('mobile.compose.followUpSet', { duration: t('compose.remind.days3') }));
+    expect(chip().nextElementSibling).toBe(screen.getByRole('toolbar'));
     fireEvent.click(sendButton());
     await flush();
     expect(callsOf('mobile.compose.send')[0].remindAfterDays).toBe(3);
+  });
+
+  it('the chip\'s cross clears the reminder, and the sheet shows the choice that is set', async () => {
+    premiumOn();
+    await ready();
+    setRemind(7);
+    openFollowUp();
+    expect(choice(7).getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(choice(7));
+    fireEvent.click(within(chip()).getByRole('button', { name: t('mobile.compose.followUpClear') }));
+    expect(chip()).toBeNull();
+    fireEvent.click(sendButton());
+    await flush();
+    expect(callsOf('mobile.compose.send')[0]).not.toHaveProperty('remindAfterDays');
   });
 
   it('a reminder the engine refuses for Premium says so in place', async () => {
     premiumOn();
     engine.sendError = 'PREMIUM_REQUIRED';
     const { onClose } = await ready();
-    typeInto(remind(), '1');
+    setRemind(1);
     fireEvent.click(sendButton());
     await flush();
     expect(screen.getByRole('alert').textContent).toBe(t('compose.remind.upsell'));
@@ -730,9 +766,13 @@ describe('Follow-up reminder', () => {
 
   it('a free user choosing a reminder gets the paywall and it stays off', async () => {
     await ready();
-    typeInto(remind(), '7');
+    openFollowUp();
+    // Each day count carries the Premium badge; Off does not.
+    expect(choice(7).textContent).toContain(t('common.premium'));
+    expect(choice(0).textContent).not.toContain(t('common.premium'));
+    fireEvent.click(choice(7));
     expect(useMobileStore.getState().paywall).toMatchObject({ feature: 'followUp' });
-    expect(remind().value).toBe('0');
+    expect(chip()).toBeNull();
     fireEvent.click(sendButton());
     await flush();
     expect(callsOf('mobile.compose.send')[0]).not.toHaveProperty('remindAfterDays');
@@ -741,7 +781,7 @@ describe('Follow-up reminder', () => {
   it('is not offered on a Graph account', async () => {
     useMobileStore.setState({ accounts: [{ id: 'g1', email: 'g@example.test', kind: 'graph' }] });
     await ready({ accountId: 'g1' });
-    expect(screen.queryByLabelText(t('compose.remind.title'), { exact: false })).toBeNull();
+    expect(document.querySelector('[data-mv-followup-open]')).toBeNull();
     useMobileStore.setState({ accounts: [] });
   });
 });
@@ -1100,7 +1140,7 @@ describe('Compose with AI (Settings > AI)', () => {
 describe('layout: the bar, the toolbar above the keyboard, the fields', () => {
   const premiumOn = () => useMobileStore.setState({ premium: { premium: true, source: 'apple', expiresMs: Date.now() + 30 * 86_400_000 } });
   const toolbar = () => screen.getByRole('toolbar');
-  const toolNames = () => Array.from(toolbar().querySelectorAll('button, select')).map((el) => el.getAttribute('aria-label'));
+  const toolNames = () => Array.from(toolbar().querySelectorAll('button')).map((el) => el.getAttribute('aria-label'));
   afterEach(() => {
     useMobileStore.setState((st) => ({ prefs: { ...st.prefs, templates: [], aiEnabled: false }, accounts: [] }));
   });
@@ -1122,7 +1162,7 @@ describe('layout: the bar, the toolbar above the keyboard, the fields', () => {
     expect(bar.parentElement).toBe(screen.getByRole('dialog'));
     expect(bar.closest('.mv-compose__scroll')).toBeNull();
     expect(document.querySelector('.mv-compose__scroll').nextElementSibling).toBe(bar);
-    expect(toolNames()).toEqual([t('mobile.compose.attach'), t('mobile.compose.sendLater'), t('compose.remind.title')]);
+    expect(toolNames()).toEqual([t('mobile.compose.attach'), t('mobile.compose.sendLater'), t('mobile.compose.followUp')]);
     expect(bar.querySelector('[data-mv-send-later-open]')).toBeTruthy();
     expect(bar.querySelector('[data-mv-templates-open]')).toBeNull();
     expect(bar.querySelector('[data-mv-ai-open]')).toBeNull();
@@ -1131,7 +1171,7 @@ describe('layout: the bar, the toolbar above the keyboard, the fields', () => {
     renderCompose();
     await flush();
     expect(toolNames()).toEqual([
-      t('mobile.compose.attach'), t('mobile.compose.sendLater'), t('compose.templates'), t('settings.tab.aiProviders'), t('compose.remind.title'),
+      t('mobile.compose.attach'), t('mobile.compose.sendLater'), t('compose.templates'), t('settings.tab.aiProviders'), t('mobile.compose.followUp'),
     ]);
     expect(toolbar().querySelector('[data-mv-templates-open]')).toBeTruthy();
     expect(toolbar().querySelector('[data-mv-ai-open]')).toBeTruthy();
@@ -1141,40 +1181,33 @@ describe('layout: the bar, the toolbar above the keyboard, the fields', () => {
     expect(toolbar().querySelector('[data-mv-send-later-open]').disabled).toBe(false);
   });
 
-  it('a Graph account has no Remind tool', async () => {
+  it('a Graph account has no Follow up tool', async () => {
     useMobileStore.setState({ accounts: [{ id: 'g1', email: 'g@example.test', kind: 'graph' }] });
     renderCompose({ accountId: 'g1' });
     await flush();
     expect(toolNames()).toEqual([t('mobile.compose.attach'), t('mobile.compose.sendLater')]);
   });
 
-  it('Remind is the native select laid over its bell, marked while a reminder is set', async () => {
+  it('every tool carries a caption under its icon, in desktop\'s words where it has them', async () => {
+    useMobileStore.setState((st) => ({ prefs: { ...st.prefs, templates: [{ name: 'Thanks', body: 'Thank you!' }], aiEnabled: true } }));
+    renderCompose();
+    await flush();
+    const captions = Array.from(toolbar().querySelectorAll('button')).map((b) => b.querySelector('.mv-compose__tool-caption')?.textContent);
+    expect(captions).toEqual([
+      t('mobile.compose.attach'), t('mobile.compose.later'), t('compose.templates'), t('settings.tab.aiProviders'), t('mobile.compose.followUp'),
+    ]);
+    for (const b of toolbar().querySelectorAll('button')) expect(b.querySelector('svg[aria-hidden="true"]')).toBeTruthy();
+  });
+
+  it('Follow up is marked while a reminder is set', async () => {
     premiumOn();
     renderCompose();
     await flush();
-    const select = document.getElementById('mv-compose-remind');
-    expect(select.tagName).toBe('SELECT');
-    const tool = select.closest('[data-mv-remind]');
-    expect(tool.closest('[role="toolbar"]')).toBe(toolbar());
-    expect(tool.querySelector('svg[aria-hidden="true"]')).toBeTruthy();
-    expect(tool.textContent).not.toContain(t('common.premium'));
+    const tool = document.querySelector('[data-mv-followup-open]');
     expect(tool.hasAttribute('data-mv-active')).toBe(false);
-    typeInto(select, '3');
+    fireEvent.click(tool);
+    fireEvent.click(document.querySelector('[data-mv-remind-choice="3"]'));
     expect(tool.hasAttribute('data-mv-active')).toBe(true);
-    typeInto(select, '0');
-    expect(tool.hasAttribute('data-mv-active')).toBe(false);
-  });
-
-  it('without Premium the Remind tool carries the Premium badge and a pick stays off', async () => {
-    renderCompose();
-    await flush();
-    const select = document.getElementById('mv-compose-remind');
-    const tool = select.closest('[data-mv-remind]');
-    expect(tool.textContent).toContain(t('common.premium'));
-    typeInto(select, '1');
-    expect(useMobileStore.getState().paywall).toMatchObject({ feature: 'followUp' });
-    expect(select.value).toBe('0');
-    expect(tool.hasAttribute('data-mv-active')).toBe(false);
   });
 
   it('the Cc/Bcc toggle sits at the end of the To line', async () => {
@@ -1206,10 +1239,11 @@ describe('layout: the bar, the toolbar above the keyboard, the fields', () => {
     expect(tools).not.toMatch(/(^|[\s;])(position|transform)\s*:/);
     // The keyboard covers the home indicator: no safe-area gap above it.
     expect(rule('.mv-compose[data-mv-keyboard] .mv-compose__tools')).toContain('padding-bottom: 0');
-    // The cause of the sideways scroll was a select sized to its longest option.
-    const select = rule('.mv-compose__select');
-    expect(select).toMatch(/(^|[\s;])flex: 1[;\s]/);
-    expect(select).toContain('min-width: 0');
+    // The cause of the sideways scroll was a field sized to its longest option: the From chip
+    // takes the line's remaining width and cuts a long address short.
+    const chip = rule('.mv-compose__from-chip');
+    expect(chip).toMatch(/(^|[\s;])flex: 1[;\s]/);
+    expect(chip).toContain('min-width: 0');
     expect(rule('.mv-compose__scroll')).not.toContain('overflow-x');
   });
 });

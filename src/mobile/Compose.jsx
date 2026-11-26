@@ -20,9 +20,9 @@
 // again. A queued send leaves at once: the outbox (store `outbox`) takes it from there.
 //
 // Layout: the top bar holds Back, the title and Send, nothing else. The tools live in a toolbar
-// that is the screen's footer, so it sits right above the keyboard while it is up: Attach, Send
-// later, Templates (when there are any), AI (when it is on) and Remind (when offered), each a 44 pt
-// icon button. From, To (its Cc/Bcc toggle at the end of the line), Cc, Bcc and Subject are 48 pt
+// that is the screen's footer, so it sits right above the keyboard while it is up: Attach, Later
+// (send later), Templates (when there are any), AI (when it is on) and Follow up (when offered),
+// each a 44 pt button with its icon and a caption under it. From, To (its Cc/Bcc toggle at the end of the line), Cc, Bcc and Subject are 48 pt
 // lines with a hairline under each; the body follows.
 //
 // Send later (plan 4 Task 8): the clock in the toolbar opens the time sheet (SendLater.jsx); the
@@ -30,17 +30,21 @@
 // section. A time past 5 minutes without Premium opens the paywall instead; the engine's refusal
 // (PREMIUM_REQUIRED, SCHEDULE_TOO_FAR) is shown in place like any other.
 //
-// Follow-up reminder (plan 4 Task 9): the bell in the toolbar is "Remind me if no reply" (off, 1 day,
-// 3 days, 1 week), a native select laid invisibly over the bell so the picker stays the system's;
-// the bell reads active while a reminder is set. The choice goes with the send as `remindAfterDays`;
-// the engine records the reminder once the message went out. A choice without Premium opens the
-// paywall instead and stays off. Not offered on a Graph account (desktop parity). The engine's
-// refusal (PREMIUM_REQUIRED) is shown in place.
+// Follow-up reminder (plan 4 Task 9): the labelled Follow up button opens a sheet (compose/FollowUp.jsx)
+// that says what it does and offers Off, 1 day, 3 days and 1 week; a set reminder shows as a chip
+// above the toolbar with a cross that clears it, and the button reads active. The choice goes with
+// the send as `remindAfterDays`; the engine records the reminder once the message went out. A choice
+// without Premium opens the paywall instead and stays off. Not offered on a Graph account (desktop
+// parity). The engine's refusal (PREMIUM_REQUIRED) is shown in place.
 //
-// From: an account with aliases (or a `sendAs` other than its login) shows a picker of them all,
-// starting at its `sendAs`, else the login (`identitiesOf`); the pick goes with the send and the
-// draft as `from`, and the engine checks it is the account's. One address shows as plain text. The
-// picker takes the line's remaining width and never more: a long address is cut short, it never
+// From: a chip (avatar, address, chevron) opens a sheet of every account with its aliases indented
+// (compose/FromSheet.jsx), the open address checked. An account's addresses are its login first,
+// then its aliases and `sendAs` (`identitiesOf`), starting at its `sendAs`, else the login; the pick
+// goes with the send and the draft as `from`, and the engine checks it is the account's. Picking
+// another account re-homes the compose: the account the send and the draft belong to (the same
+// draft id moves with it), the signature swaps for the new account's (compose/fromChoices.js), and
+// the typed text, recipients and attachments stay. One address on one account shows as plain text.
+// The chip takes the line's remaining width and never more: a long address is cut short, it never
 // widens the form.
 //
 // Templates (Settings > Mail preferences, pref `templates`): the Templates tool lists them; one
@@ -59,7 +63,7 @@
 //
 // Keyboard: the screen is laid on the visible part of the screen above the keyboard and only its
 // fields scroll (keyboardViewport.js); targets are 44 pt.
-import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useKeyboardViewport } from './keyboardViewport.js';
 import { displayText } from '../utils/bidiText.js';
 import { daemonCall, pickFiles } from './transport.js';
@@ -71,6 +75,11 @@ import RecipientField, { commitText } from './RecipientField.jsx';
 import Sheet from './Sheet.jsx';
 import SendLater from './SendLater.jsx';
 import { openPaywall, usePremium } from './premium.js';
+import FromChip from './compose/FromChip.jsx';
+import FromSheet from './compose/FromSheet.jsx';
+import { FollowUpChip, FollowUpSheet } from './compose/FollowUp.jsx';
+import ToolButton from './compose/ToolButton.jsx';
+import { swapSignature } from './compose/fromChoices.js';
 import { formatFullDate, formatSize } from './format.js';
 import { useBackLayer } from './backStack.js';
 import { useMobileStore } from './store.js';
@@ -84,14 +93,6 @@ import { AiIcon, BackButton, BellIcon, ClockIcon, CloseIcon, PaperclipIcon, Temp
 export const AUTOSAVE_MS = 1500;
 /** A forwarded part with no progress for this long is given up on. */
 export const STALL_MS = 60_000;
-
-/** The reminder choices: days, and the label's key. */
-const REMIND_CHOICES = Object.freeze([
-  [0, 'compose.remind.off'],
-  [1, 'compose.remind.days1'],
-  [3, 'compose.remind.days3'],
-  [7, 'compose.remind.days7'],
-]);
 
 const TITLE_KEYS = Object.freeze({
   new: 'mobile.compose.newTitle',
@@ -165,14 +166,19 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
   const [identities, setIdentities] = useState([]); // [{ address, label }]: the From picker's
   const [from, setFrom] = useState('');
   const [picking, setPicking] = useState(false); // the templates sheet
+  const [fromOpen, setFromOpen] = useState(false); // the From sheet
+  const [followOpen, setFollowOpen] = useState(false); // the Follow up sheet
+  // The account this compose belongs to: the one it opened on, until a From pick moves it.
+  const [acct, setAcct] = useState(accountId);
+  const acctRef = useRef(accountId);
+  const accounts = useMobileStore((s) => s.accounts);
   const [reminding, setReminding] = useState(null); // null | { later } : the attachment question
   const templates = useMobileStore((s) => s.prefs.templates) || [];
   const caret = useRef(null); // where a template goes: the body's caret, once it had one
   const quote = useRef(''); // the quote prepare put under the body: not the user's words
   const sigBlock = useRef(''); // the signature put above the quote ("\n\n-- \n..."): not theirs either
   const premium = usePremium();
-  const premiumBadge = useId();
-  const remindOffered = useMobileStore((s) => s.accounts.find((a) => a.id === accountId)?.kind !== 'graph');
+  const remindOffered = useMobileStore((s) => s.accounts.find((a) => a.id === acct)?.kind !== 'graph');
   const [edits, setEdits] = useState(0);
 
   const threading = useRef({ inReplyTo: '', references: '' });
@@ -183,13 +189,19 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
   // The account's signature (Settings > Accounts, or the desktop's), read once: '' for none, or
   // when it or signatures overall are off. A reopened draft already has its text: none added.
   const signature = useRef(null);
-  // The account's settings, read once: its signature, aliases and `sendAs`.
-  const settings = useRef(null);
-  if (settings.current === null) settings.current = daemonCall('mobile.accountSettings.get', { accountId }).catch(() => null);
+  // An account's settings (its signature, aliases and `sendAs`), read once each, whichever screen
+  // part asks first: this compose's own, and the others' when the From sheet lists them.
+  const settingsCache = useRef(new Map());
+  const settingsFor = useCallback((id) => {
+    if (!settingsCache.current.has(id)) {
+      settingsCache.current.set(id, daemonCall('mobile.accountSettings.get', { accountId: id }).catch(() => null));
+    }
+    return settingsCache.current.get(id);
+  }, []);
   if (signature.current === null) {
     signature.current = openDraft
       ? Promise.resolve('')
-      : settings.current.then((s) => (s ? signatureFor(s) : ''));
+      : settingsFor(accountId).then((s) => (s ? signatureFor(s) : ''));
   }
   const [shownMode, setShownMode] = useState(mode);
   const modeRef = useRef(mode);
@@ -236,7 +248,7 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
       try {
         const reply = await daemonCall('mobile.drafts.save', {
           ...(draftId.current ? { id: draftId.current } : {}),
-          accountId,
+          accountId: acctRef.current,
           ...fieldsOf(fields),
           mode: modeRef.current,
         });
@@ -249,7 +261,7 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
     });
     chain.current = run.then(() => undefined);
     return run;
-  }, [accountId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Stops autosave for good (until a refused send re-arms it) and waits for a save in flight. */
   const stopSaving = useCallback(() => {
@@ -326,16 +338,66 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
 
   // ── From: the account's addresses ────────────────────────────────────────
   const fromDefault = useRef('');
+  const rehomed = useRef(null); // { address }: a From pick moved the compose, its settings still to come
+  const known = accounts.find((a) => a.id === acct);
+  const login = known?.email || (acct === accountId ? fromEmail : '');
   useEffect(() => {
-    settings.current.then((s) => {
-      if (!live.current || !s) return;
-      const list = identitiesOf(fromEmail, s);
+    let current = true;
+    settingsFor(acct).then((s) => {
+      const move = rehomed.current;
+      if (!live.current || !current || (!s && !move)) return;
+      rehomed.current = null;
+      const list = identitiesOf(login, s);
       fromDefault.current = defaultFrom(list, s);
       setIdentities(list);
-      // A reopened draft's own From wins over the default.
-      setFrom((cur) => cur || fromDefault.current);
+      if (!move) {
+        // A reopened draft's own From wins over the default.
+        setFrom((cur) => cur || fromDefault.current);
+        return;
+      }
+      const wanted = list.find((i) => i.address.toLowerCase() === move.address.toLowerCase());
+      setFrom(wanted ? wanted.address : fromDefault.current);
+      // The new account's signature takes the old one's place; a reopened draft has its own text.
+      if (sigBlock.current || !openDraft) {
+        const sig = s ? signatureFor(s) : '';
+        const next = sig ? withSignature('', sig) : '';
+        const old = sigBlock.current; // read now: the updater below runs at the next render
+        setText((cur) => swapSignature(cur, old, next, { quote: quote.current }));
+        sigBlock.current = next;
+      }
     });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    return () => { current = false; };
+  }, [acct]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** A pick in the From sheet: an address of this account, or of another, which moves the compose. */
+  const pickFrom = ({ accountId: id, address }) => {
+    setFromOpen(false);
+    if (locked.current) return;
+    haptic.selection();
+    if (id === acctRef.current) {
+      setFrom(address);
+      edit('from');
+      return;
+    }
+    rehomed.current = { address };
+    acctRef.current = id;
+    setAcct(id);
+    setIdentities([]);
+    setFrom('');
+    if (accounts.find((a) => a.id === id)?.kind === 'graph') setRemind(0);
+    edit('from');
+  };
+  /** A pick in the Follow up sheet; a day count without Premium opens the paywall instead. */
+  const pickFollowUp = (days) => {
+    setFollowOpen(false);
+    if (days > 0 && !premium) {
+      setRemind(0);
+      openPaywall('followUp');
+      return;
+    }
+    haptic.selection();
+    setRemind(days);
+  };
   // A reopened draft's From the account no longer sends from (an alias removed since): the
   // default again, whichever of the draft and the addresses came in first. Spelled as listed.
   useEffect(() => {
@@ -490,7 +552,7 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
     let sent = null;
     try {
       sent = await daemonCall('mobile.compose.send', {
-        accountId, ...(id ? { draftId: id } : {}), ...fields,
+        accountId: acct, ...(id ? { draftId: id } : {}), ...fields,
         ...(sendAtMs != null ? { sendAtMs } : heldUntil != null ? { sendAtMs: heldUntil } : {}),
         ...(remind > 0 && remindOffered ? { remindAfterDays: remind } : {}),
       });
@@ -505,7 +567,7 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
       scroller.current?.scrollTo?.({ top: 0 });
       return;
     }
-    if (heldUntil != null && sent?.id) useMobileStore.getState().offerUndoSend(sent.id, accountId, fields, heldUntil);
+    if (heldUntil != null && sent?.id) useMobileStore.getState().offerUndoSend(sent.id, acct, fields, heldUntil);
     haptic.notify('success');
     useMobileStore.getState().loadOutbox();
     onClose();
@@ -562,7 +624,7 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
     if (locked.current) return;
     const [own] = splitQuote(latest.current.text);
     const params = ['shorten', 'tone'].includes(action)
-      ? { action, accountId, text: own, ...(tone ? { tone } : {}) }
+      ? { action, accountId: acct, text: own, ...(tone ? { tone } : {}) }
       : { action, accountId, folder: original.folder, uid: original.uid };
     ai.start(params, (result) => {
       if (!live.current || locked.current) return;
@@ -629,8 +691,12 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
   const closeLater = useCallback(() => setLater(false), []);
   const closePicking = useCallback(() => setPicking(false), []);
   const closeReminding = useCallback(() => setReminding(null), []);
+  const closeFrom = useCallback(() => setFromOpen(false), []);
+  const closeFollow = useCallback(() => setFollowOpen(false), []);
 
-  useBackLayer(!confirming && !attaching && !later && !picking && !reminding && !aiPicking, requestLeave);
+  useBackLayer(!confirming && !attaching && !later && !picking && !reminding && !aiPicking && !fromOpen && !followOpen, requestLeave);
+  useBackLayer(fromOpen, closeFrom);
+  useBackLayer(followOpen, closeFollow);
   useBackLayer(picking, closePicking);
   useBackLayer(aiPicking, closeAiPicking);
   useBackLayer(Boolean(reminding), closeReminding);
@@ -640,6 +706,8 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
   useKeyboardViewport(sheet, scroller);
 
   const title = t(TITLE_KEYS[shownMode] || TITLE_KEYS.new);
+  const accountsList = accounts.some((a) => a.id === accountId) ? accounts : [{ id: accountId, email: fromEmail, displayName: '' }, ...accounts];
+  const fromSwitchable = identities.length > 1 || accountsList.length > 1;
   let hint = null;
   if (invalid) hint = t('mobile.compose.invalidAddress');
   else if (noTo && (ccAll.length || bccAll.length)) hint = t('mobile.compose.needTo');
@@ -665,26 +733,14 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
       </header>
       <div ref={scroller} className="mv-compose__scroll">
         {error && <p className="mv-compose__error" role="alert">{typeof error === 'string' ? t(error) : t(error.key, error.vars)}</p>}
-        {identities.length > 1 ? (
-          <div className="mv-compose__line" data-mv-from>
-            <label className="mv-compose__label" htmlFor="mv-compose-from">{t('common.from')}</label>
-            <select
-              id="mv-compose-from"
-              className="mv-compose__select mv-compose__from"
-              dir="auto"
-              value={from}
-              disabled={loading || locked.current}
-              onChange={(e) => { if (!locked.current) { setFrom(e.target.value); edit('from'); } }}
-            >
-              {identities.map((i) => <option key={i.address} value={i.address}>{i.label}</option>)}
-            </select>
-          </div>
-        ) : (
-          <div className="mv-compose__line">
-            <span className="mv-compose__label">{t('common.from')}</span>
-            <span className="mv-compose__from" dir="auto">{fromEmail}</span>
-          </div>
-        )}
+        <div className="mv-compose__line" data-mv-from>
+          <span className="mv-compose__label">{t('common.from')}</span>
+          {fromSwitchable ? (
+            <FromChip account={known || { email: login, id: acct }} address={from || login} disabled={loading || locked.current} onOpen={() => setFromOpen(true)} />
+          ) : (
+            <span className="mv-compose__from" dir="auto">{login}</span>
+          )}
+        </div>
         <RecipientField
           label={t('common.to')}
           entries={to.entries}
@@ -753,50 +809,22 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
           onSelect={(e) => { caret.current = e.target.selectionStart; }}
         />
       </div>
+      {remind > 0 && remindOffered && <FollowUpChip days={remind} onClear={() => setRemind(0)} />}
       <div className="mv-compose__tools" role="toolbar" aria-label={t('mobile.actions.toolbar')}>
-        <Button variant="ghost" size="touch" icon aria-label={t('mobile.compose.attach')} disabled={locked.current} onClick={() => setAttaching(true)}>
-          <PaperclipIcon />
-        </Button>
-        <Button variant="ghost" size="touch" icon data-mv-send-later-open aria-label={t('mobile.compose.sendLater')} disabled={!canSend} onClick={() => trySend(true)}>
-          <ClockIcon />
-        </Button>
+        <ToolButton icon={PaperclipIcon} caption={t('mobile.compose.attach')} disabled={locked.current} onClick={() => setAttaching(true)} />
+        <ToolButton icon={ClockIcon} caption={t('mobile.compose.later')} label={t('mobile.compose.sendLater')} data-mv-send-later-open disabled={!canSend} onClick={() => trySend(true)} />
         {templates.length > 0 && (
-          <Button variant="ghost" size="touch" icon data-mv-templates-open aria-label={t('compose.templates')} disabled={loading || locked.current} onClick={() => setPicking(true)}>
-            <TemplateIcon />
-          </Button>
+          <ToolButton icon={TemplateIcon} caption={t('compose.templates')} data-mv-templates-open disabled={loading || locked.current} onClick={() => setPicking(true)} />
         )}
         {aiEnabled && (
-          <Button variant="ghost" size="touch" icon data-mv-ai-open aria-label={t('settings.tab.aiProviders')} disabled={loading || locked.current || ai.busy} onClick={() => setAiPicking(true)}>
-            <AiIcon />
-          </Button>
+          <ToolButton icon={AiIcon} caption={t('settings.tab.aiProviders')} data-mv-ai-open disabled={loading || locked.current || ai.busy} onClick={() => setAiPicking(true)} />
         )}
         {remindOffered && (
-          // The native picker, laid invisibly over the bell (desktop's RemindIfNoReply glyph).
-          <span className="mv-compose__remind" data-mv-remind data-mv-active={remind > 0 ? '' : undefined}>
-            <BellIcon size={22} />
-            {!premium && <span id={premiumBadge} className="mv-schedule__premium">{t('common.premium')}</span>}
-            <select
-              id="mv-compose-remind"
-              className="mv-compose__remind-select"
-              aria-label={t('compose.remind.title')}
-              aria-describedby={premium ? undefined : premiumBadge}
-              value={remind}
-              disabled={locked.current}
-              onChange={(e) => {
-                const days = Number(e.target.value) || 0;
-                if (days > 0 && !premium) {
-                  setRemind(0);
-                  openPaywall('followUp');
-                  return;
-                }
-                setRemind(days);
-              }}
-            >
-              {REMIND_CHOICES.map(([days, key]) => <option key={days} value={days}>{t(key)}</option>)}
-            </select>
-          </span>
+          <ToolButton icon={BellIcon} caption={t('mobile.compose.followUp')} data-mv-followup-open data-mv-active={remind > 0 ? '' : undefined} disabled={locked.current} onClick={() => setFollowOpen(true)} />
         )}
       </div>
+      {fromOpen && <FromSheet accounts={accountsList} current={{ accountId: acct, address: from || login }} loadSettings={settingsFor} onPick={pickFrom} onClose={closeFrom} />}
+      {followOpen && <FollowUpSheet value={remind} premium={premium} onPick={pickFollowUp} onClose={closeFollow} />}
       {confirming && (
         <Sheet kind="sheet" label={t('mobile.compose.leaveTitle')} onClose={keepEditing}>
           <div className="mv-sheet__grip" aria-hidden="true" />
