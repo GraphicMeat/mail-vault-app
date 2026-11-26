@@ -144,6 +144,7 @@
 /* A flat fill, not another gradient: a paint the compositor can do on every
    mouseenter without measuring layout or blending a filter over it. */
 .quick-action-radial-item:hover:not(:disabled),
+.quick-action-radial-item[data-hot]:not(:disabled),
 .quick-action-radial-item:focus-visible:not(:disabled) {
   z-index: 2;
   color: var(--quick-action-color, var(--mail-text));
