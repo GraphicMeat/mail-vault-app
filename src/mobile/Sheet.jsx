@@ -1,6 +1,8 @@
 // A modal panel over the list: a bottom sheet or a leading-edge drawer, with a backdrop that
 // closes it on tap. Focus moves into the panel on open and back to where it was on close.
+// A sheet is dragged down to dismiss, the drawer toward its edge (gestures/useSheetDrag.js).
 import React, { useEffect, useRef } from 'react';
+import { useSheetDrag } from './gestures/useSheetDrag.js';
 
 export default function Sheet({ kind = 'sheet', label, onClose, children }) {
   const panel = useRef(null);
@@ -14,6 +16,7 @@ export default function Sheet({ kind = 'sheet', label, onClose, children }) {
       if (before && typeof before.focus === 'function') before.focus();
     };
   }, [onClose]);
+  useSheetDrag(panel, { kind, onClose });
   return (
     <div className={`mv-overlay mv-overlay--${kind}`}>
       <div className="mv-overlay__backdrop" onClick={onClose} aria-hidden="true" />

@@ -165,7 +165,7 @@ describe('deferred move and delete', () => {
     const onOpen = vi.fn();
     const { container } = render(<MessageRow row={ROWS[1]} index={1} start={0} onOpen={onOpen} onSwipe={onSwipe} />);
     const row = container.querySelector('.mv-row');
-    swipe(row, 10, 330);
+    swipe(row, 30, 330);
     fireEvent.click(row);
     expect(onSwipe).toHaveBeenCalledWith('unseen', ROWS[1]);
     expect(onOpen).not.toHaveBeenCalled();

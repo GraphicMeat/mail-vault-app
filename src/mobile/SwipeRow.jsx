@@ -12,6 +12,7 @@
 // a scroll starts. A side given as null (its swipe set to "none") does not move that way.
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { haptic } from './haptics.js';
+import { inEdgeZone } from './gestures/recognizers.js';
 
 /** How far (px) an open row stays slid: the width of the revealed button. */
 export const SWIPE_OPEN = 88;
@@ -126,6 +127,8 @@ export default function SwipeRow({ leading, trailing, onAction, initialOpen = nu
   const onPointerDown = (e) => {
     swiped.current = false;
     if (e.button > 0 || e.isPrimary === false) return;
+    // The leading edge strip is the back / drawer swipe's, not a row's.
+    if (inEdgeZone(e.clientX, window.innerWidth, isRtl(root.current))) return;
     const el = content.current;
     rtl.current = isRtl(root.current);
     drag.current = {

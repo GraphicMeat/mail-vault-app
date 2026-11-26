@@ -238,7 +238,7 @@ describe('preferences in the app', () => {
     engine.prefs = { swipeRightAction: 'flag' };
     const { App, store } = await fresh();
     const row = await searchFor(App, store);
-    await act(async () => { swipe(row(), 10, 330); });
+    await act(async () => { swipe(row(), 30, 330); });
     await waitFor(() => expect(applies().map((p) => p.kind)).toEqual(['flag']));
     expect(applies()[0]).toMatchObject({ accountId: 'a1', folder: 'INBOX', uids: [42] });
     expect(row().className).not.toContain('mv-row--unread');

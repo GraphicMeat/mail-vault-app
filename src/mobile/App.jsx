@@ -67,6 +67,8 @@ import { errorKey } from './errors.js';
 import { runPerfGate } from './perf.js';
 import { useT } from './i18n.js';
 import { useBackLayer } from './backStack.js';
+import EdgeZone from './gestures/EdgeZone.jsx';
+import { neighborRow } from './gestures/neighbors.js';
 import KeepDock from './KeepDock.jsx';
 import Toasts from './Toasts.jsx';
 import Compose from './Compose.jsx';
@@ -705,6 +707,18 @@ function App() {
     }
   }, [open, show]);
   const onViewerDelete = useCallback(() => confirmThen(deleteOpen), [confirmThen, deleteOpen]);
+  // A swipe on the viewer's header: the next or previous message of the list it was opened from.
+  const stepOpen = useCallback((dir) => {
+    if (!open) return;
+    const s = useMobileStore.getState();
+    const near = neighborRow(s.listShowing(open.accountId, open.folder), open.accountId, open.row.uid, dir);
+    if (near) show(near.row, near.index, s.placeOf(near.row));
+  }, [open, show]);
+  const openDrawer = useCallback(() => {
+    setPanel('drawer');
+    ensureViews();
+    useViewStore.getState().loadCounts();
+  }, []);
   const onNewMessage = useCallback(() => {
     const { activeAccountId: accountId } = useMobileStore.getState();
     if (accountId) setCompose({ key: Date.now(), accountId, mode: 'new' });
@@ -954,7 +968,7 @@ function App() {
   return (
     <div className="mv-kb-layer mv-app">
       <header className="mv-header">
-        <Button variant="ghost" size="touch" icon aria-label={t('mobile.drawer.open')} onClick={() => { setPanel('drawer'); ensureViews(); useViewStore.getState().loadCounts(); }}>
+        <Button variant="ghost" size="touch" icon aria-label={t('mobile.drawer.open')} onClick={openDrawer}>
           <MenuIcon />
         </Button>
         <div className="mv-header__titles">
@@ -1012,6 +1026,7 @@ function App() {
           <Button variant="secondary" size="touch" className="mt-3" onClick={loadList}>{t('common.retry')}</Button>
         </div>
       )}
+      <EdgeZone onOpenDrawer={openDrawer} />
       {fabShown && (
         <button type="button" className="mv-fab" data-mv-compose aria-label={t('mobile.compose.new')} onClick={onNewMessage}>
           <ComposeIcon />
@@ -1083,6 +1098,7 @@ function App() {
           onMove={onViewerMove}
           onDelete={onViewerDelete}
           onCompose={onViewerCompose}
+          onStep={stepOpen}
           initialPicking={DEMO_MOVE}
         />
       )}

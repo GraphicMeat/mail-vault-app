@@ -46,6 +46,7 @@ import FieldStrip from './FieldStrip.jsx';
 import Sheet from './Sheet.jsx';
 import AttachmentChip from './AttachmentChip.jsx';
 import { useBackLayer } from './backStack.js';
+import { useStepSwipe } from './gestures/useStepSwipe.js';
 import { BackButton, EnvelopeIcon, FlagIcon, ForwardIcon, MoreIcon, MoveIcon, ReplyAllIcon, ReplyIcon, ShieldIcon, SpamIcon, TrashIcon } from './icons.jsx';
 import { junkFolder, splitReader } from './quickActions.js';
 import { openPaywall } from './premium.js';
@@ -339,8 +340,11 @@ function linkTexts(translate) {
   return Object.fromEntries(LINK_REASONS.map((k) => [`linkSafety.reason.${k}`, translate(`linkSafety.reason.${k}`)]));
 }
 
-export default function Viewer({ accountId, folder, row, onClose, folders = [], onAction = noop, onMove = noop, onDelete = noop, onCompose = noop, initialPicking = false }) {
+export default function Viewer({ accountId, folder, row, onClose, folders = [], onAction = noop, onMove = noop, onDelete = noop, onCompose = noop, onStep = noop, initialPicking = false }) {
   const t = useT();
+  // A horizontal swipe on the header block steps to the next or previous message.
+  const top = useRef(null);
+  useStepSwipe(top, { onStep });
   const [seen, setSeen] = useState(row.seen !== false);
   const [flagged, setFlagged] = useState(Boolean(row.flagged));
   // The row can change under an open viewer (a delayed `markAsReadMode` marks it read): follow it.
@@ -500,7 +504,7 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
 
   return (
     <section className="mv-viewer" aria-modal="true" role="dialog" aria-label={displayText(row.subject, t('common.noSubject'))}>
-      <div className="mv-viewer__top">
+      <div ref={top} className="mv-viewer__top">
         <header className="mv-viewer__bar">
           <BackButton className="mv-viewer__back" data-mv-viewer-close onClick={onClose} />
           {trackerCount > 0 && <TrackerShield count={trackerCount} stripped={Boolean(body.trackersStripped)} onOpen={() => setTrackerList(true)} />}

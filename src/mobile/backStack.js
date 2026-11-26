@@ -64,3 +64,16 @@ export function useBackLayer(active, onClose) {
   latest.current = onClose;
   useEffect(() => (active ? pushLayer(() => latest.current?.()) : undefined), [active]);
 }
+
+/** Closes the top layer the way System Back does (the edge swipe's commit). False with none open. */
+export function popTopLayer() {
+  if (layers.length === 0) return false;
+  try {
+    window.history.back();
+  } catch {
+    // No history: close it directly.
+    const top = layers.pop();
+    top?.close();
+  }
+  return true;
+}

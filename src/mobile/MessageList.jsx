@@ -13,6 +13,7 @@ import { useT } from './i18n.js';
 import { haptic } from './haptics.js';
 import { useMobileStore } from './store.js';
 import { rowHeight } from './prefs.js';
+import { pullMayStart } from './gestures/recognizers.js';
 
 const OVERSCAN = 8;
 /** How far (px, after damping) a pull has to travel before letting go refreshes. */
@@ -41,7 +42,7 @@ export const PullIndicator = memo(function PullIndicator({ scrollRef, onRefresh,
       setPull(d);
     };
     const down = (e) => {
-      start.current = el.scrollTop <= 0 && e.touches.length === 1 ? e.touches[0].clientY : null;
+      start.current = pullMayStart(el.scrollTop, e.touches.length) ? e.touches[0].clientY : null;
     };
     const move = (e) => {
       if (start.current == null) return;

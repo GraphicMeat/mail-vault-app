@@ -1551,3 +1551,13 @@ body {
 .mv-app .keep-dock { z-index: 11; --keep-top-inset: var(--mv-safe-top); }
 .mv-app .keep-dock[data-side='right'] { right: calc(var(--mv-safe-right) + 8px); }
 .mv-app .keep-dock[data-side='left'] { left: calc(var(--mv-safe-left) + 8px); }
+
+/* The leading-edge strip (gestures/EdgeZone.jsx): the back / drawer swipe starts here. Above every
+   full-screen layer, under the sheets and drawer. */
+.mv-edge { position: fixed; top: 0; bottom: 0; inset-inline-start: 0; width: 20px; z-index: 19; touch-action: none; }
+/* A sheet's handle and the drawer are dragged away (gestures/useSheetDrag.js): the browser keeps
+   only the vertical pan the drawer's own list needs. */
+.mv-sheet__grip, .mv-sheet__title { touch-action: none; }
+.mv-drawer { touch-action: pan-y; }
+/* The viewer's header keeps its vertical scroll; a horizontal swipe on it steps to the next message. */
+.mv-viewer__top { touch-action: pan-y; }
