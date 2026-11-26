@@ -4590,6 +4590,7 @@
   "mobile.settings.saveFailed": "无法保存该设置，请重试。",
   "mobile.quickActions.onDesktop": "{{name}}（桌面版）",
   "mobile.quickActions.select": "选择",
+  "mobile.select.all": "全选",
   "mobile.settings.quickActionsHint": "打开的邮件下方的栏中按此顺序最多显示四个操作，其余操作都在“更多”中。只有账户有垃圾邮件文件夹时才会显示“移至垃圾邮件”。",
   "mobile.prefs.loadImages": "自动加载远程图片",
   "mobile.prefs.loadImagesHint": "打开邮件时加载图片。仍带有跟踪像素的邮件会保留“加载图片”按钮。",

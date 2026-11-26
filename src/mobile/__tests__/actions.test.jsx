@@ -229,6 +229,43 @@ describe('deferred move and delete', () => {
     expect(applies().map((p) => p.uids)).toEqual([[4], [2]]);
   });
 
+  it('a bulk delete over two folders is one toast and one undo, then one apply per folder', async () => {
+    const store = await freshStore();
+    const { list } = store.getState();
+    store.getState().actMany('delete', [
+      { accountId: 'a1', folder: 'INBOX', uids: [4, 2] },
+      { accountId: 'a1', folder: 'Archive', uids: [9] },
+    ]);
+    expect(uidsOf(list)).toEqual([5, 3, 1]);
+    expect(store.getState().undo).toMatchObject({ kind: 'delete', count: 3 });
+    expect(applies()).toEqual([]);
+    expect(store.getState().undoDeferred(store.getState().undo.id)).toBe(true);
+    expect(uidsOf(list)).toEqual([5, 4, 3, 2, 1]);
+    await vi.advanceTimersByTimeAsync(UNDO_MS * 3);
+    expect(applies()).toEqual([]);
+    store.getState().actMany('move', [
+      { accountId: 'a1', folder: 'INBOX', uids: [4, 2] },
+      { accountId: 'a1', folder: 'Archive', uids: [9] },
+    ], { target: 'Projects/Q4' });
+    await vi.advanceTimersByTimeAsync(UNDO_MS);
+    expect(applies()).toEqual([
+      { accountId: 'a1', folder: 'INBOX', uids: [4, 2], kind: 'move', target: 'Projects/Q4' },
+      { accountId: 'a1', folder: 'Archive', uids: [9], kind: 'move', target: 'Projects/Q4' },
+    ]);
+  });
+
+  it('a bulk read goes at once, one apply per folder, and says if any failed', async () => {
+    const store = await freshStore();
+    const done = await store.getState().actMany('seen', [
+      { accountId: 'a1', folder: 'INBOX', uids: [4, 2] },
+      { accountId: 'a1', folder: 'Archive', uids: [9] },
+    ]);
+    expect(applies().map((p) => [p.folder, p.uids, p.kind])).toEqual([['INBOX', [4, 2], 'seen'], ['Archive', [9], 'seen']]);
+    expect(done.ok).toBe(true);
+    engine.failApply = true;
+    expect((await store.getState().actMany('seen', [{ accountId: 'a1', folder: 'INBOX', uids: [1] }])).ok).toBe(false);
+  });
+
   it('a folder switch flushes the deferred action', async () => {
     const store = await freshStore();
     store.getState().act('delete', { accountId: 'a1', folder: 'INBOX', uids: [4] });

@@ -87,6 +87,10 @@ import { startPremiumSync } from './premium.js';
 import MovePicker from './MovePicker.jsx';
 import Sheet from './Sheet.jsx';
 import { rowUids } from './prefs.js';
+import { CheckSquare } from 'lucide-react';
+import SelectionHeader from './selection/SelectionHeader.jsx';
+import SelectionBar from './selection/SelectionBar.jsx';
+import { useSelection } from './selection/selectionStore.js';
 import { visibleAccounts, markReadPlan, afterDeletePick } from './prefs.js';
 import { Button } from '../components/ui/Button.jsx';
 import { ChevronDownIcon, ComposeIcon, MenuIcon, SearchIcon } from './icons.jsx';
@@ -687,7 +691,21 @@ function App() {
     if (!place.accountId) return;
     setCompose({ key: Date.now(), accountId: place.accountId, mode, original: { folder: place.folder, uid: row.uid, dateMs: row.dateMs } });
   }, []);
-  const rowWheel = useMemo(() => ({ onAction: onSwipe, onMove: onRowMove, onCompose: onRowCompose }), [onSwipe, onRowMove, onRowCompose]);
+  // Multi-select (selection/): from the wheel's Select (that row ticked) or the header's Select; Back
+  // and Escape leave it, and so does another folder. Its delete asks once with the count.
+  const selecting = useSelection((s) => s.active);
+  const endSelect = useCallback(() => useSelection.getState().end(), []);
+  useBackLayer(selecting, endSelect);
+  useEffect(() => { useSelection.getState().end(); }, [activeAccountId, activeFolder]);
+  const onSelectRow = useCallback((row) => {
+    useSelection.getState().begin([{ row, place: useMobileStore.getState().placeOf(row) }]);
+  }, []);
+  const beginSelect = useCallback(() => useSelection.getState().begin([]), []);
+  const confirmBulk = useCallback((count, run) => setAskDelete({ run, kind: 'delete', count }), []);
+  const rowWheel = useMemo(
+    () => ({ onAction: onSwipe, onMove: onRowMove, onCompose: onRowCompose, onSelect: onSelectRow }),
+    [onSwipe, onRowMove, onRowCompose, onSelectRow],
+  );
   const onViewerAction = useCallback((kind) => {
     if (!open) return undefined;
     return useMobileStore.getState().act(kind, { accountId: open.accountId, folder: open.folder, uids: [open.row.uid] });
@@ -981,9 +999,10 @@ function App() {
       : t('mobile.confirmConversation.delete', { count: askDelete.count });
   }
   // The compose button is on the screen while no message is open; the toasts rise above it then.
-  const fabShown = !open;
+  const fabShown = !open && !selecting;
   return (
     <div className="mv-kb-layer mv-app">
+      {selecting ? <SelectionHeader /> : (
       <header className="mv-header">
         <Button variant="ghost" size="touch" icon aria-label={t('mobile.drawer.open')} onClick={openDrawer}>
           <MenuIcon />
@@ -999,10 +1018,16 @@ function App() {
             <AccountButton account={account} allInboxes={allInboxes} shownAccounts={shownAccounts} onOpen={() => setPanel('switcher')} />
           )}
         </div>
+        {listState === 'ready' && !chatView && (
+          <Button variant="ghost" size="touch" icon data-mv-select-open aria-label={t('mobile.quickActions.select')} onClick={beginSelect}>
+            <CheckSquare size={22} aria-hidden="true" />
+          </Button>
+        )}
         <Button variant="ghost" size="touch" icon data-mv-search-open aria-label={t('mobile.search.open')} onClick={() => setSearchOpen(true)}>
           <SearchIcon />
         </Button>
       </header>
+      )}
       <StatusBar sync={sync} onRetry={onRefresh} />
       {(allInboxes ? shownAccounts : [account]).map((a) => (
         <React.Fragment key={a?.id ?? 'none'}>
@@ -1159,7 +1184,8 @@ function App() {
           onClose={closeCompose}
         />
       )}
-      <Toasts lifted={fabShown} />
+      {selecting && <SelectionBar confirm={confirmBulk} />}
+      <Toasts lifted={fabShown || selecting} />
     </div>
   );
 }

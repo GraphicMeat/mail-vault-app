@@ -1,10 +1,8 @@
-import { Button } from "./ui/Button";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useSelectionStore } from "../stores/selectionStore";
 import { useMessageListStore } from "../stores/messageListStore";
 import { useSearchStore } from "../stores/searchStore";
-import { X } from "lucide-react";
 import { MoveToFolderDropdown } from "./MoveToFolderDropdown";
 import { SnoozePicker } from "./SnoozePicker";
 import { serverDeleteClause, describeReaderDelete } from "../utils/custodyCopy";
@@ -13,6 +11,7 @@ import { useTagStore } from '../stores/tagStore';
 import { useMailStore } from "../stores/mailStore";
 import { useExportStore } from "../stores/exportStore";
 import { QuickActions } from "./QuickActions";
+import { SelectionBarFrame } from "./SelectionBarFrame";
 import { useQuickActionConfiguration } from "../hooks/useQuickActionConfiguration";
 import { useSettingsStore } from "../stores/settingsStore";
 import {
@@ -441,21 +440,13 @@ export function SelectionActionBarView({
   }));
 
   return (
-    <div
-      className="flex items-center gap-1 px-2 py-1.5 bg-mail-surface border border-mail-strong
-                         rounded-xl
-                         max-w-[calc(100vw-1.5rem)] min-w-0 pointer-events-auto"
-      data-quick-actions-preview={preview || undefined}
+    <SelectionBarFrame
+      label={label ?? t("selection.selected", { summary: selectedRows.length })}
+      labelRef={labelRef}
+      preview={preview}
+      clearTitle={t("selection.clearSelection")}
+      onClear={onClear}
     >
-      {/* Selection count */}
-      <span
-        ref={labelRef}
-        data-selection-label
-        className="text-sm font-medium text-mail-text px-3 whitespace-nowrap"
-      >
-        {label ?? t("selection.selected", { summary: selectedRows.length })}
-      </span>
-
       <QuickActions
         surface="selection"
         config={config}
@@ -470,19 +461,6 @@ export function SelectionActionBarView({
         onActionStart={onActionStart}
         preview={preview}
       />
-
-      <div className="w-px h-6 bg-mail-border" />
-
-      {/* Clear */}
-      <Button
-        variant="ghost"
-        icon
-        size="md"
-        onClick={onClear}
-        title={t("selection.clearSelection")}
-      >
-        <X size={16} className="text-mail-text-muted" />
-      </Button>
-    </div>
+    </SelectionBarFrame>
   );
 }

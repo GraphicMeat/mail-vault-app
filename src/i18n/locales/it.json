@@ -4590,6 +4590,7 @@
   "mobile.settings.saveFailed": "Impossibile salvare l’impostazione. Riprova.",
   "mobile.quickActions.onDesktop": "{{name}} (su desktop)",
   "mobile.quickActions.select": "Seleziona",
+  "mobile.select.all": "Seleziona tutto",
   "mobile.settings.quickActionsHint": "Fino a quattro azioni compaiono nella barra sotto un messaggio aperto, in questo ordine. Le altre sono in Altro. Sposta in Spam compare solo se l’account ha una cartella Spam.",
   "mobile.prefs.loadImages": "Carica automaticamente le immagini remote",
   "mobile.prefs.loadImagesHint": "Le immagini si caricano all'apertura del messaggio. La posta che contiene ancora pixel di tracciamento mantiene il pulsante Carica immagini.",

@@ -18,6 +18,8 @@ import { useMobileStore } from './store.js';
 import { rowHeight } from './prefs.js';
 import { pullMayStart } from './gestures/recognizers.js';
 import RowWheel from './quickActions/RowWheel.jsx';
+import SweepColumn from './selection/SweepColumn.jsx';
+import { useSelection } from './selection/selectionStore.js';
 
 const OVERSCAN = 8;
 /** How far (px, after damping) a pull has to travel before letting go refreshes. */
@@ -115,6 +117,7 @@ function MessageList({ cache, onOpen, onSwipe, onRefresh, refreshing = false, de
     setHeld({ row, key: Date.now(), x: point.x, y: point.y });
   }, []);
   const closeWheel = useCallback(() => setHeld(null), []);
+  const selecting = useSelection((s) => s.active);
   const scrollRef = useRef(null);
   const [, rerender] = useReducer((n) => n + 1, 0);
   useEffect(() => cache.subscribe(rerender), [cache]);
@@ -165,6 +168,7 @@ function MessageList({ cache, onOpen, onSwipe, onRefresh, refreshing = false, de
           emptyNote && <p className="mv-list__empty">{t('mobile.list.empty')}</p>
         ) : (
           <div className="mv-list__inner" style={{ height: `${virtualizer.getTotalSize()}px` }}>
+            {selecting && <SweepColumn cache={cache} height={height} />}
             {items.map((it) => {
               const row = cache.rowAt(it.index);
               return (

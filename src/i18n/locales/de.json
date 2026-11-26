@@ -4590,6 +4590,7 @@
   "mobile.settings.saveFailed": "Die Einstellung konnte nicht gespeichert werden. Versuche es erneut.",
   "mobile.quickActions.onDesktop": "{{name}} (am Desktop)",
   "mobile.quickActions.select": "Auswählen",
+  "mobile.select.all": "Alle auswählen",
   "mobile.settings.quickActionsHint": "Bis zu vier Aktionen stehen in dieser Reihenfolge in der Leiste unter einer geöffneten Nachricht. Alle anderen Aktionen findest du unter Mehr. In den Spam-Ordner verschieben erscheint nur, wenn das Konto einen Spam-Ordner hat.",
   "mobile.prefs.loadImages": "Externe Bilder automatisch laden",
   "mobile.prefs.loadImagesHint": "Bilder laden beim Öffnen einer Nachricht. Bei Mails mit Tracking-Pixeln bleibt die Schaltfläche Bilder laden.",

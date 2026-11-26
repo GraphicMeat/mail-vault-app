@@ -4590,6 +4590,7 @@
   "mobile.settings.saveFailed": "Impossible d’enregistrer le réglage. Réessayez.",
   "mobile.quickActions.onDesktop": "{{name}} (sur ordinateur)",
   "mobile.quickActions.select": "Sélectionner",
+  "mobile.select.all": "Tout sélectionner",
   "mobile.settings.quickActionsHint": "Jusqu’à quatre actions figurent dans la barre sous un message ouvert, dans cet ordre. Les autres sont sous Plus. Déplacer vers les indésirables n’apparaît que si le compte a un dossier Indésirables.",
   "mobile.prefs.loadImages": "Charger automatiquement les images distantes",
   "mobile.prefs.loadImagesHint": "Les images se chargent à l'ouverture d'un message. Un e-mail qui contient encore des pixels de suivi garde le bouton Charger les images.",

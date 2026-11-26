@@ -512,13 +512,13 @@ describe('All Inboxes in the app', () => {
     expect(screen.getByRole('dialog', { name: t('mobile.switcher.title') })).toBeTruthy();
   });
 
-  it('the header row holds the menu, the titles and search, nothing else', async () => {
+  it('the header row holds the menu, the titles, Select and search, nothing else', async () => {
     await mountUnified();
     await syncState('a1', 'syncing');
     const header = document.querySelector('.mv-header');
     expect(header.querySelector('.mv-chip')).toBeNull();
     expect([...header.children].map((el) => el.matches('.mv-header__titles') ? 'titles' : el.getAttribute('aria-label'))).toEqual([
-      t('mobile.drawer.open'), 'titles', t('mobile.search.open'),
+      t('mobile.drawer.open'), 'titles', t('mobile.quickActions.select'), t('mobile.search.open'),
     ]);
   });
 

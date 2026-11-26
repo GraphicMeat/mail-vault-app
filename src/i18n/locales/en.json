@@ -4590,6 +4590,7 @@
   "mobile.settings.saveFailed": "Couldn't save the setting. Try again.",
   "mobile.quickActions.onDesktop": "{{name}} (on desktop)",
   "mobile.quickActions.select": "Select",
+  "mobile.select.all": "Select all",
   "mobile.settings.quickActionsHint": "Up to four actions sit on the bar under an open message, in this order. Every other action is under More. Move to Junk shows only where the account has a Junk folder.",
   "mobile.prefs.loadImages": "Load remote images automatically",
   "mobile.prefs.loadImagesHint": "Images load as a message opens. Mail that still carries tracking pixels keeps the Load images button.",

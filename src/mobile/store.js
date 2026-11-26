@@ -4,7 +4,8 @@
 // Actions (`act`): read, unread, flag and unflag go to `mobile.actions.apply` at once. A move or a
 // delete is deferred on this side: its rows leave the list at once (`list.hide`), an undo toast
 // shows for UNDO_MS, and only then is it applied, or sooner when the page is hidden or unloaded,
-// the account or folder changes, or the next move or delete comes (one deferred action at a time;
+// the account or folder changes, or the next move or delete comes (one deferred action at a time,
+// which may span several folders: a multi-select's, `actMany`;
 // a delete in the viewer that opens the next message keeps its own toast).
 // Undo forgets it and shows the rows again; nothing reached the engine. A killed app can lose an
 // unsent move or delete, which keeps the mail.
@@ -126,7 +127,7 @@ const keysIn = (list, accountId, uids) => uids.map((uid) => list.keyFor(accountI
 export function createMobileStore() {
   let initRun = null;
   let unsubscribers = [];
-  let deferred = null; // { id, accountId, folder, uids, kind, target, list, timer }
+  let deferred = null; // { id, kind, target, groups: [{ accountId, folder, uids, list }], timer }
   let serial = 0;
   /** `id:outcome` of the send toasts already shown. */
   const toasted = new Set();
@@ -252,6 +253,12 @@ export function createMobileStore() {
       return { ok: !failed, skipped };
     }
 
+    /** Applies each group of a deferred action (or of a bulk one): `{ ok, skipped }` over all of them. */
+    async function sendGroups(kind, target, groups) {
+      const replies = await Promise.all(groups.map((g) => send({ ...g, kind, target })));
+      return { ok: replies.every((r) => r.ok), skipped: replies.flatMap((r) => r.skipped) };
+    }
+
     /** Applies the deferred move or delete now, if there is one. */
     function flush() {
       const d = deferred;
@@ -259,7 +266,7 @@ export function createMobileStore() {
       deferred = null;
       clearTimeout(d.timer);
       if (get().undo?.id === d.id) set({ undo: null });
-      return send(d);
+      return sendGroups(d.kind, d.target, d.groups);
     }
 
     function onActionResult(p) {
@@ -439,13 +446,26 @@ export function createMobileStore() {
       act(kind, { accountId, folder, uids, target } = {}) {
         if (!accountId || !folder || !Array.isArray(uids) || uids.length === 0) return Promise.resolve();
         if (!HIDES.has(kind)) return send({ accountId, folder, uids, kind, list: listOf(accountId, folder) });
+        return get().actMany(kind, [{ accountId, folder, uids }], { target });
+      },
+
+      /**
+       * `act` over several places at once (a multi-select spanning folders or accounts): `groups` is
+       * `[{ accountId, folder, uids }]`. Reads and flags go at once, one apply per group, resolving
+       * `{ ok, skipped }` over all. A move or delete is one deferred action with one undo toast
+       * counting every uid, applied group by group when it runs out.
+       */
+      actMany(kind, groups, { target } = {}) {
+        const valid = (groups || []).filter((g) => g && g.accountId && g.folder && Array.isArray(g.uids) && g.uids.length);
+        if (!valid.length) return Promise.resolve();
+        const placed = valid.map((g) => ({ ...g, uids: [...g.uids], list: listOf(g.accountId, g.folder) }));
+        if (!HIDES.has(kind)) return sendGroups(kind, undefined, placed);
         const before = flush();
-        const list = listOf(accountId, folder);
-        list?.hide(keysIn(list, accountId, uids));
+        for (const g of placed) g.list?.hide(keysIn(g.list, g.accountId, g.uids));
         const id = ++serial;
         const timer = setTimeout(() => { if (deferred?.id === id) flush(); }, UNDO_MS);
-        deferred = { id, accountId, folder, uids: [...uids], kind, target, list, timer };
-        set({ undo: { id, kind, count: uids.length, target: target ?? null } });
+        deferred = { id, kind, target, groups: placed, timer };
+        set({ undo: { id, kind, count: placed.reduce((n, g) => n + g.uids.length, 0), target: target ?? null } });
         return before;
       },
 
@@ -555,7 +575,7 @@ export function createMobileStore() {
         if (!d || d.id !== id) return false;
         deferred = null;
         clearTimeout(d.timer);
-        d.list?.unhide(keysIn(d.list, d.accountId, d.uids));
+        for (const g of d.groups) g.list?.unhide(keysIn(g.list, g.accountId, g.uids));
         set({ undo: null });
         return true;
       },
@@ -904,7 +924,7 @@ export function createMobileStore() {
       // is revoked; Settings offers it when `mobile.accounts.revocable` says so).
       async removeAccount(id, { revokeGoogle = false } = {}) {
         // A deferred action of the account being removed is dropped unsent: nothing can apply it.
-        const dropped = deferred?.accountId === id ? deferred : null;
+        const dropped = deferred?.groups.some((g) => g.accountId === id) ? deferred : null;
         if (dropped) {
           clearTimeout(dropped.timer);
           if (get().undo?.id === dropped.id) set({ undo: null });
@@ -914,7 +934,7 @@ export function createMobileStore() {
           await daemonCall('mobile.accounts.remove', revokeGoogle ? { accountId: id, revokeGoogle: true } : { accountId: id });
         } catch (err) {
           // The account stays: its dropped action's rows come back, and the switcher keeps asking.
-          dropped?.list?.unhide(keysIn(dropped.list, dropped.accountId, dropped.uids));
+          for (const g of dropped?.groups || []) g.list?.unhide(keysIn(g.list, g.accountId, g.uids));
           notice('mobile.switcher.removeFailed');
           throw err;
         }

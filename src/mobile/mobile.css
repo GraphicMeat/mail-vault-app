@@ -1571,3 +1571,24 @@ html.mv-wheel-open .mv-list { overflow: hidden; touch-action: none; }
 @media (max-width: 380px) {
   .quick-actions-radial[data-radial-layout="categories"] { zoom: .85; }
 }
+
+/* Multi-select (src/mobile/selection/): a check before each row, the strip that ticks and sweeps,
+   the header and the bar of desktop's selection surface above the safe area. */
+.mv-row-slot--selecting .mv-row { padding-inline-start: 52px; }
+.mv-row__check {
+  position: absolute; inset-inline-start: 14px; top: 50%; z-index: 1; box-sizing: border-box;
+  width: 22px; height: 22px; margin-top: -11px; border-radius: 50%;
+  border: 2px solid var(--mail-border-strong, var(--mail-border)); background: var(--mail-bg);
+  pointer-events: none;
+}
+.mv-row__check[data-checked] { border-color: var(--mail-accent); background: var(--mail-accent); }
+.mv-row__check[data-checked]::after {
+  content: ""; position: absolute; left: 5px; top: 1px; width: 5px; height: 10px;
+  border: solid var(--mail-accent-contrast, #fff); border-width: 0 2px 2px 0; transform: rotate(45deg);
+}
+.mv-checkcol { position: absolute; inset-block: 0; inset-inline-start: 0; z-index: 3; width: 52px; touch-action: none; }
+.mv-header--selecting .mv-header__titles--center { align-items: center; text-align: center; }
+.mv-selbar {
+  position: fixed; inset-inline: 12px; bottom: calc(var(--mv-safe-bottom) + 12px); z-index: 12;
+  display: flex; justify-content: center; pointer-events: none;
+}
