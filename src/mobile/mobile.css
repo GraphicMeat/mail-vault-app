@@ -1315,19 +1315,29 @@ body {
   font-size: 1rem;
 }
 .mv-search__input:focus { outline: 2px solid var(--mail-accent); outline-offset: -1px; }
-.mv-search__scopes { flex: none; display: flex; gap: 8px; padding: 4px calc(var(--mv-safe-right) + 12px) 8px calc(var(--mv-safe-left) + 12px); }
+.mv-search__scopes { flex: none; display: flex; gap: 4px; padding: 0 calc(var(--mv-safe-right) + 12px) 4px calc(var(--mv-safe-left) + 12px); }
+/* A scope chip is desktop's folder chip (DESIGN.md Chips) drawn by its face, inside a button that
+   keeps a finger's 44px hit area around it. */
 .mv-search__chip {
+  display: inline-flex;
+  align-items: center;
   min-height: 44px;
-  padding: 0 14px;
-  border: 1px solid var(--mail-border);
-  border-radius: 999px;
+  padding: 0 2px;
+  border: 0;
   background: none;
   color: var(--mail-text);
   font: inherit;
-  font-size: 0.875rem;
-  font-weight: 500;
 }
-.mv-search__chip[aria-pressed='true'] { background: var(--mail-accent-fill); border-color: var(--mail-accent-fill); color: #fff; }
+.mv-search__chip-face {
+  padding: 4px 12px;
+  border: 1px solid var(--mail-border);
+  border-radius: 999px;
+  background: transparent;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.4;
+}
+.mv-search__chip[aria-pressed='true'] .mv-search__chip-face { background: var(--mail-accent-fill); border-color: var(--mail-accent-fill); color: #fff; }
 .mv-search__results {
   flex: 1;
   min-height: 0;

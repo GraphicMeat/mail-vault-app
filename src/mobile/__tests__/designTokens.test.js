@@ -20,7 +20,7 @@ describe('the phone follows the design system', () => {
     for (const sel of ['.mv-fab', '.mv-avatar', '.mv-avatar--all', '.mv-swipe__act--move']) {
       expect(body(sel), sel).toMatch(/background: var\(--mail-accent-fill\)/);
     }
-    expect(body(".mv-search__chip[aria-pressed='true']")).toMatch(/background: var\(--mail-accent-fill\)/);
+    expect(body(".mv-search__chip[aria-pressed='true'] .mv-search__chip-face")).toMatch(/background: var\(--mail-accent-fill\)/);
   });
 
   it('corners come from the scale: 8px controls, 12px containers, 16px only for the sheet and the compose button, pills for state', () => {
@@ -63,5 +63,25 @@ describe('the phone follows the design system', () => {
     expect(b).toMatch(/color: var\(--mail-accent-text\)/);
     expect(b).toMatch(/color-mix\(in srgb, var\(--mail-accent\) 10%, transparent\)/);
     expect(b).not.toMatch(/box-shadow/);
+  });
+
+  it("search's scope chips are desktop's chip inside a 44px hit area", () => {
+    const hit = body('.mv-search__chip');
+    expect(hit).toMatch(/min-height: 44px/);
+    expect(hit).toMatch(/background: none/);
+    expect(hit).not.toMatch(/border-radius|border: 1px/);
+    const face = body('.mv-search__chip-face');
+    expect(face).toMatch(/padding: 4px 12px/);
+    expect(face).toMatch(/border: 1px solid var\(--mail-border\)/);
+    expect(face).toMatch(/border-radius: 999px/);
+    expect(face).toMatch(/background: transparent/);
+    expect(face).toMatch(/font-size: 0\.8125rem/);
+    expect(face).toMatch(/font-weight: 500/);
+    const pressed = body(".mv-search__chip[aria-pressed='true'] .mv-search__chip-face");
+    expect(pressed).toMatch(/background: var\(--mail-accent-fill\)/);
+    expect(pressed).toMatch(/border-color: var\(--mail-accent-fill\)/);
+    expect(pressed).toMatch(/color: #fff/);
+    const search = readFileSync(new URL('../Search.jsx', import.meta.url), 'utf8');
+    expect(search.match(/className="mv-search__chip"[^>]*>\s*<span className="mv-search__chip-face">/g)?.length).toBe(2);
   });
 });

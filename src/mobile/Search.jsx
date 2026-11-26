@@ -233,12 +233,12 @@ export default function Search({ onOpen, onSwipe: swipeAction, onClose, initialQ
       </header>
       <div className="mv-search__scopes" role="group" aria-label={t('mobile.search.scope')}>
         {folder && (
-          <button type="button" className="mv-search__chip" aria-pressed={scope === 'folder'} onClick={() => setScope('folder')}>
-            {t('mobile.search.thisFolder')}
+          <button type="button" aria-pressed={scope === 'folder'} onClick={() => setScope('folder')} className="mv-search__chip">
+            <span className="mv-search__chip-face">{t('mobile.search.thisFolder')}</span>
           </button>
         )}
-        <button type="button" className="mv-search__chip" aria-pressed={scope === 'all'} onClick={() => setScope('all')}>
-          {t('mobile.search.allAccounts')}
+        <button type="button" aria-pressed={scope === 'all'} onClick={() => setScope('all')} className="mv-search__chip">
+          <span className="mv-search__chip-face">{t('mobile.search.allAccounts')}</span>
         </button>
       </div>
       <div ref={scroller} className="mv-search__results" data-mv-search-results onScroll={onScroll}>
