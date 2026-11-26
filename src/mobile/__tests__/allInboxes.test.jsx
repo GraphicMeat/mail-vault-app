@@ -505,9 +505,72 @@ describe('All Inboxes in the app', () => {
     expect(header.textContent).not.toContain('a1@example.test');
     expect(screen.queryByRole('button', { name: t('mobile.switcher.open', { email: 'a1@example.test' }) })).toBeNull();
     const button = screen.getByRole('button', { name: t('mobile.switcher.open', { email: t('sidebar.allInboxes') }) });
-    expect(button.querySelector('.mv-avatar--all')).toBeTruthy();
+    // It shows every shown account's avatar, not one account's.
+    expect([...button.querySelectorAll('.mv-header__avatars .mv-avatar')].map((a) => a.textContent)).toEqual(['A', 'A']);
     fireEvent.click(button);
     expect(screen.getByRole('dialog', { name: t('mobile.switcher.title') })).toBeTruthy();
+  });
+
+  it('the header row holds the menu, the titles and search, nothing else', async () => {
+    await mountUnified();
+    await syncState('a1', 'syncing');
+    const header = document.querySelector('.mv-header');
+    expect(header.querySelector('.mv-chip')).toBeNull();
+    expect([...header.children].map((el) => el.matches('.mv-header__titles') ? 'titles' : el.getAttribute('aria-label'))).toEqual([
+      t('mobile.drawer.open'), 'titles', t('mobile.search.open'),
+    ]);
+  });
+
+  it('the message count sits beside the title; All Inboxes\' account button does not repeat the title', async () => {
+    await mountUnified();
+    const title = screen.getByRole('heading', { level: 1 });
+    const count = document.querySelector('.mv-header__count');
+    expect(count.textContent).toBe(t('common.messageCount', { count: 4 }));
+    expect(count.parentElement).toBe(title.parentElement);
+    expect(title.parentElement.classList.contains('mv-header__line')).toBe(true);
+    const button = screen.getByRole('button', { name: t('mobile.switcher.open', { email: t('sidebar.allInboxes') }) });
+    expect(button.textContent).not.toContain(t('sidebar.allInboxes'));
+    expect(button.querySelector('.mv-header__chevron')).toBeTruthy();
+  });
+
+  it('All Inboxes shows at most three avatars, then how many more', async () => {
+    engine.accounts = ['a1', 'a2', 'a3', 'a4', 'a5'].map(acct);
+    await mountUnified();
+    const button = screen.getByRole('button', { name: t('mobile.switcher.open', { email: t('sidebar.allInboxes') }) });
+    expect(button.querySelectorAll('.mv-header__avatars .mv-avatar').length).toBe(3);
+    expect(button.querySelector('.mv-header__more').textContent).toBe('+2');
+  });
+
+  it('the status strip is there only while something is pending, syncing or failed', async () => {
+    await mountUnified();
+    await syncState('a1', 'idle');
+    await syncState('a2', 'idle');
+    expect(document.querySelector('.mv-statusbar')).toBeNull();
+    await syncState('a2', 'syncing');
+    expect(document.querySelector('.mv-statusbar').textContent).toContain(t('mobile.sync.syncing'));
+    await syncState('a2', 'error', 'NETWORK');
+    const strip = document.querySelector('.mv-statusbar');
+    expect(within(strip).getByRole('button', { name: new RegExp(t('mobile.sync.failed')) })).toBeTruthy();
+    await syncState('a2', 'idle');
+    expect(document.querySelector('.mv-statusbar')).toBeNull();
+    await act(async () => { storeModule.useMobileStore.setState({ pending: 2 }); });
+    expect(document.querySelector('.mv-statusbar').textContent).toContain(t('mobile.actions.waiting', { count: 2 }));
+    await act(async () => { storeModule.useMobileStore.setState({ pending: 0 }); });
+    expect(document.querySelector('.mv-statusbar')).toBeNull();
+  });
+
+  it('one account in front: the account button names it under the folder title', async () => {
+    engine.accounts = [acct('a1')];
+    window.history.replaceState({}, '', '/mobile.html');
+    vi.resetModules();
+    const { default: App } = await import('../App.jsx');
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    render(<App />);
+    await waitFor(() => expect(document.querySelector('[data-index="0"][data-loaded="1"]')).toBeTruthy());
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(t('sidebar.inbox'));
+    const button = screen.getByRole('button', { name: t('mobile.switcher.open', { email: 'a1@example.test' }) });
+    expect(button.textContent).toContain('a1@example.test');
+    expect(document.querySelector('.mv-header__count').textContent).toBe(t('common.messageCount', { count: 2 }));
   });
 
   it('the folder drawer shows All Inboxes, not the last account\'s address or folders', async () => {

@@ -20,12 +20,16 @@
 // Its Follow up entry opens the reminders list (FollowUpList.jsx); a reminder with no reply opens
 // its Sent copy the way a notification tap opens a message. Its saved views (desktop's) open their
 // mail in ViewResults.jsx, a row opening as a search result does.
-// The outbox row (Outbox.jsx) sits between the header and the list while anything is unsent.
+// The header row is the menu button, the titles and the search button. The titles are the folder
+// (with the message count beside it, which gives way first) over the account button. Under the
+// header, the status strip (StatusBar) says what is waiting to reach the server and a sync that
+// runs or failed (with Retry); it exists only while there is something to say. The sign-in
+// banners and the outbox row (Outbox.jsx, while anything is unsent) follow, then the list.
 //
 // All Inboxes keeps an account in front (compose's From), but nothing on screen names it: the
-// header's account button says All Inboxes (desktop's account chooser does the same), the drawer
-// lists no account's folders, Drafts and Follow up count every shown account's, and the sign-in
-// banners show for every shown account.
+// header's account button shows the shown accounts' avatars and is named All Inboxes (desktop's
+// account chooser does the same), the drawer lists no account's folders, Drafts and Follow up
+// count every shown account's, and the sign-in banners show for every shown account.
 //
 // Conversations (`threadMode` grouped or expandable): a list row that stands for several messages
 // opens them on a screen of their own (ThreadView.jsx), under the viewer; a swipe on it acts on all
@@ -51,7 +55,7 @@ import Viewer from './Viewer.jsx';
 import ThreadView from './ThreadView.jsx';
 import ChatView from './ChatView.jsx';
 import AddAccount from './AddAccount.jsx';
-import AccountSwitcher, { Avatar, AllInboxesIcon, ReauthBanner, RefusedBanner } from './AccountSwitcher.jsx';
+import AccountSwitcher, { Avatar, ReauthBanner, RefusedBanner } from './AccountSwitcher.jsx';
 import FolderDrawer from './FolderDrawer.jsx';
 import { folderLabel } from './folders.js';
 import { errorKey } from './errors.js';
@@ -170,14 +174,13 @@ async function probeRun(target) {
 /** How long a pull-to-refresh spinner waits for the engine's sync state before giving up. */
 const REFRESH_SPIN_MS = 20_000;
 
-function PendingChip() {
+function PendingChip({ pending }) {
   const t = useT();
-  const pending = useMobileStore((s) => s.pending);
   if (!pending) return null;
   return <span className="mv-chip mv-chip--pending" role="status">{t('mobile.actions.waiting', { count: pending })}</span>;
 }
 
-function SyncChip({ sync, total, onRetry }) {
+function SyncChip({ sync, onRetry }) {
   const t = useT();
   if (sync?.state === 'syncing') {
     return (
@@ -189,13 +192,67 @@ function SyncChip({ sync, total, onRetry }) {
   }
   if (sync?.state === 'error') {
     return (
-      <button type="button" className="mv-chip mv-chip--error" onClick={onRetry} aria-label={`${t('mobile.sync.failed')}. ${t(errorKey(sync.code))} ${t('common.retry')}`}>
-        {t('mobile.sync.failed')}
-      </button>
+      <>
+        <span className="mv-chip mv-chip--error" aria-hidden="true">{t('mobile.sync.failed')}</span>
+        <Button variant="link" size="touch" className="mv-statusbar__retry" onClick={onRetry} aria-label={`${t('mobile.sync.failed')}. ${t(errorKey(sync.code))} ${t('common.retry')}`}>
+          {t('common.retry')}
+        </Button>
+      </>
     );
   }
-  if (total == null) return null;
-  return <span className="mv-header__count">{t('common.messageCount', { count: total })}</span>;
+  return null;
+}
+
+/**
+ * The status strip under the header: what is waiting to reach the server, and a sync that is
+ * running or failed. Rendered only while there is something to say, so an idle list keeps its
+ * height.
+ */
+function StatusBar({ sync, onRetry }) {
+  const pending = useMobileStore((s) => s.pending);
+  const syncing = sync?.state === 'syncing' || sync?.state === 'error';
+  if (!pending && !syncing) return null;
+  return (
+    <div className="mv-statusbar">
+      <PendingChip pending={pending} />
+      <SyncChip sync={sync} onRetry={onRetry} />
+    </div>
+  );
+}
+
+/**
+ * The header's account button: the account in front (avatar, address, chevron), or in All
+ * Inboxes the shown accounts' avatars (at most three, then how many more) and the chevron, so the
+ * line under the title never repeats it. Its name says which, and it opens the accounts.
+ */
+function AccountButton({ account, allInboxes, shownAccounts, onOpen }) {
+  const t = useT();
+  const shown = shownAccounts.slice(0, 3);
+  const more = shownAccounts.length - shown.length;
+  return (
+    <Button
+      variant="ghost"
+      size="touch"
+      className="mv-header__account justify-start"
+      aria-label={t('mobile.switcher.open', { email: allInboxes ? t('sidebar.allInboxes') : account.email })}
+      onClick={onOpen}
+    >
+      {allInboxes ? (
+        <span className="mv-header__avatars" aria-hidden="true">
+          {shown.map((a) => <Avatar key={a.id} account={a} small />)}
+          {more > 0 && <span className="mv-header__more">+{more}</span>}
+        </span>
+      ) : (
+        <>
+          <Avatar account={account} small />
+          <span className="mv-header__email" dir="auto">{account.email}</span>
+        </>
+      )}
+      <svg className="mv-header__chevron" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+        <path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </Button>
+  );
 }
 
 function App() {
@@ -892,34 +949,23 @@ function App() {
           </svg>
         </Button>
         <div className="mv-header__titles">
-          <h1 className="mv-header__title" dir="auto">{allInboxes ? t('sidebar.allInboxes') : folderLabel(folder)}</h1>
+          <div className="mv-header__line">
+            <h1 className="mv-header__title" dir="auto">{allInboxes ? t('sidebar.allInboxes') : folderLabel(folder)}</h1>
+            {listState === 'ready' && total != null && (
+              <span className="mv-header__count">{t('common.messageCount', { count: total })}</span>
+            )}
+          </div>
           {account && (
-            <button
-              type="button"
-              className="mv-header__account"
-              aria-label={t('mobile.switcher.open', { email: allInboxes ? t('sidebar.allInboxes') : account.email })}
-              onClick={() => setPanel('switcher')}
-            >
-              {allInboxes ? (
-                <span className="mv-avatar mv-avatar--small mv-avatar--all" aria-hidden="true"><AllInboxesIcon size={14} /></span>
-              ) : (
-                <Avatar account={account} small />
-              )}
-              <span className="mv-header__email" dir="auto">{allInboxes ? t('sidebar.allInboxes') : account.email}</span>
-              <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-                <path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
+            <AccountButton account={account} allInboxes={allInboxes} shownAccounts={shownAccounts} onOpen={() => setPanel('switcher')} />
           )}
         </div>
-        <PendingChip />
         <Button variant="ghost" size="touch" icon data-mv-search-open aria-label={t('mobile.search.open')} onClick={() => setSearchOpen(true)}>
           <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="11" cy="11" r="6.5" /><path d="m20 20-4.2-4.2" />
           </svg>
         </Button>
-        <SyncChip sync={sync} total={listState === 'ready' ? total : null} onRetry={onRefresh} />
       </header>
+      <StatusBar sync={sync} onRetry={onRefresh} />
       {(allInboxes ? shownAccounts : [account]).map((a) => (
         <React.Fragment key={a?.id ?? 'none'}>
           <ReauthBanner account={a} state={reauthState} onReauth={onReauth} />

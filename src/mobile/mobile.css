@@ -88,6 +88,17 @@ body {
   border-bottom: 1px solid var(--mail-border);
 }
 .mv-header__titles { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; }
+/* The title's line: the count wraps onto a second, clipped line once it no longer fits whole, so it
+   goes before the title truncates. */
+.mv-header__line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 8px;
+  max-width: 100%;
+  max-height: 1.625rem;
+  overflow: hidden;
+}
 .mv-header__title {
   margin: 0;
   max-width: 100%;
@@ -98,23 +109,40 @@ body {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+.mv-header__count { flex: none; white-space: nowrap; font-size: 0.75rem; font-weight: 500; color: var(--mail-text-muted); }
+/* Button (ghost) laid out as the line under the title: its padding gives way to the title's edge. */
 .mv-header__account {
-  display: inline-flex;
-  align-items: center;
   gap: 6px;
   max-width: 100%;
-  min-height: 44px;
+  min-width: 0;
   margin: -8px 0 -6px;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--mail-text-muted);
-  font: inherit;
+  margin-inline-start: -4px;
+  padding: 0 4px;
   font-size: 0.8125rem;
   font-weight: 500;
 }
 .mv-header__email { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.mv-header__count { flex: none; font-size: 0.75rem; font-weight: 500; color: var(--mail-text-muted); }
+.mv-header__chevron { flex: none; }
+.mv-header__avatars { display: inline-flex; align-items: center; }
+/* Overlapping avatars, each ringed in the header's ground so the next one reads as behind it. */
+.mv-header__avatars .mv-avatar { outline: 2px solid var(--mail-surface); }
+.mv-header__avatars .mv-avatar + .mv-avatar { margin-inline-start: -6px; }
+.mv-header__more { margin-inline-start: 6px; font-size: 0.75rem; font-weight: 500; }
+
+/* The status strip under the header (StatusBar in App.jsx): only while something is pending,
+   syncing or failed. */
+.mv-statusbar {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-height: 36px;
+  padding: 0 calc(var(--mv-safe-right) + 16px) 0 calc(var(--mv-safe-left) + 16px);
+  border-bottom: 1px solid var(--mail-border);
+  background: var(--mail-bg);
+}
+.mv-statusbar__retry { padding-inline: 8px; font-weight: 600; }
 
 .mv-avatar {
   flex: none;
@@ -150,8 +178,7 @@ body {
   font-size: 0.75rem;
   font-weight: 500;
 }
-button.mv-chip { min-height: 44px; border-color: transparent; }
-.mv-chip--error { color: var(--mv-danger); }
+.mv-chip--error { color: var(--mv-danger); border-color: transparent; padding: 0; }
 .mv-chip__spinner, .mv-pull__spinner {
   width: 12px;
   height: 12px;
@@ -549,7 +576,6 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 @media (prefers-reduced-motion: reduce) {
   .mv-toast { animation: none; }
 }
-.mv-chip--pending { margin-inline-end: 4px; }
 
 .mv-viewer__frame {
   flex: 1;
