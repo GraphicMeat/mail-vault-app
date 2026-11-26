@@ -1,4 +1,6 @@
-// The folder drawer: the active account's folders, depth first as the engine lists them, with
+// The folder drawer. Its head is the account in front, drawn as the list header's account button
+// (avatar, name or address, chevron; All Inboxes' glyph and name while All Inboxes is open), and
+// opens the account switcher (`onSwitchAccount`). Then the active account's folders, depth first as the engine lists them, with
 // unread counts (All Inboxes is picked in the accounts sheet, above the accounts). Special-use folders get their translated name; a folder that cannot be opened
 // (`noselect`) is shown as a heading for its children. Names come from `folders.js`. While All
 // Inboxes is open (`activeFolder` is ALL_INBOXES) the drawer names no account: All Inboxes is its
@@ -13,24 +15,56 @@
 // heading and each with desktop's icon, as on desktop's sidebar: a tap opens the view's mail
 // (ViewResults.jsx). The heading carries desktop's Edit and New (`onEditViews`, `onNewView`: Settings
 // > Views, the second on a new view), shown with no view as on desktop.
+// Every row wears desktop's glyph at 16px: a folder its mailbox glyph (src/utils/mailboxIcon.js,
+// desktop FolderTree's), Drafts, Follow up and Settings those desktop's sidebar gives them.
 import React from 'react';
-import { Pencil, Plus } from 'lucide-react';
+import { Bell, File, Pencil, Plus, Settings } from 'lucide-react';
 import Sheet from './Sheet.jsx';
 import { useT } from './i18n.js';
-import { folderLabel, ALL_INBOXES } from './folders.js';
-import { AllInboxesIcon } from './AccountSwitcher.jsx';
+import { folderLabel, iconMailbox, ALL_INBOXES } from './folders.js';
+import { AllInboxesIcon, Avatar } from './AccountSwitcher.jsx';
+import { getMailboxIcon } from '../utils/mailboxIcon.js';
 import { ViewIcon } from '../components/ViewIcon.jsx';
 import { viewLabel } from '../utils/viewLabel.js';
 import { Button } from '../components/ui/Button.jsx';
 
-export default function FolderDrawer({ account, folders, activeFolder, onSelect, onClose, drafts = 0, onDrafts, followUps = 0, followUpsDue = 0, onFollowUps, onSettings, views = [], viewCounts = {}, onView, onEditViews, onNewView }) {
+function FolderGlyph({ folder }) {
+  const Icon = getMailboxIcon(iconMailbox(folder));
+  return <span className="mv-folder__icon"><Icon size={16} aria-hidden="true" /></span>;
+}
+
+function DrawerHead({ account, allInboxes, onSwitchAccount }) {
+  const t = useT();
+  if (!account && !allInboxes) return null;
+  const name = account?.displayName && account.displayName !== account.email ? account.displayName : account?.email;
+  return (
+    <Button
+      variant="ghost"
+      size="touch"
+      className="mv-drawer__account justify-start"
+      aria-label={t('mobile.switcher.open', { email: allInboxes ? t('sidebar.allInboxes') : account.email })}
+      onClick={onSwitchAccount}
+    >
+      {allInboxes ? (
+        <span className="mv-avatar mv-avatar--small mv-avatar--all" aria-hidden="true"><AllInboxesIcon size={14} /></span>
+      ) : (
+        <Avatar account={account} small />
+      )}
+      <span className="mv-header__email" dir="auto">{allInboxes ? t('sidebar.allInboxes') : name}</span>
+      <svg className="mv-header__chevron" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+        <path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </Button>
+  );
+}
+
+export default function FolderDrawer({ account, folders, activeFolder, onSelect, onClose, onSwitchAccount, drafts = 0, onDrafts, followUps = 0, followUpsDue = 0, onFollowUps, onSettings, views = [], viewCounts = {}, onView, onEditViews, onNewView }) {
   const t = useT();
   const allInboxes = activeFolder === ALL_INBOXES;
   return (
     <Sheet kind="drawer" label={t('mobile.drawer.title')} onClose={onClose}>
       <div className="mv-drawer__head">
-        <h2 className="mv-drawer__title">{t('mobile.drawer.title')}</h2>
-        {account && !allInboxes && <p className="mv-drawer__account" dir="auto">{account.email}</p>}
+        <DrawerHead account={account} allInboxes={allInboxes} onSwitchAccount={onSwitchAccount} />
       </div>
       {allInboxes ? (
         <ul className="mv-folders">
@@ -62,6 +96,7 @@ export default function FolderDrawer({ account, folders, activeFolder, onSelect,
                   aria-current={active ? 'true' : undefined}
                   onClick={() => onSelect(f.path)}
                 >
+                  <FolderGlyph folder={f} />
                   <span className="mv-folder__name" dir="auto">{folderLabel(f)}</span>
                   {f.unseen > 0 && (
                     <span className="mv-folder__count" aria-label={t('mobile.unreadCount', { count: f.unseen })}>{f.unseen}</span>
@@ -99,6 +134,7 @@ export default function FolderDrawer({ account, folders, activeFolder, onSelect,
       {onDrafts && (
         <div className="mv-drawer__local">
           <button type="button" className="mv-folder" data-mv-drafts onClick={onDrafts}>
+            <span className="mv-folder__icon"><File size={16} aria-hidden="true" /></span>
             <span className="mv-folder__name">{t('mobile.drafts.title')}</span>
             {drafts > 0 && (
               <span className="mv-folder__count" aria-label={t('mobile.drafts.count', { count: drafts })}>{drafts}</span>
@@ -109,6 +145,7 @@ export default function FolderDrawer({ account, folders, activeFolder, onSelect,
       {onFollowUps && followUps > 0 && (
         <div className="mv-drawer__local">
           <button type="button" className="mv-folder" data-mv-followups-open onClick={onFollowUps}>
+            <span className="mv-folder__icon"><Bell size={16} aria-hidden="true" /></span>
             <span className="mv-folder__name">{t('mobile.followUp.title')}</span>
             {followUpsDue > 0 && (
               <span className="mv-folder__count" aria-label={t('mobile.followUp.count', { count: followUpsDue })}>{followUpsDue}</span>
@@ -119,6 +156,7 @@ export default function FolderDrawer({ account, folders, activeFolder, onSelect,
       {onSettings && (
         <div className="mv-drawer__local mv-drawer__footer">
           <button type="button" className="mv-folder" data-mv-settings onClick={onSettings}>
+            <span className="mv-folder__icon"><Settings size={16} aria-hidden="true" /></span>
             <span className="mv-folder__name">{t('mobile.settings.title')}</span>
           </button>
         </div>

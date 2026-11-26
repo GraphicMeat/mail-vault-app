@@ -25,3 +25,19 @@ export function folderLabel(folder) {
   const key = SPECIAL_KEYS[String(folder.specialUse || '').toLowerCase()];
   return key ? t(key) : folder.name || folder.path;
 }
+
+/** Desktop's spelling of each special use, for its mailbox glyphs (src/utils/mailboxIcon.js). */
+const SPECIAL_CANONICAL = {
+  '\\inbox': '\\Inbox', '\\sent': '\\Sent', '\\drafts': '\\Drafts', '\\trash': '\\Trash', '\\junk': '\\Junk',
+  '\\starred': '\\Starred', '\\important': '\\Important', '\\archive': '\\Archive', '\\all': '\\All',
+};
+
+/**
+ * The folder as desktop's mailbox glyph lookup reads it: the engine passes the server's spelling of
+ * the special use (any case), desktop's table is keyed by one spelling.
+ */
+export function iconMailbox(folder) {
+  const use = SPECIAL_CANONICAL[String(folder.specialUse || '').toLowerCase()] || null;
+  const path = folder.path.toUpperCase() === 'INBOX' ? 'INBOX' : folder.path;
+  return { path, specialUse: use };
+}

@@ -1009,6 +1009,7 @@ function App() {
           activeFolder={activeFolder}
           onSelect={onSelectFolder}
           onClose={closePanel}
+          onSwitchAccount={() => setPanel('switcher')}
           drafts={drafts.length}
           onDrafts={onDrafts}
           followUps={followUps.length}

@@ -1,8 +1,6 @@
 import React, { useMemo, createContext, useContext } from 'react';
-import {
-  ChevronDown, ChevronRight, Inbox, Send, File, Trash2, Star, AlertCircle,
-  Archive, Folder, HardDrive,
-} from 'lucide-react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
+import { getMailboxIcon } from '../utils/mailboxIcon.js';
 import { buildMailboxTree } from '../services/workflows/mailboxTree';
 import { mailboxLabel } from '../utils/imapUtf7';
 import { useT } from '../i18n/index.js';
@@ -10,28 +8,9 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { useViewHideStore } from '../stores/viewHideStore';
 import { folderIconColor } from '../utils/folderIconColor';
 
-const MAILBOX_ICONS = {
-  INBOX: Inbox,
-  '\\Inbox': Inbox,
-  '\\Sent': Send,
-  '\\Drafts': File,
-  '\\Trash': Trash2,
-  '\\Junk': Trash2,
-  '\\Starred': Star,
-  '\\Important': AlertCircle,
-  '\\Archive': Archive,
-  '\\All': Archive,
-};
-
-/**
- * A folder with no special use is a folder. The fallback used to be Inbox,
- * which was invisible while the list was flat and mostly special folders — and
- * turned all 59 of a nested reader's folders into inboxes the moment it wasn't.
- */
-export function getMailboxIcon(mailbox) {
-  if (mailbox.local) return HardDrive;
-  return MAILBOX_ICONS[mailbox.specialUse] || MAILBOX_ICONS[mailbox.path] || Folder;
-}
+// The glyph table moved to src/utils/mailboxIcon.js (the phone's drawer uses it too); its
+// importers here keep working through this re-export.
+export { getMailboxIcon };
 
 // Custom icon colours are saved per account; the tree is told which one it draws.
 const AccountScope = createContext(null);

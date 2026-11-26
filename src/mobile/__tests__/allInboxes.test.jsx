@@ -590,6 +590,15 @@ describe('All Inboxes in the app', () => {
     expect(store().activeFolder).toBe(storeModule.ALL_INBOXES);
   });
 
+  it('the drawer\'s head closes the drawer and opens the accounts', async () => {
+    await mountUnified();
+    fireEvent.click(screen.getByRole('button', { name: t('mobile.drawer.open') }));
+    const drawer = screen.getByRole('dialog', { name: t('mobile.drawer.title') });
+    fireEvent.click(within(drawer).getByRole('button', { name: t('mobile.switcher.open', { email: t('sidebar.allInboxes') }) }));
+    expect(screen.queryByRole('dialog', { name: t('mobile.drawer.title') })).toBeNull();
+    expect(screen.getByRole('dialog', { name: t('mobile.switcher.title') })).toBeTruthy();
+  });
+
   it('the drawer counts every account\'s drafts and reminders, and a draft opens from its own account', async () => {
     engine.drafts = [draft('d1', 'a1'), draft('d2', 'a2')];
     engine.followUps = [followUp('f2', 'a2')];

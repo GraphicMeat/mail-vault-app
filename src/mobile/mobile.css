@@ -635,16 +635,16 @@ body {
   animation: mv-rise 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .mv-sheet__grip { width: 36px; height: 4px; margin: 8px auto 4px; border-radius: 2px; background: var(--mail-border); }
-.mv-sheet__title, .mv-drawer__title { margin: 8px 8px 8px; font-size: 1rem; font-weight: 600; }
+.mv-sheet__title { margin: 8px 8px 8px; font-size: 1rem; font-weight: 600; }
 .mv-drawer {
   width: min(320px, 85%);
   height: 100%;
   padding: calc(var(--mv-safe-top) + 8px) 0 calc(var(--mv-safe-bottom) + 12px) var(--mv-safe-left);
   animation: mv-slide 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
-.mv-drawer__head { padding: 0 8px 8px; border-bottom: 1px solid var(--mail-border); }
-.mv-drawer__title { margin-bottom: 0; }
-.mv-drawer__account { margin: 0 8px; font-size: 0.8125rem; color: var(--mail-text-muted); overflow-wrap: anywhere; }
+.mv-drawer__head { padding: 8px; border-bottom: 1px solid var(--mail-border); }
+/* The account in front, as the list header's account button (Button, ghost): it opens the switcher. */
+.mv-drawer__account { gap: 8px; max-width: 100%; min-width: 0; padding: 0 8px; font-size: 0.875rem; font-weight: 600; color: var(--mail-text); }
 .mv-drawer__empty { margin: 24px 16px; color: var(--mail-text-muted); }
 @keyframes mv-fade { from { opacity: 0; } }
 @keyframes mv-rise { from { transform: translateY(100%); } }
