@@ -1142,7 +1142,7 @@ app.get('/api/billing/subscription-status', statusLimiter, async (req, res) => {
       if (legacyEmailSignInOpen({ appVersion, register, now })) {
         legacy = true;
         customerRow = await findCustomerByLegacyEmail(db, req.query.email);
-      } else if (seatRefreshOpen({ appVersion, now })) {
+      } else if (seatRefreshOpen({ appVersion, register, now })) {
         legacy = true;
         seatOnly = true;
         customerRow = await findSeatHolder(db, req.query.email, clientId);
@@ -1160,7 +1160,8 @@ app.get('/api/billing/subscription-status', statusLimiter, async (req, res) => {
 
     // Check in-memory cache (same customer+client pair within TTL → return cached)
     const cacheKey = `${customerId}::${clientId || ''}`;
-    if (!register) {
+    // Never for an address or seat answer: the cache holds full answers (Stripe id, devices).
+    if (!register && !legacy) {
       const cached = getCachedBilling(cacheKey);
       if (cached) return res.json(cached);
     }

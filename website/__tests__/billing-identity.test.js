@@ -183,7 +183,7 @@ describe('legacy address sign-in for 2.25.0 and older, until the end of spring 2
 // never take a new seat, so it gives nobody more than the 2.25.0 address path already did.
 describe('seat refresh: a device signed in by address stays signed in after the update', () => {
   const NOW = Date.UTC(2026, 10, 26);
-  const open = (appVersion, now = NOW) => seatRefreshOpen({ appVersion, now });
+  const open = (appVersion, now = NOW) => seatRefreshOpen({ appVersion, register: '1', now });
 
   it('opens for apps newer than 2.25.0 until the address path closes', () => {
     expect(open('2.25.1')).toBe(true);
@@ -191,6 +191,20 @@ describe('seat refresh: a device signed in by address stays signed in after the 
     expect(open('2.26.0')).toBe(true);
     expect(open('2.25.1', Date.UTC(2027, 5, 1) - 1)).toBe(true);
     expect(open('2.25.1', Date.UTC(2027, 5, 1))).toBe(false);
+  });
+
+  // Without register the route would read the status cache, keyed by the Stripe id, and
+  // answer the full body (Stripe id, device list) to anyone holding the address + device id.
+  it('only for the call that registers this device', () => {
+    expect(seatRefreshOpen({ appVersion: '2.25.1', now: NOW })).toBe(false);
+    expect(seatRefreshOpen({ appVersion: '2.25.1', register: '0', now: NOW })).toBe(false);
+  });
+
+  it('the status cache is never read for an address or seat answer', () => {
+    const src = readFileSync(new URL('../api/server.js', import.meta.url), 'utf8');
+    const start = src.indexOf("'/api/billing/subscription-status'");
+    const body = src.slice(start, src.indexOf('\napp.', start + 1));
+    expect(body).toMatch(/if \(!register && !legacy\) \{\s*const cached = getCachedBilling\(cacheKey\);/);
   });
 
   it('is not for 2.25.0 and older (they keep the address path) or a malformed version', () => {
@@ -215,7 +229,7 @@ describe('seat refresh: a device signed in by address stays signed in after the 
     const src = readFileSync(new URL('../api/server.js', import.meta.url), 'utf8');
     const start = src.indexOf("'/api/billing/subscription-status'");
     const body = src.slice(start, src.indexOf('\napp.', start + 1));
-    const gate = body.indexOf('seatRefreshOpen({ appVersion, now })');
+    const gate = body.indexOf('seatRefreshOpen({ appVersion, register, now })');
     const lookup = body.indexOf('findSeatHolder(db, req.query.email, clientId)');
     expect(gate).toBeGreaterThan(0);
     expect(lookup).toBeGreaterThan(gate);

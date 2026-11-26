@@ -54,8 +54,9 @@ function legacyEmailSignInOpen({ appVersion, register, now }) {
  * the device already holds a live seat. It never takes a new seat, so it reaches no more than
  * the address path did. Ends with the address path.
  */
-function seatRefreshOpen({ appVersion, now }) {
-  if (!(now < LEGACY_EMAIL_SIGNIN_UNTIL)) return false;
+function seatRefreshOpen({ appVersion, register, now }) {
+  // Only the registering call: any other reads the status cache, which holds full answers.
+  if (register !== '1' || !(now < LEGACY_EMAIL_SIGNIN_UNTIL)) return false;
   const app = parseVersion(appVersion);
   return !!(app && !atOrBelowLast(app));
 }

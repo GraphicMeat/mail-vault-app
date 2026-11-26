@@ -49,6 +49,7 @@ import { BillingPlanView, BillingDevicesView, ManageSubscriptionButton } from '.
 // Cooldown constants
 const AUTO_REFRESH_COOLDOWN = 60_000;  // 60s for focus/mount
 const MANUAL_REFRESH_COOLDOWN = 10_000; // 10s for button clicks
+const CODE_LIFETIME = 10 * 60_000;      // a mailed sign-in code works this long
 const STALE_THRESHOLD = 3600_000;       // 1h before mount auto-refresh
 
 function formatDate(dateStr) {
@@ -204,8 +205,9 @@ export function BillingSettings({ onNavigate, onReportBug }) {
   ));
   // Email-code sign-in: the address the code went to (null = no code asked for yet).
   const [codeFor, setCodeFor] = useState(null);
-  // When the code was asked for: only mail sent after it is read for the code.
-  const [codeSince, setCodeSince] = useState(0);
+  // The first live request for this address (its mail counts too) and the latest (the watch
+  // runs 10 minutes from it). Only mail sent after the first is read for the code.
+  const [codeAsk, setCodeAsk] = useState({ email: null, since: 0, startedAt: 0 });
   const [code, setCode] = useState('');
   const [codeBusy, setCodeBusy] = useState(false);
   const [codeError, setCodeError] = useState(null);
@@ -280,13 +282,15 @@ export function BillingSettings({ onNavigate, onReportBug }) {
   // ── Billing API helpers ─────────────────────────────────────────────────────
 
   // Shared request logic — used by both sign-in and refresh paths
-  const billingRequest = useCallback(async ({ email, customerId, manual = false }) => {
+  // `fresh`: a sign-in with a customer id a code just proved. The code is spent, so no
+  // cooldown or refresh already on its way may swallow it.
+  const billingRequest = useCallback(async ({ email, customerId, manual = false, fresh = false }) => {
     if (!email && !customerId) return;
 
     const cooldown = manual ? MANUAL_REFRESH_COOLDOWN : AUTO_REFRESH_COOLDOWN;
-    if (Date.now() - lastRefreshRef.current < cooldown) return;
-    if (isBillingRateLimited()) return;
-    if (inflightRef.current && refreshPromiseRef.current) return refreshPromiseRef.current;
+    if (!fresh && Date.now() - lastRefreshRef.current < cooldown) return;
+    if (!fresh && isBillingRateLimited()) return;
+    if (!fresh && inflightRef.current && refreshPromiseRef.current) return refreshPromiseRef.current;
 
     inflightRef.current = true;
     setSyncing(true);
@@ -344,7 +348,7 @@ export function BillingSettings({ onNavigate, onReportBug }) {
   // an address).
   const signInWithEmail = useCallback(async (email, customerId) => {
     setSignInNotice(null);
-    const result = await billingRequest({ email, customerId, manual: true });
+    const result = await billingRequest({ email, customerId, manual: true, fresh: !!customerId });
     if (!result) return; // network/rate-limit paths surface via syncError / rateLimitMsg
 
     setBillingProfile(result);
@@ -434,10 +438,13 @@ export function BillingSettings({ onNavigate, onReportBug }) {
     setCodeBusy(true);
     setCodeError(null);
     setSignInNotice(null);
-    const since = Date.now();
+    const startedAt = Date.now();
     try {
       await signinStart(email, getLocale());
-      setCodeSince(since);
+      setCodeAsk(prev => ({
+        email, startedAt,
+        since: prev.email === email && startedAt - prev.since < CODE_LIFETIME ? prev.since : startedAt,
+      }));
       setCodeFor(email);
       setCode('');
     } catch (e) {
@@ -478,10 +485,10 @@ export function BillingSettings({ onNavigate, onReportBug }) {
   useEffect(() => {
     if (!codeFor) return undefined;
     return watchSigninCode({
-      email: codeFor, since: codeSince,
+      email: codeFor, since: codeAsk.since, startedAt: codeAsk.startedAt,
       onCode: (found) => { setCode(found); return verifyRef.current(codeFor, found); },
     });
-  }, [codeFor, codeSince]);
+  }, [codeFor, codeAsk]);
 
   const handleCheckout = async (planId) => {
     setCheckoutError(null);

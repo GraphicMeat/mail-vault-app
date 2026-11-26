@@ -19,7 +19,8 @@ const { useMailStore } = await import('../../../stores/mailStore');
 const { useSettingsStore } = await import('../../../stores/settingsStore');
 const { findSigninCode, watchSigninCode, SIGNIN_SUBJECTS } = await import('../signinCodeWatch');
 
-const SINCE = Date.parse('2026-11-26T09:46:00Z');
+// Five minutes ago, so the mails below (a minute or two after it) are not dated ahead of now.
+const SINCE = Date.now() - 5 * 60_000;
 const at = (min) => new Date(SINCE + min * 60_000).toISOString();
 const ACCOUNT = { id: 'a1', email: 'payer@mock.test' };
 const TREE = [
@@ -71,6 +72,12 @@ describe('findSigninCode', () => {
     expect(api.fetchEmailLight).toHaveBeenCalledTimes(1);
   });
 
+  it('ignores a sign-in mail dated in the future', async () => {
+    mailIn({ INBOX: [{ uid: 7, subject: 'Your MailVault sign-in code', date: at(60) }] });
+    expect(await findSigninCode({ email: 'payer@mock.test', since: SINCE, now: () => SINCE + 60_000 })).toBeNull();
+    expect(await findSigninCode({ email: 'payer@mock.test', since: SINCE, now: () => SINCE + 61 * 60_000 })).toBe('806375');
+  });
+
   it('never fills a code from some other mail', async () => {
     mailIn({ INBOX: [{ uid: 7, subject: 'Your Acme verification code', date: at(1) }] });
     expect(await findSigninCode({ email: 'payer@mock.test', since: SINCE })).toBeNull();
@@ -103,6 +110,24 @@ describe('findSigninCode', () => {
 });
 
 describe('watchSigninCode', () => {
+  // After a resend the first mail may be the only one that arrives (the mail sender drops a
+  // second mail within 10 minutes), so mail from the first request still counts, and the
+  // watch runs 10 minutes from the latest request.
+  it('runs 10 minutes from the latest request while reading mail from the first', async () => {
+    vi.useFakeTimers();
+    try {
+      mailIn({});
+      let clock = SINCE + 8 * 60_000;
+      const stop = watchSigninCode({ email: 'payer@mock.test', since: SINCE, startedAt: SINCE + 8 * 60_000, onCode: vi.fn(), now: () => clock });
+      clock = SINCE + 12 * 60_000;
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(api.searchEmails).toHaveBeenCalled();
+      stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('keeps looking until the code arrives, then hands it over once', async () => {
     vi.useFakeTimers();
     try {

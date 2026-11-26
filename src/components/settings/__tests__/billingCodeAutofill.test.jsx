@@ -86,4 +86,36 @@ describe('Billing code sign-in fills the code in', () => {
     await waitFor(() => expect(billing.signinStart).toHaveBeenCalledWith('payer@mock.test', expect.anything()));
     await screen.findByTestId('billing-code-form');
   });
+
+  // A focus refresh just before the code arrives must not swallow the sign-in with its
+  // cooldown: the code is spent by then, and the user would be left signed out, silently.
+  it('signs in with a fresh code even right after a refresh', async () => {
+    let handOver;
+    watch.watchSigninCode.mockImplementation(({ onCode }) => { handOver = onCode; return vi.fn(); });
+    useSettingsStore.setState({
+      billingEmail: 'payer@mock.test',
+      billingProfile: { customerId: null, customerEmail: 'payer@mock.test', hasSubscription: true, status: 'active', premiumAccess: true, clientAccessGranted: true, activeClients: [] },
+      billingLastChecked: Date.now(),
+    });
+    render(<BillingSettings />);
+    fireEvent.click(screen.getByRole('button', { name: /Email me a code/i }));
+    await screen.findByTestId('billing-code-form');
+    window.dispatchEvent(new Event('focus'));
+    await handOver('806375');
+    await waitFor(() => expect(billing.fetchSubscriptionStatus).toHaveBeenCalledWith(expect.objectContaining({ customerId: 'cus_9' })));
+    await waitFor(() => expect(useSettingsStore.getState().billingProfile?.customerId).toBe('cus_9'));
+  });
+
+  it('after Send a new code, still reads the mail sent for the first request', async () => {
+    watch.watchSigninCode.mockReturnValue(vi.fn());
+    render(<BillingSettings />);
+    fireEvent.click(await screen.findByRole('button', { name: /Sign In to Premium/i }));
+    await screen.findByTestId('billing-code-form');
+    const first = watch.watchSigninCode.mock.calls.at(-1)[0];
+    await new Promise(r => setTimeout(r, 5));
+    fireEvent.click(screen.getByRole('button', { name: /Send a new code/i }));
+    await waitFor(() => expect(billing.signinStart).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(watch.watchSigninCode.mock.calls.at(-1)[0].startedAt).toBeGreaterThan(first.since));
+    expect(watch.watchSigninCode.mock.calls.at(-1)[0].since).toBe(first.since);
+  });
 });

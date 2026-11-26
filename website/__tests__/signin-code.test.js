@@ -261,6 +261,17 @@ describe('signin verify', () => {
     expect(await signin.verify({ email: 'reader@example.com', code: codeOf(0) })).toEqual({ error: 'code_expired' });
   });
 
+  // Several live codes must not buy more guesses: a wrong guess costs every live code one.
+  it('a wrong guess spends an attempt on every live code', async () => {
+    const { signin, codeOf, db } = setup({ randomInt: (() => { let n = 300000; return () => n++; })() });
+    await signin.start({ email: 'reader@example.com' });
+    await signin.start({ email: 'reader@example.com' });
+    await signin.drain();
+    for (let i = 0; i < 5; i++) expect(await signin.verify({ email: 'reader@example.com', code: '999999' })).toEqual({ error: 'code_wrong' });
+    expect(db.rows.map((r) => r.attempts)).toEqual([5, 5]);
+    expect(await signin.verify({ email: 'reader@example.com', code: codeOf(0) })).toEqual({ error: 'code_expired' });
+  });
+
   it('an expired earlier code does not ride along with a live newer one', async () => {
     const { signin, codeOf, clock } = setup({ randomInt: (() => { let n = 200000; return () => n++; })() });
     await signin.start({ email: 'reader@example.com' });

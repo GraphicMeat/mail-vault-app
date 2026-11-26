@@ -15,7 +15,7 @@
 //   - a new code leaves the older live ones working (up to the last 3, each within its own
 //     10 minutes): the partner mailer drops a second mail to one address within 10 minutes
 //     and still answers ok, so after a resend the first mail may be the only one that
-//     arrives. Guesses are counted on the newest code, and spending any code spends them all;
+//     arrives. A guess costs every live code an attempt, and spending any code spends them all;
 //   - per address, 3 codes an hour (counted whether or not the address is a
 //     customer, in memory like send-link's counters: a restart resets them and
 //     the per-IP limits in server.js still apply).
@@ -142,21 +142,25 @@ function createSigninCode({
       [address, at],
     );
     if (!rows.length) return { error: 'code_expired' };
-    const row = rows[0];
 
-    // Spend an attempt before looking at the guess, atomically, so parallel
-    // guesses cannot get more than MAX_ATTEMPTS tries between them.
-    const [claim] = await db.execute(
-      'UPDATE billing_signin_codes SET attempts = attempts + 1 WHERE id = ? AND used_at IS NULL AND attempts < ? AND expires_at > ?',
-      [row.id, MAX_ATTEMPTS, at],
-    );
-    if (!claim.affectedRows) return { error: 'code_expired' };
+    // Spend an attempt on every live code before looking at the guess, atomically, so
+    // parallel guesses cannot get more than MAX_ATTEMPTS tries between them, and several
+    // live codes buy no extra guesses. Only codes that still had an attempt are compared.
+    const open = [];
+    for (const row of rows) {
+      const [claim] = await db.execute(
+        'UPDATE billing_signin_codes SET attempts = attempts + 1 WHERE id = ? AND used_at IS NULL AND attempts < ? AND expires_at > ?',
+        [row.id, MAX_ATTEMPTS, at],
+      );
+      if (claim.affectedRows) open.push(row);
+    }
+    if (!open.length) return { error: 'code_expired' };
 
     const guess = typeof code === 'string' ? code.trim() : '';
     if (!/^\d{6}$/.test(guess)) return { error: 'code_wrong' };
     const hash = hashCode(address, guess);
     // Every live code is compared, so the time taken does not say which one matched.
-    const match = rows.reduce((hit, r) => (safeEqualHex(hash, r.code_hash) && !hit ? r : hit), null);
+    const match = open.reduce((hit, r) => (safeEqualHex(hash, r.code_hash) && !hit ? r : hit), null);
     if (!match) return { error: 'code_wrong' };
 
     const [used] = await db.execute('UPDATE billing_signin_codes SET used_at = ? WHERE id = ? AND used_at IS NULL', [at, match.id]);
