@@ -13,8 +13,10 @@ const EVENTS = JSON.parse(readFileSync(here('../../../src-mobile-engine/events.j
 const ALLOWED_INVOKES = ['daemon_rpc', 'mobile_app_icon', 'mobile_auth_close', 'mobile_auth_open', 'mobile_log', 'mobile_notification_take', 'mobile_notifications_permission', 'mobile_open_file', 'mobile_pick_files', 'mobile_share_file', 'mobile_store_products', 'mobile_store_purchase', 'mobile_store_restore'];
 // The camera: the official barcode scanner plugin's own commands (scanner.js), and nothing else of it.
 const SCANNER_INVOKES = ['plugin:barcode-scanner|cancel', 'plugin:barcode-scanner|check_permissions', 'plugin:barcode-scanner|open_app_settings', 'plugin:barcode-scanner|request_permissions', 'plugin:barcode-scanner|scan'];
-// A plugin command other than the scanner's.
-const otherPlugin = (c) => c.startsWith('plugin:') && !SCANNER_INVOKES.includes(c);
+// The haptics plugin's feedback commands (haptics.js), and not its raw vibrate.
+const HAPTIC_INVOKES = ['plugin:haptics|impact_feedback', 'plugin:haptics|notification_feedback', 'plugin:haptics|selection_feedback'];
+// A plugin command other than the scanner's and the haptics'.
+const otherPlugin = (c) => c.startsWith('plugin:') && !SCANNER_INVOKES.includes(c) && !HAPTIC_INVOKES.includes(c);
 // Desktop stores (and `plugin-fs`) would bring the desktop RPC graph with them.
 // `sparkle` is the desktop updater; lucide's Sparkles icon files (the settings manifest's Cleanup
 // icon, shared with the phone) are not it.
@@ -30,13 +32,19 @@ describe('mobile seam', () => {
   it('only_daemon_rpc_is_invoked', async () => {
     const { invokes } = await analyzeSeam(ENTRY);
     expect(invokes.length).toBeGreaterThan(0);
-    expect(invokes.filter((c) => !ALLOWED_INVOKES.includes(c) && !SCANNER_INVOKES.includes(c))).toEqual([]);
+    expect(invokes.filter((c) => !ALLOWED_INVOKES.includes(c) && !SCANNER_INVOKES.includes(c) && !HAPTIC_INVOKES.includes(c))).toEqual([]);
   });
 
   it('the_camera_is_reached_through_the_barcode_scanner_commands_only', async () => {
     const { invokes } = await analyzeSeam(ENTRY);
-    expect(invokes.filter((c) => c.startsWith('plugin:'))).toEqual(SCANNER_INVOKES);
+    expect(invokes.filter((c) => c.startsWith('plugin:barcode-scanner'))).toEqual(SCANNER_INVOKES);
+    expect(invokes.filter((c) => c.startsWith('plugin:'))).toEqual([...SCANNER_INVOKES, ...HAPTIC_INVOKES]);
     expect(invokes.filter((c) => !c.startsWith('plugin:') && /scan|camera/.test(c))).toEqual([]);
+  });
+
+  it('haptics_reach_the_three_feedback_commands_only', async () => {
+    const { invokes } = await analyzeSeam(ENTRY);
+    expect(invokes.filter((c) => c.startsWith('plugin:haptics'))).toEqual(HAPTIC_INVOKES);
   });
 
   it('open_and_share_are_the_only_file_commands', async () => {

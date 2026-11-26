@@ -74,6 +74,7 @@ import { openPaywall, usePremium } from './premium.js';
 import { formatFullDate, formatSize } from './format.js';
 import { useBackLayer } from './backStack.js';
 import { useMobileStore } from './store.js';
+import { haptic } from './haptics.js';
 import { useT } from './i18n.js';
 import { useAiAction } from './AiActions.jsx';
 import { Button } from '../components/ui/Button.jsx';
@@ -497,6 +498,7 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
       if (!live.current) return;
       stopped.current = false;
       setSending(false);
+      haptic.notify('error');
       // Premium ended since the reminder was chosen (a send-later time is checked first).
       const reminderRefused = err?.code === 'PREMIUM_REQUIRED' && remind > 0 && sendAtMs == null;
       setError(reminderRefused ? 'compose.remind.upsell' : sendError(err));
@@ -504,6 +506,7 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
       return;
     }
     if (heldUntil != null && sent?.id) useMobileStore.getState().offerUndoSend(sent.id, accountId, fields, heldUntil);
+    haptic.notify('success');
     useMobileStore.getState().loadOutbox();
     onClose();
   };

@@ -568,6 +568,11 @@ pub fn run() {
             if let Err(e) = app.handle().plugin(tauri_plugin_barcode_scanner::init()) {
                 log_line(&format!("MV_MOBILE {}", json!({ "scannerPluginError": e.to_string() })));
             }
+            // Haptic feedback (src/mobile/haptics.js); a missing plugin only silences the taps.
+            #[cfg(mobile)]
+            if let Err(e) = app.handle().plugin(tauri_plugin_haptics::init()) {
+                log_line(&format!("MV_MOBILE {}", json!({ "hapticsPluginError": e.to_string() })));
+            }
             // The native plugin, after the engine is open: on Android registering it waits until the
             // webview exists, and the page's first calls wait for the engine meanwhile. Without it attachments cannot open and links stay cancelled (the guard above denies
             // them all the same); the rest of the app works.

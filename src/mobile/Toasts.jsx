@@ -7,6 +7,7 @@ import React, { useEffect } from 'react';
 import { useMobileStore } from './store.js';
 import { folderLabel } from './folders.js';
 import { useT } from './i18n.js';
+import { haptic } from './haptics.js';
 
 export const NOTICE_MS = 6000;
 
@@ -46,7 +47,7 @@ export default function Toasts({ lifted = false }) {
       {undoSend && (
         <div className="mv-toast" role="status" aria-live="polite" data-mv-undo-send>
           <span className="mv-toast__text">{t('mobile.undoSend.sending')}</span>
-          <button type="button" className="mv-toast__btn" onClick={() => useMobileStore.getState().undoSendNow()}>
+          <button type="button" className="mv-toast__btn" onClick={() => { haptic.impact('light'); useMobileStore.getState().undoSendNow(); }}>
             {t('mobile.actions.undo')}
           </button>
         </div>
@@ -54,7 +55,7 @@ export default function Toasts({ lifted = false }) {
       {undo && (
         <div className="mv-toast" role="status" aria-live="polite">
           <span className="mv-toast__text" dir="auto">{undoText}</span>
-          <button type="button" className="mv-toast__btn" data-mv-undo onClick={() => useMobileStore.getState().undoDeferred(undo.id)}>
+          <button type="button" className="mv-toast__btn" data-mv-undo onClick={() => { haptic.impact('light'); useMobileStore.getState().undoDeferred(undo.id); }}>
             {t('mobile.actions.undo')}
           </button>
         </div>

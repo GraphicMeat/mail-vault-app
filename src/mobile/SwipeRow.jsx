@@ -11,6 +11,7 @@
 // `touch-action: pan-y` leaves vertical scrolling to the browser, which cancels the pointer once
 // a scroll starts. A side given as null (its swipe set to "none") does not move that way.
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { haptic } from './haptics.js';
 
 /** How far (px) an open row stays slid: the width of the revealed button. */
 export const SWIPE_OPEN = 88;
@@ -116,6 +117,7 @@ export default function SwipeRow({ leading, trailing, onAction, initialOpen = nu
   };
 
   const run = (side) => {
+    haptic.impact('medium');
     setOpen(null);
     place(0, true);
     onAction(side);
@@ -127,7 +129,7 @@ export default function SwipeRow({ leading, trailing, onAction, initialOpen = nu
     const el = content.current;
     rtl.current = isRtl(root.current);
     drag.current = {
-      id: e.pointerId, x0: e.clientX, y0: e.clientY, axis: null, dx: 0,
+      id: e.pointerId, x0: e.clientX, y0: e.clientY, axis: null, dx: 0, armed: false,
       base: offsetFor(openRef.current), width: (el && el.offsetWidth) || 375, rtl: rtl.current,
     };
   };
@@ -153,6 +155,12 @@ export default function SwipeRow({ leading, trailing, onAction, initialOpen = nu
     const lead = d.rtl ? -x : x;
     if ((lead > 0 && !leading) || (lead < 0 && !trailing)) x = 0;
     d.dx = x - d.base;
+    // One tick as the drag passes the point where letting go runs the action, and one back.
+    const armed = Math.abs(x) >= d.width * FULL_SWIPE;
+    if (armed !== d.armed) {
+      d.armed = armed;
+      haptic.selection();
+    }
     place(x, false);
   };
 

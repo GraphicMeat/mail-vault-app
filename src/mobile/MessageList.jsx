@@ -10,6 +10,7 @@ import React, { memo, useEffect, useLayoutEffect, useReducer, useRef, useState }
 import { useVirtualizer } from '@tanstack/react-virtual';
 import MessageRow from './MessageRow.jsx';
 import { useT } from './i18n.js';
+import { haptic } from './haptics.js';
 import { useMobileStore } from './store.js';
 import { rowHeight } from './prefs.js';
 
@@ -21,7 +22,7 @@ const PULL_MAX = 96;
 export const PULL_REST = 40;
 
 /** The pull indicator. Owns the pull state, so a pull repaints this line and not the rows. */
-const PullIndicator = memo(function PullIndicator({ scrollRef, onRefresh, refreshing }) {
+export const PullIndicator = memo(function PullIndicator({ scrollRef, onRefresh, refreshing }) {
   const t = useT();
   const [pull, setPull] = useState(0);
   const start = useRef(null);
@@ -34,6 +35,8 @@ const PullIndicator = memo(function PullIndicator({ scrollRef, onRefresh, refres
     if (!el) return undefined;
     const set = (d) => {
       if (d === distance.current) return;
+      // One tick each time the pull passes its trigger (not per move).
+      if (d >= PULL_TRIGGER && distance.current < PULL_TRIGGER) haptic.impact('light');
       distance.current = d;
       setPull(d);
     };

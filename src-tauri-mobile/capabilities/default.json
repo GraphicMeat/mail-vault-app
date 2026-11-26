@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/mobile-schema.json",
   "identifier": "default",
-  "description": "Capability for the mobile main window: core, and the barcode scanner's camera for Import from computer",
+  "description": "Capability for the mobile main window: core, the barcode scanner's camera for Import from computer, and haptic feedback",
   "windows": ["main"],
   "permissions": [
     "core:default",
@@ -9,6 +9,9 @@
     "barcode-scanner:allow-cancel",
     "barcode-scanner:allow-check-permissions",
     "barcode-scanner:allow-request-permissions",
-    "barcode-scanner:allow-open-app-settings"
+    "barcode-scanner:allow-open-app-settings",
+    "haptics:allow-impact-feedback",
+    "haptics:allow-notification-feedback",
+    "haptics:allow-selection-feedback"
   ]
 }

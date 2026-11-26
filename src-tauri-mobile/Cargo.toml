@@ -34,6 +34,10 @@ keyring-core = "1"
 # MIT OR Apache-2.0. Mobile only (the crate is empty on a host build), but listed for every target so
 # its build script registers the permissions the capability names. Same 2.5 line as the npm side.
 tauri-plugin-barcode-scanner = "2.5"
+# The taps of feedback (src/mobile/haptics.js): UIKit feedback generators on iOS, the vibrator on
+# Android. Official Tauri plugin, MIT OR Apache-2.0. Mobile only (empty on a host build), but
+# listed for every target so its build script registers the permissions the capability names.
+tauri-plugin-haptics = "2.4"
 
 [target.'cfg(target_os = "ios")'.dependencies]
 # "protected": the data-protection keychain, the one an iOS app has.
