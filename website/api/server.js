@@ -32,7 +32,7 @@ const path = require('path');
 const analytics = require('meatlytics');
 const { getPool, initDatabase } = require('./database');
 const {
-  findCustomer, findCustomerByLegacyEmail, legacyEmailSignInOpen, legacyEmailSignInExpired, legacyView,
+  findCustomer, findCustomerByLegacyEmail, findSeatHolder, seatRefreshOpen, legacyEmailSignInOpen, legacyEmailSignInExpired, legacyView,
   adminAuthorized, CUSTOMER_ID_REQUIRED, APP_UPDATE_REQUIRED,
 } = require('./billing-identity');
 const {
@@ -612,7 +612,7 @@ const checkoutLimiter = rateLimit({
 // start mails a 6-digit code to a billing customer and always answers {ok:true};
 // verify trades the code for the Stripe customer id, which the phone then hands
 // to subscription-status with register=1. Per-address limits live in signin-code.js.
-const { createSigninCode, RESPONSES: SIGNIN_RESPONSES } = require('./signin-code');
+const { createSigninCode, RESPONSES: SIGNIN_RESPONSES, EMAIL_WINDOW_MS: SIGNIN_EMAIL_WINDOW_MS } = require('./signin-code');
 const signinCode = createSigninCode({
   getDb: getPool,
   send: sendViaGraphicMeat,
@@ -645,6 +645,8 @@ app.post('/api/billing/signin/start', signinStartLimiter, async (req, res) => {
   } catch (err) {
     console.error('[billing/signin/start]', err.message);
   }
+  // The per-address window is an hour: say so, or the app retries a minute later, in a loop.
+  if (outcome === 'limited') res.set('Retry-After', String(Math.ceil(SIGNIN_EMAIL_WINDOW_MS / 1000)));
   const [status, body] = SIGNIN_RESPONSES[outcome];
   res.status(status).json(body);
 });
@@ -1130,14 +1132,23 @@ app.get('/api/billing/subscription-status', statusLimiter, async (req, res) => {
     const db = getPool();
     let customerRow;
     let legacy = false;
+    let seatOnly = false;
 
     if (!customerId) {
-      // 2.25.0 and older sign in by address; see LAST_EMAIL_SIGNIN_VERSION.
+      // 2.25.0 and older sign in by address; see LAST_EMAIL_SIGNIN_VERSION. Newer apps that
+      // were signed in that way stay signed in through the seat they hold (seatRefreshOpen).
       const now = Date.now();
       if (legacyEmailSignInExpired({ appVersion, now })) return res.status(426).json(APP_UPDATE_REQUIRED);
-      if (!legacyEmailSignInOpen({ appVersion, register, now })) return res.status(400).json(CUSTOMER_ID_REQUIRED);
-      legacy = true;
-      customerRow = await findCustomerByLegacyEmail(db, req.query.email);
+      if (legacyEmailSignInOpen({ appVersion, register, now })) {
+        legacy = true;
+        customerRow = await findCustomerByLegacyEmail(db, req.query.email);
+      } else if (seatRefreshOpen({ appVersion, now })) {
+        legacy = true;
+        seatOnly = true;
+        customerRow = await findSeatHolder(db, req.query.email, clientId);
+      } else {
+        return res.status(400).json(CUSTOMER_ID_REQUIRED);
+      }
       customerId = customerRow?.stripe_customer_id || '';
     }
     // An address sign-in is answered without the Stripe id and never cached under it.
@@ -1205,7 +1216,7 @@ app.get('/api/billing/subscription-status', statusLimiter, async (req, res) => {
           // New client — check limit and insert
           const currentActive = await getActiveClients(db, customerRow.id);
           const full = currentActive.length >= CLIENT_LIMIT;
-          if (full && legacy) {
+          if (seatOnly) { /* a seat refresh only keeps a seat it holds, never takes one */ } else if (full && legacy) {
             // An address sign-in never takes a seat from a signed-in device: no seat for it.
           } else {
             if (full) {

@@ -11,6 +11,8 @@ import {
   signinStart, signinVerify,
 } from '../../services/billingApi';
 import { notify } from '../../stores/focusStore';
+import { watchSigninCode } from '../../services/workflows/signinCodeWatch';
+import { refreshAddressSignIn } from '../../services/workflows/billingSeat';
 import { startCheckout } from '../../services/checkout';
 import { PlanPicker, defaultPlanId, planCtaLabel } from '../billing/PlanPicker';
 import { ConfirmDialog } from '../ConfirmDialog';
@@ -202,6 +204,8 @@ export function BillingSettings({ onNavigate, onReportBug }) {
   ));
   // Email-code sign-in: the address the code went to (null = no code asked for yet).
   const [codeFor, setCodeFor] = useState(null);
+  // When the code was asked for: only mail sent after it is read for the code.
+  const [codeSince, setCodeSince] = useState(0);
   const [code, setCode] = useState('');
   const [codeBusy, setCodeBusy] = useState(false);
   const [codeError, setCodeError] = useState(null);
@@ -364,7 +368,14 @@ export function BillingSettings({ onNavigate, onReportBug }) {
   const refreshSignedIn = useCallback(async ({ manual = false } = {}) => {
     const cid = billingProfile?.customerId;
     const email = billingEmail;
-    if (!cid) return;
+    // A 2.25.0 address sign-in has no customer id: it refreshes through its device seat.
+    if (!cid) {
+      if (!billingProfile?.hasSubscription || !email) return;
+      if (Date.now() - lastRefreshRef.current < (manual ? MANUAL_REFRESH_COOLDOWN : AUTO_REFRESH_COOLDOWN)) return;
+      lastRefreshRef.current = Date.now();
+      await refreshAddressSignIn();
+      return;
+    }
 
     const previous = billingProfile;
     const result = await billingRequest({ email, customerId: cid, manual });
@@ -417,32 +428,35 @@ export function BillingSettings({ onNavigate, onReportBug }) {
     return () => obs.disconnect();
   }, []);
 
-  const handleSignIn = async () => {
-    const email = (selectedEmail || '').trim().toLowerCase();
+  const handleSignIn = async (address = selectedEmail) => {
+    const email = (address || '').trim().toLowerCase();
     if (!email || codeBusy) return;
     setCodeBusy(true);
     setCodeError(null);
     setSignInNotice(null);
+    const since = Date.now();
     try {
       await signinStart(email, getLocale());
+      setCodeSince(since);
       setCodeFor(email);
       setCode('');
     } catch (e) {
-      setCodeError(e.message || t('errors.billingUnreachable'));
+      setCodeError(e instanceof BillingRateLimitError
+        ? t('settings.billing.tooManyCodes', { minutes: Math.max(1, Math.ceil(e.retryAfterMs / 60000)) })
+        : (e.message || t('errors.billingUnreachable')));
     } finally {
       setCodeBusy(false);
     }
   };
 
-  const handleVerifyCode = async () => {
-    if (!codeFor || codeBusy) return;
+  const verifyCode = async (email, typed) => {
     setCodeBusy(true);
     setCodeError(null);
     try {
-      const cid = await signinVerify(codeFor, code.trim());
+      const cid = await signinVerify(email, typed.trim());
       setCodeFor(null);
       setCode('');
-      await signInWithEmail(codeFor, cid);
+      await signInWithEmail(email, cid);
     } catch (e) {
       setCodeError(e.code === 'code_expired' ? t('settings.billing.codeExpired')
         : e.code === 'code_wrong' ? t('settings.billing.codeWrong')
@@ -451,6 +465,23 @@ export function BillingSettings({ onNavigate, onReportBug }) {
       setCodeBusy(false);
     }
   };
+  const verifyRef = useRef(verifyCode);
+  verifyRef.current = verifyCode;
+
+  const handleVerifyCode = async () => {
+    if (!codeFor || codeBusy) return;
+    await verifyCode(codeFor, code);
+  };
+
+  // While a code is on its way, look for it in this account's Inbox and Spam and sign in with
+  // it the moment it arrives.
+  useEffect(() => {
+    if (!codeFor) return undefined;
+    return watchSigninCode({
+      email: codeFor, since: codeSince,
+      onCode: (found) => { setCode(found); return verifyRef.current(codeFor, found); },
+    });
+  }, [codeFor, codeSince]);
 
   const handleCheckout = async (planId) => {
     setCheckoutError(null);
@@ -581,17 +612,18 @@ export function BillingSettings({ onNavigate, onReportBug }) {
                 sections={emailRows}
                 onChange={email => { setSelectedEmail(email); setSignInNotice(null); }} />
             </div>
-            <button onClick={handleSignIn} disabled={signInDisabled || codeBusy || !!codeFor}
+            <button onClick={() => handleSignIn()} disabled={signInDisabled || codeBusy || !!codeFor}
               className="min-w-[140px] px-4 py-2 text-sm font-medium bg-mail-accent-fill text-white rounded-lg hover:bg-mail-accent/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
               {syncing || (codeBusy && !codeFor) ? <Loader size={14} className="animate-spin" /> : <CreditCard size={14} />}
               <span>{signInLabel}</span>
             </button>
           </div>
         )}
-        {codeFor && !isSignedIn && (
+        {codeFor && (!isSignedIn || !customerId) && (
           <form className="mt-3 space-y-2" data-testid="billing-code-form"
             onSubmit={e => { e.preventDefault(); handleVerifyCode(); }}>
             <p className="text-xs text-mail-text-muted">{t('settings.billing.codeSent', { email: pa(codeFor, 'email') })}</p>
+            <p className="text-xs text-mail-text-muted">{t('settings.billing.codeLooking')}</p>
             <div className="flex gap-2">
               <input type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={12}
                 aria-label={t('settings.billing.code')} placeholder={t('settings.billing.code')}
@@ -604,7 +636,7 @@ export function BillingSettings({ onNavigate, onReportBug }) {
               </button>
             </div>
             <div className="flex gap-3">
-              <button type="button" disabled={codeBusy} onClick={() => { setCodeFor(null); handleSignIn(); }}
+              <button type="button" disabled={codeBusy} onClick={() => { const to = codeFor; setCodeFor(null); handleSignIn(to); }}
                 className="text-xs text-mail-accent hover:underline disabled:opacity-50">{t('settings.billing.newCode')}</button>
               <button type="button" disabled={codeBusy} onClick={() => { setCodeFor(null); setCode(''); setCodeError(null); }}
                 className="text-xs text-mail-text-muted hover:underline disabled:opacity-50">{t('common.cancel')}</button>
@@ -732,6 +764,17 @@ export function BillingSettings({ onNavigate, onReportBug }) {
           makes it a purchase mechanism App Review will not accept in-app. */}
       {!IS_APPSTORE_BUILD && billingProfile?.hasSubscription && customerId && (
         <ManageSubscriptionButton onClick={() => setShowIssues(true)} />
+      )}
+      {/* Signed in by address on 2.25.0: Premium works, but the plan and the device list need
+          the Stripe id, which only the emailed code gives. */}
+      {!IS_APPSTORE_BUILD && isSignedIn && !customerId && !codeFor && (
+        <div className="flex items-center justify-between gap-3 p-3 rounded-lg border border-mail-border">
+          <p className="text-xs text-mail-text-muted">{t('settings.billing.manageNeedsCode')}</p>
+          <button type="button" onClick={() => handleSignIn(billingEmail)} disabled={codeBusy}
+            className="shrink-0 px-3 py-1.5 text-xs font-medium text-mail-accent-text border border-mail-accent/40 rounded-lg hover:bg-mail-accent/10 transition-colors disabled:opacity-50">
+            {t('settings.billing.emailMeCode')}
+          </button>
+        </div>
       )}
 
       {/* Active Devices */}

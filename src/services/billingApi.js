@@ -20,9 +20,11 @@ class BillingRateLimitError extends Error {
   }
 }
 
-async function billingFetch(endpoint, options = {}) {
+// `ownLimit`: a 429 here is this request's own limit (one address's codes), not the server's,
+// so it neither waits for nor sets the lock every other billing call honours.
+async function billingFetch(endpoint, { ownLimit = false, ...options } = {}) {
   // Block if locally rate-limited
-  if (Date.now() < _rateLimitedUntil) {
+  if (!ownLimit && Date.now() < _rateLimitedUntil) {
     const remaining = Math.ceil((_rateLimitedUntil - Date.now()) / 1000);
     throw new BillingRateLimitError(remaining);
   }
@@ -45,8 +47,8 @@ async function billingFetch(endpoint, options = {}) {
   // Handle 429 with Retry-After
   if (res.status === 429) {
     const retryAfter = parseInt(res.headers.get('Retry-After') || res.headers.get('retry-after'), 10);
-    const secs = (retryAfter > 0 && retryAfter < 3600) ? retryAfter : 60;
-    _rateLimitedUntil = Date.now() + secs * 1000;
+    const secs = (retryAfter > 0 && retryAfter <= 3600) ? retryAfter : 60;
+    if (!ownLimit) _rateLimitedUntil = Date.now() + secs * 1000;
     throw new BillingRateLimitError(secs);
   }
 
@@ -97,6 +99,7 @@ export async function redeemActivation(token) {
  * the same either way). */
 export async function signinStart(email, lang) {
   return billingFetch('/api/billing/signin/start', {
+    ownLimit: true,
     method: 'POST',
     body: JSON.stringify(lang ? { email, lang } : { email }),
   });

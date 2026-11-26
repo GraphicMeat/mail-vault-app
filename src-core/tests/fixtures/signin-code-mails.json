@@ -1,0 +1,47 @@
+[
+  {
+    "lang": "en",
+    "subject": "Your MailVault sign-in code",
+    "text": "Your sign-in code\n\nEnter this code in MailVault to sign in to Premium.\nIf MailVault is open, it fills the code in for you.\n\n482913\n\nThe code works once and expires in 10 minutes.\n\n--\nIf you did not ask for it, ignore this email. Nobody can sign in without the code.\nMailVault by Graphic Meat\n"
+  },
+  {
+    "lang": "de",
+    "subject": "Dein MailVault-Anmeldecode",
+    "text": "Dein Anmeldecode\n\nGib diesen Code in MailVault ein, um dich bei Premium anzumelden.\nIst MailVault geöffnet, trägt es den Code für dich ein.\n\n482913\n\nDer Code gilt einmal und läuft in 10 Minuten ab.\n\n--\nHast du ihn nicht angefordert, ignoriere diese E-Mail. Ohne den Code kann sich niemand anmelden.\nMailVault von Graphic Meat\n"
+  },
+  {
+    "lang": "fr",
+    "subject": "Votre code de connexion MailVault",
+    "text": "Votre code de connexion\n\nSaisissez ce code dans MailVault pour vous connecter à Premium.\nSi MailVault est ouvert, il saisit le code pour vous.\n\n482913\n\nLe code ne sert qu'une fois et expire dans 10 minutes.\n\n--\nSi vous ne l'avez pas demandé, ignorez cet e-mail. Personne ne peut se connecter sans le code.\nMailVault par Graphic Meat\n"
+  },
+  {
+    "lang": "es",
+    "subject": "Tu código de acceso de MailVault",
+    "text": "Tu código de acceso\n\nIntroduce este código en MailVault para iniciar sesión en Premium.\nSi MailVault está abierto, rellena el código por ti.\n\n482913\n\nEl código sirve una sola vez y caduca en 10 minutos.\n\n--\nSi no lo pediste, ignora este correo. Nadie puede iniciar sesión sin el código.\nMailVault de Graphic Meat\n"
+  },
+  {
+    "lang": "it",
+    "subject": "Il tuo codice di accesso MailVault",
+    "text": "Il tuo codice di accesso\n\nInserisci questo codice in MailVault per accedere a Premium.\nSe MailVault è aperto, inserisce il codice al posto tuo.\n\n482913\n\nIl codice vale una sola volta e scade tra 10 minuti.\n\n--\nSe non l'hai richiesto, ignora questa e-mail. Senza il codice nessuno può accedere.\nMailVault di Graphic Meat\n"
+  },
+  {
+    "lang": "ja",
+    "subject": "MailVaultのログインコード",
+    "text": "ログインコード\n\nMailVaultにこのコードを入力して、Premiumにログインしてください。\nMailVaultを開いていれば、コードは自動で入力されます。\n\n482913\n\nコードは1回のみ有効で、10分で期限切れになります。\n\n--\n心当たりがない場合は、このメールを無視してください。コードがなければ誰もログインできません。\nMailVault by Graphic Meat\n"
+  },
+  {
+    "lang": "ko",
+    "subject": "MailVault 로그인 코드",
+    "text": "로그인 코드\n\nMailVault에 이 코드를 입력해 Premium에 로그인하세요.\nMailVault가 열려 있으면 코드가 자동으로 입력됩니다.\n\n482913\n\n코드는 한 번만 사용할 수 있고 10분 후에 만료됩니다.\n\n--\n요청하지 않으셨다면 이 이메일을 무시하세요. 코드가 없으면 아무도 로그인할 수 없습니다.\nMailVault by Graphic Meat\n"
+  },
+  {
+    "lang": "zh",
+    "subject": "你的 MailVault 登录验证码",
+    "text": "你的登录验证码\n\n在 MailVault 中输入此验证码即可登录 Premium。\n如果 MailVault 已打开，它会自动帮你填写验证码。\n\n482913\n\n验证码只能使用一次，10 分钟后失效。\n\n--\n如果不是你本人请求的，请忽略这封邮件。没有验证码，任何人都无法登录。\nMailVault，Graphic Meat 出品\n"
+  },
+  {
+    "lang": "pt-br",
+    "subject": "Seu código de acesso do MailVault",
+    "text": "Seu código de acesso\n\nDigite este código no MailVault para entrar no Premium.\nSe o MailVault estiver aberto, ele preenche o código para você.\n\n482913\n\nO código vale uma única vez e expira em 10 minutos.\n\n--\nSe você não pediu, ignore este e-mail. Ninguém consegue entrar sem o código.\nMailVault da Graphic Meat\n"
+  }
+]

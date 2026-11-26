@@ -4,10 +4,13 @@ import { describe, expect, it } from 'vitest';
 
 const require = createRequire(import.meta.url);
 const {
-  findCustomer, findCustomerByLegacyEmail, legacyEmailSignInOpen, legacyEmailSignInExpired, legacyView, LAST_EMAIL_SIGNIN_VERSION, LEGACY_EMAIL_SIGNIN_UNTIL,
+  findCustomer, findCustomerByLegacyEmail, findSeatHolder, seatRefreshOpen, legacyEmailSignInOpen, legacyEmailSignInExpired, legacyView, LAST_EMAIL_SIGNIN_VERSION, LEGACY_EMAIL_SIGNIN_UNTIL,
   APP_UPDATE_REQUIRED,
   adminAuthorized, CUSTOMER_ID_REQUIRED,
 } = require('../api/billing-identity.js');
+
+const SEAT_SQL = 'SELECT c.* FROM billing_customers c JOIN billing_clients k ON k.billing_customer_id = c.id '
+  + 'WHERE c.email = ? AND k.client_id = ? AND k.revoked_at IS NULL LIMIT 1';
 
 function fakeDb(byId, byEmail = {}) {
   const calls = [];
@@ -17,6 +20,10 @@ function fakeDb(byId, byEmail = {}) {
       calls.push(sql);
       if (sql === 'SELECT * FROM billing_customers WHERE stripe_customer_id = ?') return [byId[p[0]] ? [byId[p[0]]] : []];
       if (sql === 'SELECT * FROM billing_customers WHERE email = ?') return [byEmail[p[0]] ? [byEmail[p[0]]] : []];
+      if (sql === SEAT_SQL) {
+        const row = byEmail[p[0]];
+        return [row && (row.seats || []).includes(p[1]) ? [row] : []];
+      }
       throw new Error(`unexpected statement: ${sql}`);
     },
   };
@@ -24,7 +31,7 @@ function fakeDb(byId, byEmail = {}) {
 
 // Server deployed code sign-in (11-24) before any app release had the code screen: 2.25.0
 // signs in by address alone. Address sign-in stays open for 2.25.0 and older until the end
-// of spring 2027 (through 31 May, UTC); from 2.26.0 the app must sign in with the code.
+// of spring 2027 (through 31 May, UTC); from 2.25.1 the app must sign in with the code.
 describe('legacy address sign-in for 2.25.0 and older, until the end of spring 2027', () => {
   const SPRING = Date.UTC(2027, 4, 31, 23, 59, 59);
   const open = (appVersion, now = Date.UTC(2026, 10, 25)) => legacyEmailSignInOpen({ appVersion, register: '1', now });
@@ -167,6 +174,53 @@ describe('legacy address sign-in for 2.25.0 and older, until the end of spring 2
       const body = src.slice(start, src.indexOf('\napp.', start + 1));
       expect(body, route).not.toMatch(/findCustomerByLegacyEmail|legacyEmailSignInOpen/);
     }
+  });
+});
+
+// A computer signed in by address on 2.25.0 holds a device seat but no Stripe id. After the
+// update (2.25.1+) it must stay signed in without a code: the seat it already holds is the
+// proof. It is answered like an address sign-in (no Stripe id, no device list) and it can
+// never take a new seat, so it gives nobody more than the 2.25.0 address path already did.
+describe('seat refresh: a device signed in by address stays signed in after the update', () => {
+  const NOW = Date.UTC(2026, 10, 26);
+  const open = (appVersion, now = NOW) => seatRefreshOpen({ appVersion, now });
+
+  it('opens for apps newer than 2.25.0 until the address path closes', () => {
+    expect(open('2.25.1')).toBe(true);
+    expect(open('2.25.1-nightly.202611260900.gabc')).toBe(true);
+    expect(open('2.26.0')).toBe(true);
+    expect(open('2.25.1', Date.UTC(2027, 5, 1) - 1)).toBe(true);
+    expect(open('2.25.1', Date.UTC(2027, 5, 1))).toBe(false);
+  });
+
+  it('is not for 2.25.0 and older (they keep the address path) or a malformed version', () => {
+    expect(open('2.25.0')).toBe(false);
+    expect(open('2.24.9')).toBe(false);
+    for (const a of [undefined, '', 'x', ['2.25.1']]) expect(open(a), String(a)).toBe(false);
+  });
+
+  it('finds the customer only when this device already holds a live seat', async () => {
+    const row = { id: 7, stripe_customer_id: 'cus_7', email: 'payer@b.test', seats: ['client-held'] };
+    const db = fakeDb({}, { 'payer@b.test': row });
+    expect(await findSeatHolder(db, ' Payer@B.test ', 'client-held')).toBe(row);
+    expect(await findSeatHolder(db, 'payer@b.test', 'client-other')).toBeUndefined();
+    const quiet = fakeDb({});
+    for (const [e, c] of [['payer@b.test', ''], ['payer@b.test', undefined], ['', 'client-held'], [42, 'x'], ['a@b.test', ['x']]]) {
+      expect(await findSeatHolder(quiet, e, c)).toBeUndefined();
+    }
+    expect(quiet.calls).toEqual([]);
+  });
+
+  it('the status route gates it, answers through legacyView, and never adds a seat for it', () => {
+    const src = readFileSync(new URL('../api/server.js', import.meta.url), 'utf8');
+    const start = src.indexOf("'/api/billing/subscription-status'");
+    const body = src.slice(start, src.indexOf('\napp.', start + 1));
+    const gate = body.indexOf('seatRefreshOpen({ appVersion, now })');
+    const lookup = body.indexOf('findSeatHolder(db, req.query.email, clientId)');
+    expect(gate).toBeGreaterThan(0);
+    expect(lookup).toBeGreaterThan(gate);
+    expect(body.slice(gate, gate + 400)).toMatch(/legacy = true;/);
+    expect(body).toMatch(/if \(seatOnly\) \{[^}]*\} else if \(full && legacy\)/);
   });
 });
 

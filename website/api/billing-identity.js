@@ -23,7 +23,7 @@ async function findCustomer(db, customerId) {
 // Temporary exception. The server required the customer id (11-24) before any desktop
 // release had the code sign-in screen: 2.25.0 signs in by address alone. Address sign-in
 // stays open for apps at or below this version through the end of spring 2027 (31 May,
-// UTC); from 2.26.0 the app signs in with the code. Delete this and its call in the
+// UTC); from 2.25.1 the app signs in with the code. Delete this and its call in the
 // subscription-status route after LEGACY_EMAIL_SIGNIN_UNTIL (the REMINDER test goes red
 // then); keep legacyEmailSignInExpired and APP_UPDATE_REQUIRED.
 const LAST_EMAIL_SIGNIN_VERSION = '2.25.0';
@@ -45,6 +45,29 @@ function legacyEmailSignInOpen({ appVersion, register, now }) {
   if (register !== '1' || !(now < LEGACY_EMAIL_SIGNIN_UNTIL)) return false;
   const app = parseVersion(appVersion);
   return !!(app && atOrBelowLast(app));
+}
+
+/**
+ * A computer signed in by address on 2.25.0 keeps a device seat but has no Stripe id. Once it
+ * updates (newer than LAST_EMAIL_SIGNIN_VERSION) it stays signed in through that seat: the
+ * status call names the address and this device's id, and is answered (legacyView) only when
+ * the device already holds a live seat. It never takes a new seat, so it reaches no more than
+ * the address path did. Ends with the address path.
+ */
+function seatRefreshOpen({ appVersion, now }) {
+  if (!(now < LEGACY_EMAIL_SIGNIN_UNTIL)) return false;
+  const app = parseVersion(appVersion);
+  return !!(app && !atOrBelowLast(app));
+}
+
+const SEAT_SQL = 'SELECT c.* FROM billing_customers c JOIN billing_clients k ON k.billing_customer_id = c.id '
+  + 'WHERE c.email = ? AND k.client_id = ? AND k.revoked_at IS NULL LIMIT 1';
+
+/** The customer whose live seat this device holds, found by address + device id, or undefined. */
+async function findSeatHolder(db, email, clientId) {
+  if (typeof email !== 'string' || !email.trim() || typeof clientId !== 'string' || !clientId) return undefined;
+  const [rows] = await db.execute(SEAT_SQL, [email.trim().toLowerCase(), clientId]);
+  return rows[0];
 }
 
 /**
@@ -88,6 +111,6 @@ function adminAuthorized(provided, expected) {
 }
 
 module.exports = {
-  findCustomer, findCustomerByLegacyEmail, legacyEmailSignInOpen, legacyEmailSignInExpired, legacyView, LAST_EMAIL_SIGNIN_VERSION, LEGACY_EMAIL_SIGNIN_UNTIL,
+  findCustomer, findCustomerByLegacyEmail, findSeatHolder, seatRefreshOpen, legacyEmailSignInOpen, legacyEmailSignInExpired, legacyView, LAST_EMAIL_SIGNIN_VERSION, LEGACY_EMAIL_SIGNIN_UNTIL,
   adminAuthorized, CUSTOMER_ID_REQUIRED, APP_UPDATE_REQUIRED,
 };

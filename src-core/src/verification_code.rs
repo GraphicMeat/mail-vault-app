@@ -24,9 +24,9 @@ use crate::sender_check::js_space;
 static KEYWORDS: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(concat!(
         r"(?i)(?-u:\b)(?:codes?|otp|passcode|pin|2fa|mfa|one[- ]?time|verif[0-9A-Za-z_]*|authenticat[0-9A-Za-z_]*|token|confirm[0-9A-Za-z_]*|sign[- ]?in|log[- ]?in)(?-u:\b)",
-        r"|c[oó]digo|verificaci[oó]n|codice|verifica|best[äa]tigung|sicherheits|verifizier|einmal|v[ée]rification",
+        r"|c[oó]digo|verificaci[oó]n|codice|verifica|best[äa]tigung|sicherheits|verifizier|einmal|anmelde|v[ée]rification",
         r"|kodas(?-u:\b)|kod[ąų]|kod(?:o|u|us|ai|e)(?-u:\b)|patvirtin|prisijung",
-        r"|認証|確認コード|検証|ワンタイム|인증|확인 코드|验证码|驗證碼|校验码",
+        r"|認証|コード|検証|ワンタイム|인증|코드|验证码|驗證碼|校验码",
     ))
     .unwrap()
 });
@@ -232,6 +232,23 @@ mod tests {
             Value::Null => String::new(),
             Value::String(s) => s.clone(),
             other => other.to_string(),
+        }
+    }
+
+    /// MailVault's own Premium sign-in mail, every locale, exactly as the website builds it
+    /// (`website/api/signin-code-email.js`; `signin-code-fixture.test.js` keeps this file in
+    /// step). Billing fills the code in from it, so detection must find it in each one, and the
+    /// subject (which never holds the code) must earn the body a read.
+    #[test]
+    fn finds_the_code_in_every_mailvault_signin_mail() {
+        let mails: Vec<Value> = serde_json::from_str(include_str!("../tests/fixtures/signin-code-mails.json")).unwrap();
+        assert_eq!(mails.len(), 9);
+        for mail in &mails {
+            let lang = field(mail, "lang");
+            let (subject, text) = (field(mail, "subject"), field(mail, "text"));
+            assert_eq!(find_verification_code(&subject, &text).as_deref(), Some("482913"), "{lang}");
+            assert!(find_verification_code(&subject, "").is_none(), "{lang}: the subject never carries it");
+            assert!(body_may_hold_code(&subject, ""), "{lang}: the subject alone must earn a body read");
         }
     }
 

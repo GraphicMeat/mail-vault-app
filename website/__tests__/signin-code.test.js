@@ -36,9 +36,9 @@ function fakeDb(customers = {}) {
         rows.push({ id: nextId++, email: p[0], code_hash: p[1], expires_at: p[2], attempts: 0, used_at: null });
         return [{ insertId: nextId - 1, affectedRows: 1 }, []];
       }
-      if (q.startsWith('SELECT id, code_hash FROM billing_signin_codes WHERE email = ? AND used_at IS NULL ORDER BY id DESC LIMIT 1')) {
-        const r = rows.filter((x) => x.email === p[0] && x.used_at == null).sort((a, b) => b.id - a.id)[0];
-        return [r ? [{ id: r.id, code_hash: r.code_hash }] : [], []];
+      if (q.startsWith('SELECT id, code_hash FROM billing_signin_codes WHERE email = ? AND used_at IS NULL AND expires_at > ? ORDER BY id DESC LIMIT 3')) {
+        const live = rows.filter((x) => x.email === p[0] && x.used_at == null && x.expires_at > p[1]).sort((a, b) => b.id - a.id).slice(0, 3);
+        return [live.map((r) => ({ id: r.id, code_hash: r.code_hash })), []];
       }
       if (q.startsWith('UPDATE billing_signin_codes SET attempts = attempts + 1 WHERE id = ?')) {
         const r = rows.find((x) => x.id === p[0]);
@@ -241,15 +241,34 @@ describe('signin verify', () => {
     expect(outs.filter((o) => o.customerId)).toHaveLength(1);
   });
 
-  it('a newer code replaces the older one', async () => {
-    const { signin, codeOf } = setup();
+  // The partner mailer drops a second mail to one address within 10 minutes (and says ok),
+  // so a resend can leave only the first mail in the inbox: its code must still work.
+  it('an earlier code still works after a resend', async () => {
+    const { signin, codeOf, sent } = setup();
     await signin.start({ email: 'reader@example.com' });
     await signin.start({ email: 'reader@example.com' });
     await signin.drain();
-    const first = codeOf(0);
-    const second = codeOf(1);
-    if (first !== second) expect(await signin.verify({ email: 'reader@example.com', code: first })).toEqual({ error: 'code_wrong' });
-    expect(await signin.verify({ email: 'reader@example.com', code: second })).toEqual({ customerId: 'cus_123' });
+    expect(sent).toHaveLength(2);
+    expect(await signin.verify({ email: 'reader@example.com', code: codeOf(0) })).toEqual({ customerId: 'cus_123' });
+  });
+
+  it('the newest code works too, and spending one code spends them all', async () => {
+    const { signin, codeOf } = setup({ randomInt: (() => { let n = 100000; return () => n++; })() });
+    await signin.start({ email: 'reader@example.com' });
+    await signin.start({ email: 'reader@example.com' });
+    await signin.drain();
+    expect(await signin.verify({ email: 'reader@example.com', code: codeOf(1) })).toEqual({ customerId: 'cus_123' });
+    expect(await signin.verify({ email: 'reader@example.com', code: codeOf(0) })).toEqual({ error: 'code_expired' });
+  });
+
+  it('an expired earlier code does not ride along with a live newer one', async () => {
+    const { signin, codeOf, clock } = setup({ randomInt: (() => { let n = 200000; return () => n++; })() });
+    await signin.start({ email: 'reader@example.com' });
+    await signin.drain();
+    clock.t += 10 * MIN + 1;
+    await signin.start({ email: 'reader@example.com' });
+    await signin.drain();
+    expect(await signin.verify({ email: 'reader@example.com', code: codeOf(0) })).toEqual({ error: 'code_wrong' });
   });
 
   it('never accepts a code minted for another address', async () => {
@@ -316,19 +335,62 @@ describe('signin verify', () => {
 
 describe('signin mail', () => {
   const LANGS = Object.keys(require('../api/send-link-email.js').LOCALES);
-  it.each(LANGS)('%s has subject, code in both parts, no em dash, nothing remote', (lang) => {
+  const HERO = 'https://mailvaultapp.com/assets/email/signin-code.jpg';
+  const ICON = 'https://mailvaultapp.com/assets/email/mailvault-icon.png';
+  it.each(LANGS)('%s has subject, code in both parts, no em dash, only the two hosted pictures', (lang) => {
     const { subject, text, html } = mail.buildSigninCodeEmail(lang, '482913');
     expect(subject.length).toBeGreaterThan(5);
     expect(text).toContain('482913');
     expect(html).toContain('482913');
     for (const s of [subject, text, html]) expect(s).not.toContain('—');
-    expect(html).not.toMatch(/<img|src=|url\(|<link|http:\/\//i);
-    expect(html).not.toMatch(/href=/i);
+    const remote = html.match(/(?:src|href)=["'][^"']*["']|url\(|<link|http:\/\//gi) || [];
+    expect(remote).toEqual([`src="${ICON}"`, `src="${HERO}"`]);
+    expect(html).toMatch(/<img [^>]*alt="[^"]{10,}"/);
     expect(subject).not.toContain('482913');
+  });
+  // Desktop signs in with this mail too: the copy may not send anyone to a phone.
+  it.each(LANGS)('%s never says phone, and says MailVault can fill the code in', (lang) => {
+    const c = mail.COPY[lang === 'pt-BR' ? 'pt-br' : lang] || mail.COPY[lang];
+    const { text } = mail.buildSigninCodeEmail(lang, '482913');
+    expect(text).not.toMatch(/phone|Handy|téléphone|teléfono|telefono|スマートフォン|휴대폰|手机|celular/i);
+    expect(text).toContain(c.autofill);
+  });
+  it('fits a phone screen: fluid width, a picture that scales, a smaller code under 520px', () => {
+    const { html } = mail.buildSigninCodeEmail('en', '482913');
+    expect(html).toContain('name="viewport"');
+    expect(html).toMatch(/max-width:\s*520px/);
+    expect(html).toMatch(/<img [^>]*style="[^"]*width:100%;[^"]*height:auto/);
+    expect(html).toMatch(/@media only screen and \(max-width: 520px\)[\s\S]*\.mv-code \{ font-size: 28px/);
+  });
+  it('the pictures it links are in the site, and small', () => {
+    const { existsSync, statSync } = require('node:fs');
+    const path = require('node:path');
+    for (const name of ['signin-code.jpg', 'mailvault-icon.png']) {
+      const file = path.join(__dirname, '..', 'assets', 'email', name);
+      expect(existsSync(file), name).toBe(true);
+      expect(statSync(file).size, name).toBeLessThan(150 * 1024);
+    }
+  });
+  // The icon is the app's own (Tauri bundle icon), not a look-alike.
+  it('the icon is the app icon', () => {
+    const { readFileSync } = require('node:fs');
+    const path = require('node:path');
+    const ours = readFileSync(path.join(__dirname, '..', 'assets', 'email', 'mailvault-icon.png'));
+    const site = readFileSync(path.join(__dirname, '..', 'icon-128.png'));
+    expect(ours.equals(site)).toBe(true);
   });
   it('localizes and falls back to English', () => {
     const subjects = LANGS.map((l) => mail.buildSigninCodeEmail(l, '111111').subject);
     expect(new Set(subjects).size).toBe(LANGS.length);
     expect(mail.buildSigninCodeEmail('xx', '111111')).toEqual(mail.buildSigninCodeEmail('en', '111111'));
+  });
+});
+
+describe('signin start route', () => {
+  const server = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'api', 'server.js'), 'utf8');
+  // Without Retry-After the app locks every billing call for a minute and the user retries in a loop.
+  it('tells a limited address when to try again', () => {
+    const route = server.slice(server.indexOf("app.post('/api/billing/signin/start'"), server.indexOf("app.post('/api/billing/signin/verify'"));
+    expect(route).toMatch(/outcome === 'limited'[\s\S]*set\('Retry-After'/);
   });
 });

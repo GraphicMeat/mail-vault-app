@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { startMailtoBridge } from '../../utils/mailto';
 import { announceActivation, startActivationBridge } from '../../services/billingActivation';
+import { refreshAddressSignIn } from '../../services/workflows/billingSeat';
 import { startPrivacySync } from '../../utils/privacy/privacySync';
 import { useMailStore } from '../../stores/mailStore';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
@@ -26,6 +27,10 @@ export function useNativeBridges({ setMailtoError, openSettings, setShowShortcut
     }).catch(() => {}); // not in Tauri
     return () => { active = false; if (stop) stop(); };
   }, []);
+
+  // A 2.25.0 address sign-in stays signed in through its device seat (billingSeat.js); once
+  // per launch, so its Premium also ends when the plan does.
+  useEffect(() => { void refreshAddressSignIn().catch(() => {}); }, []);
 
   // mailvault://activate links from the website's web checkout: spend the token, sign in.
   useEffect(() => {
