@@ -4588,6 +4588,8 @@
   "mobile.settings.source": "O código-fonte está no GitHub",
   "mobile.settings.loadFailed": "Não foi possível carregar as configurações.",
   "mobile.settings.saveFailed": "Não foi possível salvar a configuração. Tente de novo.",
+  "mobile.quickActions.onDesktop": "{{name}} (no computador)",
+  "mobile.quickActions.select": "Selecionar",
   "mobile.settings.quickActionsHint": "Até quatro ações ficam na barra abaixo de uma mensagem aberta, nesta ordem. As outras ficam em Mais. Mover para spam só aparece quando a conta tem uma pasta de spam.",
   "mobile.prefs.loadImages": "Carregar imagens remotas automaticamente",
   "mobile.prefs.loadImagesHint": "As imagens carregam ao abrir a mensagem. E-mails que ainda trazem pixels de rastreamento mantêm o botão Carregar imagens.",

@@ -1,12 +1,15 @@
 // The mobile message list: a virtualized scroller over the page cache. Rows have one fixed height,
 // so positions come from `estimateSize` alone and nothing is measured while scrolling.
 //
+// Holding a row opens the quick action wheel on it (`wheel`: the app's paths for what the wheel runs,
+// quickActions/RowWheel.jsx); without `wheel` a row cannot be held.
+//
 // Live: when the folder changes under it the cache drops its pages and keeps the top row as an
 // anchor; once the reload finds that row again the list moves by the rows that landed above it,
 // so what the user was reading stays put. Pull-to-refresh watches touches only (passive
 // listeners, no `preventDefault`), never scroll events, so scrolling stays on the fast path.
 // An empty folder says so, unless `emptyNote` is false (local drafts are shown above it, App.jsx).
-import React, { memo, useEffect, useLayoutEffect, useReducer, useRef, useState } from 'react';
+import React, { memo, useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import MessageRow from './MessageRow.jsx';
 import { useT } from './i18n.js';
@@ -14,6 +17,7 @@ import { haptic } from './haptics.js';
 import { useMobileStore } from './store.js';
 import { rowHeight } from './prefs.js';
 import { pullMayStart } from './gestures/recognizers.js';
+import RowWheel from './quickActions/RowWheel.jsx';
 
 const OVERSCAN = 8;
 /** How far (px, after damping) a pull has to travel before letting go refreshes. */
@@ -102,8 +106,15 @@ export const PullIndicator = memo(function PullIndicator({ scrollRef, onRefresh,
 });
 
 /** `accountOf(row)`: the row's account, in a list that spans accounts (All Inboxes); else null. */
-function MessageList({ cache, onOpen, onSwipe, onRefresh, refreshing = false, demoSwipe = null, accountOf = null, emptyNote = true }) {
+function MessageList({ cache, onOpen, onSwipe, onRefresh, refreshing = false, demoSwipe = null, accountOf = null, emptyNote = true, wheel = null }) {
   const t = useT();
+  // The row the wheel is open on: `{ row, key, x, y }`.
+  const [held, setHeld] = useState(null);
+  const hold = useCallback((row, point) => {
+    haptic.impact('medium');
+    setHeld({ row, key: Date.now(), x: point.x, y: point.y });
+  }, []);
+  const closeWheel = useCallback(() => setHeld(null), []);
   const scrollRef = useRef(null);
   const [, rerender] = useReducer((n) => n + 1, 0);
   useEffect(() => cache.subscribe(rerender), [cache]);
@@ -165,6 +176,7 @@ function MessageList({ cache, onOpen, onSwipe, onRefresh, refreshing = false, de
                   account={accountOf && row ? accountOf(row) : undefined}
                   onOpen={onOpen}
                   onSwipe={onSwipe}
+                  onHold={wheel ? hold : null}
                   initialSwipe={demoSwipe && demoSwipe.index === it.index ? demoSwipe.side : null}
                 />
               );
@@ -172,6 +184,7 @@ function MessageList({ cache, onOpen, onSwipe, onRefresh, refreshing = false, de
           </div>
         )}
       </div>
+      {wheel && <RowWheel target={held} onClose={closeWheel} {...wheel} />}
     </div>
   );
 }

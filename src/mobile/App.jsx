@@ -671,6 +671,23 @@ function App() {
     else run();
   }, [moving]);
   const closeMoving = useCallback(() => setMoving(null), []);
+  // The row wheel (quickActions/RowWheel.jsx) runs through the swipe's paths; the rest are here:
+  // a move to a folder it names (Junk, a saved folder) asks for a conversation's count as a swipe's
+  // Move does, and a reply opens compose on that row's own account and folder.
+  const onRowMove = useCallback((row, target) => {
+    const s = useMobileStore.getState();
+    const place = s.placeOf(row);
+    const uids = rowUids(row);
+    const run = () => s.act('move', { ...place, uids, target });
+    if (uids.length > 1) setAskDelete({ run, kind: 'move', count: uids.length });
+    else run();
+  }, []);
+  const onRowCompose = useCallback((mode, row) => {
+    const place = useMobileStore.getState().placeOf(row);
+    if (!place.accountId) return;
+    setCompose({ key: Date.now(), accountId: place.accountId, mode, original: { folder: place.folder, uid: row.uid, dateMs: row.dateMs } });
+  }, []);
+  const rowWheel = useMemo(() => ({ onAction: onSwipe, onMove: onRowMove, onCompose: onRowCompose }), [onSwipe, onRowMove, onRowCompose]);
   const onViewerAction = useCallback((kind) => {
     if (!open) return undefined;
     return useMobileStore.getState().act(kind, { accountId: open.accountId, folder: open.folder, uids: [open.row.uid] });
@@ -1012,6 +1029,7 @@ function App() {
           cache={list}
           onOpen={onOpen}
           onSwipe={onSwipe}
+          wheel={rowWheel}
           accountOf={accountOf}
           onRefresh={onRefresh}
           refreshing={Boolean(pulled)}

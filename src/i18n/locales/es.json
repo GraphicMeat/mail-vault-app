@@ -4588,6 +4588,8 @@
   "mobile.settings.source": "El código fuente está en GitHub",
   "mobile.settings.loadFailed": "No se pudieron cargar los ajustes.",
   "mobile.settings.saveFailed": "No se pudo guardar el ajuste. Inténtalo de nuevo.",
+  "mobile.quickActions.onDesktop": "{{name}} (en el escritorio)",
+  "mobile.quickActions.select": "Seleccionar",
   "mobile.settings.quickActionsHint": "Hasta cuatro acciones aparecen en la barra bajo un mensaje abierto, en este orden. Las demás están en Más. Mover a Correo no deseado solo aparece si la cuenta tiene esa carpeta.",
   "mobile.prefs.loadImages": "Cargar imágenes remotas automáticamente",
   "mobile.prefs.loadImagesHint": "Las imágenes se cargan al abrir un mensaje. El correo que aún lleva píxeles de seguimiento mantiene el botón Cargar imágenes.",

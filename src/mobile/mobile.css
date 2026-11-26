@@ -1561,3 +1561,13 @@ body {
 .mv-drawer { touch-action: pan-y; }
 /* The viewer's header keeps its vertical scroll; a horizontal swipe on it steps to the next message. */
 .mv-viewer__top { touch-action: pan-y; }
+
+/* The quick action wheel (quickActions/RowWheel.jsx): a held row neither shows the system's
+   callout nor selects text, and while a finger slides over the wheel the list stays still. The
+   categorized wheel is 400px wide: scaled to fit a phone's width, as Settings' samples are. */
+.mv-row-slot, .mv-row { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+html.mv-wheel-open .mv-list { overflow: hidden; touch-action: none; }
+.quick-actions-radial[data-radial-layout="categories"] { zoom: .9; }
+@media (max-width: 380px) {
+  .quick-actions-radial[data-radial-layout="categories"] { zoom: .85; }
+}

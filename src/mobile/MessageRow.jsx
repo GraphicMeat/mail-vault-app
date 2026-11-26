@@ -15,9 +15,11 @@
 // Flagged and attachment indicators are desktop's glyphs at 14px before the date (a filled star in
 // the flag colour, a muted paperclip when the engine's row says `hasAttachments`), fixed boxes, so
 // neither changes the row's height. A conversation's paperclip is its newest message's.
+// Holding the row (`onHold(row, { x, y })`, 350ms) opens the quick action wheel (quickActions/RowWheel.jsx);
+// moving, scrolling or a swipe cancels the hold (gestures/useLongPress.js).
 // Deliberately not built on src/components/EmailRow: that pulls in the desktop stores.
 // `RowFace` is what the row shows; Settings > Appearance > Layout draws its sample with it.
-import React, { forwardRef, memo } from 'react';
+import React, { forwardRef, memo, useRef } from 'react';
 import { displayText } from '../utils/bidiText.js';
 import { cleanPreviewText } from '../utils/previewText.js';
 import { formatEmailDate } from './format.js';
@@ -30,6 +32,7 @@ import { useMobileStore } from './store.js';
 import { swipeKind, rowHeight, PREF_DEFAULTS } from './prefs.js';
 import { accountRowKey } from './messagePages.js';
 import TagChips from './TagChips.jsx';
+import { useLongPress } from './gestures/useLongPress.js';
 
 /** Row height in px at the default preferences: three lines of text plus padding; well over the
  *  44px tap minimum. The row's own height is `rowHeight(prefs)`. */
@@ -92,8 +95,10 @@ export const RowFace = forwardRef(function RowFace({ row, shown = row, prefs, ac
 });
 
 /** `account`: set in All Inboxes, where the row starts with desktop's account badge: the account's initial on its colour. */
-function MessageRow({ row, index, start = 0, onOpen, onSwipe, initialSwipe = null, account = null }) {
+function MessageRow({ row, index, start = 0, onOpen, onSwipe, onHold = null, initialSwipe = null, account = null }) {
   const t = useT();
+  const slot = useRef(null);
+  useLongPress(slot, { enabled: Boolean(row && onHold), onFire: (point) => onHold(row, point) });
   const swipes = useMobileStore((s) => s.prefs.trackpadSwipeEnabled !== false);
   const leadingAction = useMobileStore((s) => (swipes ? s.prefs.swipeRightAction : 'none'));
   const trailingAction = useMobileStore((s) => (swipes ? s.prefs.swipeLeftAction : 'none'));
@@ -134,7 +139,7 @@ function MessageRow({ row, index, start = 0, onOpen, onSwipe, initialSwipe = nul
     }
   };
   return (
-    <div className="mv-row-slot" data-index={index} data-loaded="1" style={style} onClick={() => onOpen(row, index)}>
+    <div ref={slot} className="mv-row-slot" data-index={index} data-loaded="1" style={style} onClick={() => onOpen(row, index)}>
       <SwipeRow
         key={row.accountId ? accountRowKey(row.accountId, row.uid) : row.uid}
         initialOpen={initialSwipe}
