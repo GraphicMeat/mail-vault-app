@@ -421,3 +421,6 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--mail-accent-fi
 .google-fonts-tracking-note { display: flex; align-items: flex-start; gap: 8px; margin: 4px 0; padding: 8px 10px; border: 1px solid color-mix(in srgb, var(--mail-warning) 35%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--mail-warning) 10%, transparent); color: var(--mail-text); font-size: 12px; line-height: 1.45; }
 .google-fonts-tracking-note svg { flex-shrink: 0; margin-top: 1px; color: var(--mail-warning); }
 .onboarding-cta-sells .onboarding-cta-thanks { align-items: flex-start; }
+/* The chat sample is the tallest of the four: tighter here so it fits its card in every language. */
+.onboarding-free .sample-chat-heading { padding-top: 6px; padding-bottom: 6px; }
+.onboarding-free .sample-chat-messages { padding: 8px 12px; gap: 6px; }

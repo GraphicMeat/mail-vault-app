@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { GripVertical, Plus, X } from "lucide-react";
+import { ArrowLeft, GripVertical, Plus, X } from "lucide-react";
+import { registerPopoverLayer } from "../../hooks/useDialogA11y";
 import { QuickActionModeTiles, QuickActionPaletteDots, QuickActionPresets, QuickActionSample } from "./QuickActionSamples";
 import { SettingsTabs } from "../ui/SettingsTabs";
 import { SegmentedChoice } from "../ui/SegmentedChoice";
@@ -74,30 +75,42 @@ const newEntry = (action, params = {}) => ({
  */
 function ActionStrip({ entries, palette, onReorder, onRemove, onColor, children }) {
   const t = useT();
+  const strip = useRef(null);
   const dragged = useRef(null);
   const ids = entries.map((entry) => entry.id);
   const move = (from, to) => {
-    if (to < 0 || to >= ids.length || from === to) return;
+    if (from < 0 || to < 0 || to >= ids.length || from === to) return;
     const next = [...ids];
     next.splice(to, 0, next.splice(from, 1)[0]);
     onReorder(next);
   };
+  // Pointer drag, not HTML5 drag and drop: Tauri's file-drop handling eats
+  // HTML5 drag events on Windows (as in ViewEditorView). The grip captures the
+  // pointer; on release the chip under it takes the dragged chip's place.
+  const chipAt = (x, y) => [...(strip.current?.querySelectorAll("[data-entry]") || [])].findIndex((chip) => {
+    const r = chip.getBoundingClientRect();
+    return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+  });
   return (
     <div className="quick-actions-strip-row">
-      <ul className="quick-actions-strip" aria-label={t("quickActions.actionList")}>
+      <ul ref={strip} className="quick-actions-strip" aria-label={t("quickActions.actionList")}>
         {entries.map((entry, index) => (
-          <li key={entry.id} data-entry={entry.id} draggable className="quick-actions-chip" data-colored={!!entry.editorColor}
-            style={entry.editorColor ? { "--quick-action-editor-color": entry.editorColor } : undefined}
-            onDragStart={(event) => { dragged.current = entry.id; event.dataTransfer?.setData?.("text/plain", entry.id); }}
-            onDragOver={(event) => event.preventDefault()}
-            onDrop={(event) => {
-              event.preventDefault();
-              const id = dragged.current || event.dataTransfer?.getData?.("text/plain");
-              dragged.current = null;
-              move(ids.indexOf(id), index);
-            }}>
+          <li key={entry.id} data-entry={entry.id} className="quick-actions-chip" data-colored={!!entry.editorColor}
+            data-dragging={dragged.current === entry.id || undefined}
+            style={entry.editorColor ? { "--quick-action-editor-color": entry.editorColor } : undefined}>
             <button type="button" className="quick-actions-chip-grip" aria-label={t("quickActions.reorder", { name: entry.label })}
               title={t("quickActions.reorderChipInstructions")}
+              onPointerDown={(event) => {
+                if (event.button !== 0) return;
+                dragged.current = entry.id;
+                event.currentTarget.setPointerCapture?.(event.pointerId);
+              }}
+              onPointerUp={(event) => {
+                const id = dragged.current;
+                dragged.current = null;
+                if (id) move(ids.indexOf(id), chipAt(event.clientX, event.clientY));
+              }}
+              onPointerCancel={() => { dragged.current = null; }}
               onKeyDown={(event) => {
                 const step = { ArrowLeft: -1, ArrowUp: -1, ArrowRight: 1, ArrowDown: 1 }[event.key];
                 if (!step) return;
@@ -139,8 +152,20 @@ function AddActionPicker({ surface, present, labels, templates, folders, getActi
     if (!open) return undefined;
     const away = (event) => { if (!root.current?.contains(event.target)) close(); };
     document.addEventListener("pointerdown", away);
-    return () => document.removeEventListener("pointerdown", away);
+    // A layer of its own on the Settings dialog's Escape stack: Escape closes
+    // this list and leaves Settings open.
+    const unregister = registerPopoverLayer(close);
+    return () => { document.removeEventListener("pointerdown", away); unregister?.(); };
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The search box goes away when an action asks for its folder, label or
+  // template: focus moves to that list rather than falling to the page.
+  useEffect(() => {
+    if (open && asking) root.current?.querySelector(".quick-actions-picker button")?.focus();
+  }, [open, asking]);
+  // Settings scrolls: an add button near the bottom opens its list out of view otherwise.
+  useEffect(() => {
+    if (open) root.current?.querySelector(".quick-actions-picker")?.scrollIntoView?.({ block: "nearest" });
+  }, [open, asking]);
   const close = () => { setOpen(false); setQuery(""); setAsking(null); setNewLabel(""); };
   const add = (action, params) => { onAdd(action, params); close(); };
   const pick = (action) => (["move", "tag", "replyTemplate"].includes(action) ? setAsking(action) : add(action));
@@ -159,7 +184,7 @@ function AddActionPicker({ surface, present, labels, templates, folders, getActi
       </button>
       {open && (
         <div className="quick-actions-picker" role="dialog" aria-label={t("quickActions.addAction")}
-          onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); close(); } }}>
+>
           {!asking && <>
             <input type="search" autoFocus value={query} onChange={(event) => setQuery(event.target.value)}
               placeholder={t("quickActions.findAction")} aria-label={t("quickActions.findAction")} />
@@ -181,6 +206,9 @@ function AddActionPicker({ surface, present, labels, templates, folders, getActi
               {!groups.length && <p className="quick-actions-picker-empty">{t("quickActions.noActionMatch")}</p>}
             </div>
           </>}
+          {asking && <button type="button" className="quick-actions-picker-back" onClick={() => setAsking(null)}>
+            <ArrowLeft size={13} aria-hidden="true" />{t("common.back")}
+          </button>}
           {asking === "move" && <div className="quick-actions-picker-list" role="group" aria-label={t("quickActions.param.folder")}>
             <p className="quick-actions-picker-group">{t("quickActions.param.folder")}</p>
             {choice("each", t("quickActions.param.folderPicker"), () => add("move"), present.has("move"))}

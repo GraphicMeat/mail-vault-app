@@ -1050,3 +1050,6 @@
   .quick-actions-look { grid-template-columns: minmax(0, 1fr); }
   .quick-actions-mode-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+.quick-actions-picker-back { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px; border-radius: 6px; color: var(--mail-text-muted); font-size: 12px; }
+.quick-actions-picker-back:hover { color: var(--mail-text); background: var(--mail-surface-hover); }
+.quick-actions-chip-grip { touch-action: none; }

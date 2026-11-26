@@ -18,7 +18,6 @@ const CATEGORY_KEYS = {
   handwriting: 'fonts.category.handwriting',
 };
 const ERROR_KEYS = { E_FONT_OFFLINE: 'fonts.error.offline' };
-/** The message for a failed download's code. */
 /**
  * Said wherever a font can be downloaded: the download goes to Google, which
  * sees the address it comes from. No font file is fetched before a pick.
@@ -31,6 +30,7 @@ export function GoogleFontsTrackingNote() {
   </p>;
 }
 
+/** The message for a failed download's code. */
 export const fontErrorText = (t, code) => t(ERROR_KEYS[code] || 'fonts.error.failed');
 
 /**

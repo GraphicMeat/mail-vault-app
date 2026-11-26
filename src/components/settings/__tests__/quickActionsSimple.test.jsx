@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QuickActionsSettings } from '../QuickActionsSettings';
+import { Dialog } from '../../ui/Dialog';
 import { quickActionScopeKey, resolveQuickActions } from '../../../utils/quickActions';
 import { applyQuickActionPreset, QUICK_ACTION_PRESETS } from '../../../utils/quickActionPresets';
 import { pinQuickActionScope } from '../../../hooks/useQuickActionConfiguration';
@@ -102,7 +103,7 @@ describe('Quick actions, simplified', () => {
     expect(order()).toEqual(['delete']);
   });
 
-  it('moves a chip with the arrow keys on its grip, and by dragging it onto another', () => {
+  it('moves a chip with the arrow keys on its grip, and by dragging its grip onto another', () => {
     state.quickActions = row(['archive', 'reply', 'export']);
     const view = render(<QuickActionsSettings />);
     fireEvent.keyDown(within(strip()).getByRole('button', { name: 'Reorder Archive' }), { key: 'ArrowRight' });
@@ -111,11 +112,24 @@ describe('Quick actions, simplified', () => {
     fireEvent.keyDown(within(strip()).getByRole('button', { name: 'Reorder Export' }), { key: 'ArrowLeft' });
     expect(order()).toEqual(['reply', 'export', 'archive']);
     view.rerender(<QuickActionsSettings />);
-    const items = within(strip()).getAllByRole('listitem');
-    const data = { setData: vi.fn(), getData: () => 'archive', effectAllowed: '', dropEffect: '' };
-    fireEvent.dragStart(items[2], { dataTransfer: data });
-    fireEvent.dragOver(items[0], { dataTransfer: data });
-    fireEvent.drop(items[0], { dataTransfer: data });
+    vi.stubGlobal('PointerEvent', class extends MouseEvent {
+      constructor(type, options = {}) { super(type, options); this.pointerId = options.pointerId ?? 1; }
+    });
+    // jsdom has no layout: three chips side by side, 100px each.
+    const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+      const index = this.matches('li.quick-actions-chip') ? [...this.parentElement.children].indexOf(this) : 0;
+      return { left: index * 100, right: index * 100 + 96, top: 0, bottom: 30, width: 96, height: 30 };
+    });
+    try {
+      // Pointer drag, not HTML5 drag and drop, which Tauri swallows on Windows.
+      expect(within(strip()).getAllByRole('listitem')[0].getAttribute('draggable')).toBeNull();
+      const grip = within(strip()).getByRole('button', { name: 'Reorder Archive' });
+      fireEvent.pointerDown(grip, { button: 0, pointerId: 1, clientX: 210, clientY: 10 });
+      fireEvent.pointerUp(grip, { pointerId: 1, clientX: 20, clientY: 10 });
+    } finally {
+      rect.mockRestore();
+      vi.unstubAllGlobals();
+    }
     expect(order()).toEqual(['archive', 'reply', 'export']);
   });
 
@@ -133,6 +147,17 @@ describe('Quick actions, simplified', () => {
     fireEvent.click(within(picker).getByRole('button', { name: 'Forward' }));
     expect(order()).toEqual(['reply', 'forward', 'archive', 'export']);
     expect(screen.queryByRole('dialog', { name: 'Add action' })).toBeNull();
+  });
+
+  it('closes only the picker on Escape inside the Settings dialog, which stays open', () => {
+    state.quickActions = row(['archive']);
+    const onClose = vi.fn();
+    render(<Dialog open onClose={onClose} title="Settings"><QuickActionsSettings /></Dialog>);
+    fireEvent.click(screen.getByRole('button', { name: 'Add action' }));
+    expect(screen.getByRole('dialog', { name: 'Add action' })).toBeTruthy();
+    fireEvent.keyDown(document.activeElement || document.body, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: 'Add action' })).toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it('asks for the folder inside the picker before adding Move to folder', () => {

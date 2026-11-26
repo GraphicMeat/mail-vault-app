@@ -328,9 +328,9 @@ describe('onboarding', function () {
      */
     it('does not move the Continue button while browsing every feature', async function () {
       const total = await $$('[data-testid^="premium-tile-"]').length;
-      // One tile per entry in src/data/premiumFeatures.js (17 always, plus
+      // One tile per entry in src/data/premiumFeatures.js (18 always, plus
       // Portable outside the App Store build). Update with the catalog.
-      expect(total).toBe(18);
+      expect(total).toBe(19);
 
       const seen = [], tops = [];
       for (let i = 0; i < total; i++) {
