@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ArrowRight, Moon, Sun } from 'lucide-react';
-import { useSettingsStore, SIDEBAR_LAYOUTS } from '../../stores/settingsStore';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { SIDEBAR_LAYOUTS } from '../../utils/sidebarLayouts';
 import { useThemeStore, PALETTES } from '../../stores/themeStore';
 import { useT } from '../../i18n/index.js';
 import { Button } from '../ui/Button';

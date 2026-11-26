@@ -8,7 +8,8 @@ import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { FolderSelector } from '../FolderSelector';
-import { useUiStore } from '../../../stores/uiStore';
+import { useMailStore } from '../../../stores/mailStore';
+import '../../../services/workflows/bindStoreActions';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { t } from '../../../i18n';
 
@@ -25,7 +26,7 @@ const base = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  useUiStore.setState({ viewMode: 'all' });
+  useMailStore.setState({ viewMode: 'all' });
   useSettingsStore.setState({ sidebarStyle: 'list', expandedFolders: {} });
 });
 afterEach(cleanup);
@@ -38,7 +39,7 @@ describe('FolderSelector', () => {
     const group = screen.getByRole('group', { name: t('sidebar.mailSource') });
     expect(within(group).getAllByRole('button')).toHaveLength(3);
     fireEvent.click(within(group).getByRole('button', { name: t('sidebar.viewServer') }));
-    expect(useUiStore.getState().viewMode).toBe('server');
+    expect(useMailStore.getState().viewMode).toBe('server');
     expect(base.onOpenMail).toHaveBeenCalled();
     expect(within(group).getByRole('button', { name: t('sidebar.viewServer') }).getAttribute('aria-pressed')).toBe('true');
   });

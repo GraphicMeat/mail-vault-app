@@ -17,10 +17,11 @@ const SOURCES = [
  * Folder selection: mail source, folder search and the folder list of the
  * account on screen (or All Inboxes). The sidebar mounts it in its own Folders
  * section (`heading`), or right under the selected account row, where New
- * folder sits on that row instead.
+ * folder sits on that row instead (`newFolder` puts it beside the search when
+ * that row is hidden inside a collapsed group).
  */
 export function FolderSelector({
-  heading = false, unifiedInbox = false, mailHidden = false, onOpenMail, onNewFolder,
+  heading = false, newFolder = false, unifiedInbox = false, mailHidden = false, onOpenMail, onNewFolder,
   accountId, mailboxes, activeMailbox, expanded, onToggle, onSelect, counts, onContextMenu, flash, onFlashEnd,
 }) {
   const t = useT();
@@ -40,11 +41,14 @@ export function FolderSelector({
         </button>
       ))}
     </div>
-    <label className="sidebar-find-field">
-      <Search size={14} aria-hidden="true" />
-      <input type="search" value={query} onChange={event => setQuery(event.target.value)}
-        aria-label={t('sidebar.findFolder')} placeholder={t('sidebar.findFolder')} />
-    </label>
+    <div className="sidebar-find-row">
+      <label className="sidebar-find-field">
+        <Search size={14} aria-hidden="true" />
+        <input type="search" value={query} onChange={event => setQuery(event.target.value)}
+          aria-label={t('sidebar.findFolder')} placeholder={t('sidebar.findFolder')} />
+      </label>
+      {newFolder && <NewFolderButton onClick={onNewFolder} />}
+    </div>
     <div className="sidebar-folder-list" data-testid="sidebar-folder-list">
       {unifiedInbox ? <UnifiedFolderList tagCloud={tagCloud} onOpenMail={onOpenMail} mailHidden={mailHidden} searchQuery={query} /> : (
         <Folders accountId={accountId} mailboxes={mailboxes} activeMailbox={activeMailbox} expanded={expanded}

@@ -200,3 +200,6 @@
 .sidebar-folder-selector-nested { margin: 6px 0 10px; }
 .sidebar-folder-selector-nested .sidebar-folder-list { overflow: visible; }
 [data-sidebar-density="compact"] .sidebar-folder-selector-nested { margin: 4px 0 6px; }
+.sidebar-find-row { display: flex; flex-shrink: 0; align-items: flex-start; gap: 4px; }
+.sidebar-find-row .sidebar-find-field { flex: 1; }
+.sidebar-find-row > button { margin-top: 3px; flex-shrink: 0; }

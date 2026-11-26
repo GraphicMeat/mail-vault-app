@@ -65,14 +65,15 @@ describe('Sidebar: folders under the account', function () {
   });
 
   it('opens a folder from the nested list', async () => {
+    // DOM only: ui-* specs run in CI without the e2e store seam.
     const target = await browser.execute(() => {
       const rows = [...document.querySelectorAll('[data-testid="folder-selector"] [data-testid="folder-row"]')];
-      const current = window.__MAIL_STORE__?.getState().activeMailbox;
-      return rows.find(r => r.dataset.path && r.dataset.path !== current)?.dataset.path || null;
+      return rows.find(r => r.dataset.path && r.getAttribute('aria-current') !== 'true')?.dataset.path || null;
     });
     assert.ok(target, 'no second folder to open');
     await clickReachable(`[data-testid="folder-selector"] [data-testid="folder-row"][data-path="${target}"]`);
-    await browser.waitUntil(() => browser.execute(p => window.__MAIL_STORE__?.getState().activeMailbox === p, target), { timeout: 10000 });
+    await browser.waitUntil(() => browser.execute(p => document.querySelector(
+      `[data-testid="folder-selector"] [data-testid="folder-row"][data-path="${CSS.escape(p)}"]`)?.getAttribute('aria-current') === 'true', target), { timeout: 10000 });
   });
 
   it('brings the Folders section back with Stacked', async () => {

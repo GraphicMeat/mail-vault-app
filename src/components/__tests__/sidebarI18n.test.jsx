@@ -18,7 +18,9 @@ import en from '../../i18n/locales/en.json';
 // Resolved from cwd, not `import.meta.url`: vitest.config forces jsdom for
 // everything under src/components/**, and in jsdom `import.meta.url` is not a
 // file: URL, so readFileSync rejects it.
-const SRC = readFileSync(resolve(process.cwd(), 'src/components/Sidebar.jsx'), 'utf8');
+// The folder selector was lifted out of Sidebar.jsx into its own module.
+const SRC = ['src/components/Sidebar.jsx', 'src/components/sidebar/FolderSelector.jsx']
+  .map(file => readFileSync(resolve(process.cwd(), file), 'utf8')).join('\n');
 
 const EXPECTED = [
   'sidebar.passwordMissing', 'common.retry', 'sidebar.noInternet',

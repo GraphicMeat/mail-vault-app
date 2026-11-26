@@ -914,8 +914,14 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   // account list right below that account (or All Inboxes), not in a section.
   const nested = sidebarLayout === 'nested';
   const openNewFolder = () => setNameDialog({ mode: 'create', node: null });
-  const renderFolderSelector = (heading = false) => (
-    <FolderSelector heading={heading} unifiedInbox={unifiedInbox} mailHidden={mailHidden} onOpenMail={onOpenMail}
+  // The group that holds the selector under its header: a group inbox that is
+  // open, or the active account's group while it is collapsed (its rows, and
+  // the selector under them, are not drawn then).
+  const activeGroup = accountGroups?.[activeAccountId];
+  const nestedGroup = unifiedInbox ? unifiedGroup
+    : activeGroup && groupNav.collapsed?.[activeGroup] ? activeGroup : null;
+  const renderFolderSelector = (heading = false, newFolder = false) => (
+    <FolderSelector heading={heading} newFolder={newFolder} unifiedInbox={unifiedInbox} mailHidden={mailHidden} onOpenMail={onOpenMail}
       onNewFolder={openNewFolder} accountId={activeAccountId} mailboxes={shownMailboxes}
       activeMailbox={activeViewId || mailHidden ? null : activeMailbox} expanded={expandedFolders}
       onToggle={toggleFolder} onSelect={selectFolder} counts={folderStatus?.[activeAccountId]}
@@ -1076,7 +1082,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
               {nested && unifiedInbox && !unifiedGroup && renderFolderSelector()}
               {insightsEntry}
               <AccountSections sections={sections} {...groupNav} onOpenGroup={groupNav.openGroup} onToggleGroup={groupNav.toggleGroup}
-                renderAfterHeader={nested && unifiedInbox && unifiedGroup ? name => name === unifiedGroup && renderFolderSelector() : undefined}
+                renderAfterHeader={nested ? name => name === nestedGroup && renderFolderSelector(false, !unifiedInbox) : undefined}
                 renderAccount={account => <React.Fragment key={account.id}>
                 {renderAccount(account)}
                 {account.id === activeAccountId && renderAccountNotice(account)}

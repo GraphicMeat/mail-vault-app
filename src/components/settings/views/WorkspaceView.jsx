@@ -9,7 +9,7 @@ import { Check, Columns, Rows } from 'lucide-react';
 import { SettingRow } from '../../ui/SettingRow';
 import { ToggleSwitch } from '../../ui/ToggleSwitch';
 import { SidebarLayoutPreview, WorkspacePreviewView } from './PreviewViews';
-import { SIDEBAR_LAYOUTS } from '../../../stores/settingsStore';
+import { SIDEBAR_LAYOUTS } from '../../../utils/sidebarLayouts';
 import { useT } from './viewContext';
 
 const PREVIEW_LINE_CHOICES = [[0, 'listPreview.off'], [1, 'listPreview.one'], [2, 'listPreview.two'], [3, 'listPreview.three']];

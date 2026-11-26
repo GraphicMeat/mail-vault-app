@@ -36,7 +36,7 @@ beforeEach(() => {
     displayNames: { studio: 'Design studio' }, hiddenAccounts: { hidden: true },
     accountOrder: [], accountColors: {}, unreadPerAccount: { personal: 3 },
     expandedFolders: {}, transferHoverEnabled: false, billingProfile: null,
-    lastMailboxPerAccount: { personal: 'Archive' }, accountGroups: {},
+    lastMailboxPerAccount: { personal: 'Archive' }, accountGroups: {}, collapsedAccountGroups: {},
   });
   useMailStore.setState({
     accounts, activeAccountId: 'studio', activeMailbox: 'INBOX', unifiedInbox: false, unifiedGroup: null,
@@ -219,7 +219,7 @@ describe('Sidebar layouts', () => {
       expect(screen.queryByTestId('new-folder-btn')).toBeNull();
     });
 
-    it('opens a group inbox's folders below that group's header', () => {
+    it("opens a group inbox's folders below that group's header", () => {
       useSettingsStore.setState({ sidebarLayout: 'nested', accountGroups: { studio: 'Work', personal: 'Work' } });
       useMailStore.setState({ unifiedInbox: true, unifiedGroup: 'Work', unifiedFolder: 'INBOX' });
       render(<Sidebar />);
@@ -228,6 +228,16 @@ describe('Sidebar layouts', () => {
       expect(before(selector(), row('Design studio'))).toBe(true);
       expect(before(screen.getByTestId('all-inboxes-btn'), selector())).toBe(true);
       expect(screen.getAllByTestId('folder-selector')).toHaveLength(1);
+    });
+
+    it('keeps the selector and New folder under the header when the active account's group is collapsed', () => {
+      useSettingsStore.setState({ sidebarLayout: 'nested', accountGroups: { studio: 'Work' }, collapsedAccountGroups: { Work: true } });
+      render(<Sidebar />);
+      const group = screen.getByRole('group', { name: 'Work' });
+      expect(group.contains(selector())).toBe(true);
+      expect(screen.queryByRole('button', { name: /^Design studio/ })).toBeNull();
+      expect(within(selector()).getByTestId('new-folder-btn')).toBeTruthy();
+      expect(screen.getAllByTestId('new-folder-btn')).toHaveLength(1);
     });
 
     it('keeps the stacked Folders section for the other layouts', () => {

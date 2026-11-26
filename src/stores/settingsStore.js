@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { SIDEBAR_LAYOUTS } from '../utils/sidebarLayouts';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { safeStorage, flushSafeStorage, safeStorageWritable } from './safeStorage';
 import { daemonCall } from '../services/daemonClient';
@@ -67,8 +68,6 @@ export const DEFAULT_SHORTCUTS = {
 //
 // Exported (test-only name) so a spec can exercise the shortcut-merge
 // behaviour directly, without standing up zustand/persist's storage plumbing.
-// Settings and onboarding list them in this order.
-export const SIDEBAR_LAYOUTS = ['stacked', 'split', 'switcher', 'nested'];
 const normalizeSidebarLayout = layout => SIDEBAR_LAYOUTS.includes(layout) ? layout : 'stacked';
 const normalizeSidebarDensity = density => density === 'compact' ? 'compact' : 'comfortable';
 // The message list's rows, the same two choices apart from the sidebar's.
