@@ -1,7 +1,7 @@
 // A fake phone shell and engine behind `window.__TAURI__` (transport.js calls through it): every
 // RPC a settings page asks answered with a plausible reply, in the reply shapes the engine's own
 // page tests use. Three accounts (one with a very long address), tags, fields, views, auto-tag
-// rules and Premium on. `installMockEngine()` installs it and returns `{ unhandled, emit }`:
+// rules, local drafts and Premium on. `installMockEngine()` installs it and returns `{ unhandled, emit }`:
 // `unhandled` names every method it had no answer for.
 export function installMockEngine(SHOT = { theme: 'light', palette: 'indigo' }) {
   const now = Date.now();
@@ -75,6 +75,13 @@ export function installMockEngine(SHOT = { theme: 'light', palette: 'indigo' }) 
     { atMs: now - 2000, direction: 'out', protocol: 'https', host: 'mailvaultapp.com', port: 443, purpose: 'billing', account: null, bytesUp: 10, bytesDown: 20, durationMs: 80, result: 'HTTP 500', country: 'DE' },
     { atMs: now - 60000, direction: 'out', protocol: 'imap', host: 'imap.subdomain.example-company.test', port: 993, purpose: 'sync', account: ACCOUNTS[2].email, bytesUp: 5000, bytesDown: 9000000, durationMs: 4200, result: 'ok', country: 'LT' },
   ];
+  // The phone's own (local) drafts: two of `a1`, one of `g1` (the drawer's one Drafts and the
+  // Drafts folder's local rows show the open account's only).
+  let DRAFTS = [
+    { id: 'drf_00000000000000a1', accountId: 'a1', to: 'ann@example.com', subject: 'Notes from Tuesday', text: 'Here are the notes.', updatedMs: now - 20 * 60000 },
+    { id: 'drf_00000000000000a2', accountId: 'a1', to: '', subject: '', text: 'Remember to', updatedMs: now - 3 * 3600000 },
+    { id: 'drf_00000000000000g1', accountId: 'g1', to: 'bob@x.test', subject: 'Re: Lunch on Thursday?', text: 'Thursday works.', updatedMs: now - DAY },
+  ];
   const HTML = '<div style="font-family:sans-serif"><p>Hi Ada,</p><p>Here is the summary you asked for. The numbers are up eleven percent on last quarter and the team would like to walk you through them on Thursday.</p><p>Best,<br>Ann</p></div>';
 
   function rpc(method, p = {}) {
@@ -88,7 +95,9 @@ export function installMockEngine(SHOT = { theme: 'light', palette: 'indigo' }) 
       case 'mobile.message.body': return { html: HTML, text: null, attachments: [], remoteImages: 0, trackers: 0, gone: false };
       case 'mobile.message.inlineImages': return { images: {}, missing: [] };
       case 'mobile.outbox.list': return [];
-      case 'mobile.drafts.list': return [];
+      case 'mobile.drafts.list': return DRAFTS.map(({ text, ...d }) => d);
+      case 'mobile.drafts.get': { const d = DRAFTS.find((x) => x.id === p.id); return d ? { cc: '', bcc: '', inReplyTo: '', references: '', attachments: [], ...d } : null; }
+      case 'mobile.drafts.delete': DRAFTS = DRAFTS.filter((d) => d.id !== p.id); return { deleted: true };
       case 'mobile.followup.list': return { items: [] };
       case 'mobile.actions.pending': return {
         pending: p.accountId && p.accountId !== 'a1' ? [] : [

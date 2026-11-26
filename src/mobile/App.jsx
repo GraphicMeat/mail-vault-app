@@ -16,7 +16,11 @@
 //
 // Compose (Compose.jsx) is a full-screen layer over the list or the viewer: the button at the
 // bottom right starts a new message, the viewer's More sheet a reply, reply to all or forward.
-// The drawer's Drafts entry opens the drafts list (DraftsList.jsx); a draft reopens in Compose.
+// Drafts are the phone's own (local). While the account has a Drafts folder and it is open (not
+// All Inboxes), that account's local drafts sit above the folder's list (DraftRows, the drafts
+// list's rows, outside the virtual scroller and at most 40% of the screen), and the empty-folder
+// note gives way to them; in All Inboxes, or with no Drafts folder, the drawer's Drafts row opens
+// the drafts list (DraftsList.jsx). A draft reopens in Compose.
 // Its Follow up entry opens the reminders list (FollowUpList.jsx); a reminder with no reply opens
 // its Sent copy the way a notification tap opens a message. Its saved views (desktop's) open their
 // mail in ViewResults.jsx, a row opening as a search result does.
@@ -24,7 +28,8 @@
 // (with the message count beside it, which gives way first) over the account button. Under the
 // header, the status strip (StatusBar) says what is waiting to reach the server and a sync that
 // runs or failed (with Retry); it exists only while there is something to say. The sign-in
-// banners and the outbox row (Outbox.jsx, while anything is unsent) follow, then the list.
+// banners and the outbox row (Outbox.jsx, while anything is unsent) follow, then the local drafts
+// (in the Drafts folder), then the list.
 //
 // All Inboxes keeps an account in front (compose's From), but nothing on screen names it: the
 // header's account button shows the shown accounts' avatars and is named All Inboxes (desktop's
@@ -57,7 +62,7 @@ import ChatView from './ChatView.jsx';
 import AddAccount from './AddAccount.jsx';
 import AccountSwitcher, { Avatar, ReauthBanner, RefusedBanner } from './AccountSwitcher.jsx';
 import FolderDrawer from './FolderDrawer.jsx';
-import { folderLabel } from './folders.js';
+import { folderLabel, draftsFolder } from './folders.js';
 import { errorKey } from './errors.js';
 import { runPerfGate } from './perf.js';
 import { useT } from './i18n.js';
@@ -66,7 +71,7 @@ import KeepDock from './KeepDock.jsx';
 import Toasts from './Toasts.jsx';
 import Compose from './Compose.jsx';
 import OutboxRow from './Outbox.jsx';
-import DraftsList from './DraftsList.jsx';
+import DraftsList, { DraftRows } from './DraftsList.jsx';
 import FollowUpList from './FollowUpList.jsx';
 import ViewResults from './ViewResults.jsx';
 import Settings from './Settings.jsx';
@@ -813,6 +818,13 @@ function App() {
   const allInboxes = activeFolder === ALL_INBOXES;
   // Mail view chat (`viewStyle`): the folder by person (ChatView.jsx). All Inboxes stays a list.
   const chatView = useMobileStore((s) => s.prefs.viewStyle) === 'chat' && !allInboxes;
+  // The account's Drafts folder is open: its local drafts are listed on top (read fresh on entry).
+  const inDraftsFolder = !allInboxes && activeFolder != null && draftsFolder(folders)?.path === activeFolder;
+  useEffect(() => { if (inDraftsFolder) useMobileStore.getState().loadDrafts(); }, [inDraftsFolder, activeAccountId]);
+  const folderDrafts = useMemo(
+    () => (inDraftsFolder ? drafts.filter((d) => d.accountId === activeAccountId) : []),
+    [inDraftsFolder, drafts, activeAccountId],
+  );
   const accountOf = useMemo(() => {
     if (!allInboxes) return null;
     const byId = new Map(accounts.map((a) => [a.id, a]));
@@ -968,8 +980,17 @@ function App() {
         </React.Fragment>
       ))}
       <OutboxRow initialOpen={DEMO_OUTBOX} />
+      {folderDrafts.length > 0 && (
+        <DraftRows
+          drafts={folderDrafts}
+          onOpen={onOpenDraft}
+          className="mv-drafts__list mv-drafts__list--inline"
+          aria-label={t('mobile.drafts.title')}
+          data-mv-local-drafts
+        />
+      )}
       {listState === 'ready' && list && chatView && (
-        <ChatView key={listKey} accountId={activeAccountId} folder={activeFolder} list={list} onOpen={onOpen} onSwipe={onSwipe} />
+        <ChatView key={listKey} accountId={activeAccountId} folder={activeFolder} list={list} onOpen={onOpen} onSwipe={onSwipe} emptyNote={folderDrafts.length === 0} />
       )}
       {listState === 'ready' && list && !chatView && (
         <MessageList
@@ -981,6 +1002,7 @@ function App() {
           onRefresh={onRefresh}
           refreshing={Boolean(pulled)}
           demoSwipe={DEMO_SWIPE}
+          emptyNote={folderDrafts.length === 0}
         />
       )}
       {listState === 'loading' && <p className="mv-status">{t('explorer.loading')}</p>}

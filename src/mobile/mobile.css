@@ -1195,6 +1195,16 @@ body {
   margin: 0;
   padding: 0 0 var(--mv-safe-bottom);
 }
+/* The local drafts above an account's Drafts folder (App.jsx), between the outbox row and the list,
+   outside the virtual scroller: never more than 40% of the screen, scrolling inside beyond that. */
+.mv-drafts__list--inline {
+  flex: none;
+  max-height: 40%;
+  padding-bottom: 0;
+  background: var(--mail-surface);
+  border-bottom: 1px solid var(--mail-border);
+}
+.mv-drafts__list--inline > .mv-drafts__item:last-child { border-bottom: 0; }
 .mv-drafts__item {
   display: flex;
   align-items: center;

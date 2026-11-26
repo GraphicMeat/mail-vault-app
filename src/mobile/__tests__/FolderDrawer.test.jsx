@@ -94,6 +94,53 @@ describe('the drawer rows wear desktop glyphs', () => {
   });
 });
 
+describe('one Drafts in the drawer', () => {
+  const draftsNamed = () => [...document.querySelectorAll('.mv-folder')]
+    .filter((el) => [t('sidebar.drafts'), t('mobile.drafts.title')].includes(el.querySelector('.mv-folder__name')?.textContent));
+  const withDrafts = (use = '\\Drafts', extra = {}) => [folder('INBOX', '\\Inbox'), folder('Drafts', use, extra), folder('Sent', '\\Sent')];
+
+  it('with a Drafts folder there is one Drafts row: the folder, with the local drafts as its count', () => {
+    const onSelect = vi.fn();
+    const onDrafts = vi.fn();
+    draw({ folders: withDrafts(), drafts: 2, onSelect, onDrafts });
+    const rows = draftsNamed();
+    expect(rows.length).toBe(1);
+    expect(within(rows[0]).getByLabelText(t('mobile.drafts.count', { count: 2 })).textContent).toBe('2');
+    expect(glyphOf(rows[0])).toBe('lucide-file');
+    fireEvent.click(rows[0]);
+    expect(onSelect).toHaveBeenCalledWith('Drafts');
+    expect(onDrafts).not.toHaveBeenCalled();
+  });
+
+  it('knows the Drafts folder in any spelling of its special use', () => {
+    draw({ folders: withDrafts('\\drafts'), drafts: 1 });
+    expect(draftsNamed().length).toBe(1);
+    expect(screen.getByLabelText(t('mobile.drafts.count', { count: 1 }))).toBeTruthy();
+  });
+
+  it('with no local drafts the Drafts folder shows what it showed before', () => {
+    draw({ folders: withDrafts('\\Drafts', { unseen: 3 }), drafts: 0 });
+    const rows = draftsNamed();
+    expect(rows.length).toBe(1);
+    expect(within(rows[0]).getByLabelText(t('mobile.unreadCount', { count: 3 })).textContent).toBe('3');
+    expect(screen.queryByLabelText(t('mobile.drafts.count', { count: 0 }))).toBeNull();
+  });
+
+  it('keeps the local Drafts row without a Drafts folder, with a Drafts folder that cannot be opened, and in All Inboxes', () => {
+    const onDrafts = vi.fn();
+    draw({ drafts: 2, onDrafts });
+    fireEvent.click(screen.getByLabelText(t('mobile.drafts.count', { count: 2 })).closest('button'));
+    expect(onDrafts).toHaveBeenCalledTimes(1);
+    cleanup();
+    draw({ folders: withDrafts('\\Drafts', { noselect: true }), drafts: 2 });
+    expect(screen.getByLabelText(t('mobile.drafts.count', { count: 2 })).closest('.mv-drawer__local')).toBeTruthy();
+    cleanup();
+    draw({ folders: withDrafts(), activeFolder: ALL_INBOXES, drafts: 2 });
+    expect(draftsNamed().length).toBe(1);
+    expect(screen.getByLabelText(t('mobile.drafts.count', { count: 2 })).closest('.mv-drawer__local')).toBeTruthy();
+  });
+});
+
 describe('mailboxIcon.js', () => {
   it('is the one desktop FolderTree uses, re-exported from there', () => {
     expect(FolderTree.getMailboxIcon).toBe(getMailboxIcon);

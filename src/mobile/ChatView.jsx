@@ -3,7 +3,8 @@
 // person's conversations (`mobile.chat.topics`, engine `chat.rs`). A topic is a list row like the
 // threaded list's: a tap opens the conversation screen (ThreadView) or the message, a swipe acts on
 // it. Both read again whenever the folder's list reloads (`list.version` moves: new mail, a delete,
-// a move), and a row waiting out its undo toast is left out, as in the list.
+// a move), and a row waiting out its undo toast is left out, as in the list. An empty folder says
+// so, unless `emptyNote` is false (local drafts are shown above it, App.jsx).
 import React, { useEffect, useLayoutEffect, useReducer, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { displayText } from '../utils/bidiText.js';
@@ -46,7 +47,7 @@ function People({ people, onPick }) {
     measured.current = height;
     virtualizer.measure();
   }, [height, virtualizer]);
-  if (!people.length) return <div className="mv-list"><p className="mv-list__empty">{t('mobile.list.empty')}</p></div>;
+  if (!people.length) return <div className="mv-list">{emptyNote && <p className="mv-list__empty">{t('mobile.list.empty')}</p>}</div>;
   return (
     <div ref={scrollRef} className="mv-list">
       <div className="mv-list__inner" style={{ height: `${virtualizer.getTotalSize()}px` }}>
@@ -80,7 +81,7 @@ function People({ people, onPick }) {
   );
 }
 
-export default function ChatView({ accountId, folder, list, onOpen, onSwipe }) {
+export default function ChatView({ accountId, folder, list, onOpen, onSwipe, emptyNote = true }) {
   const t = useT();
   const version = useListVersion(list);
   const [people, setPeople] = useState(null);

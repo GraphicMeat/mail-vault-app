@@ -5,6 +5,7 @@
 // anchor; once the reload finds that row again the list moves by the rows that landed above it,
 // so what the user was reading stays put. Pull-to-refresh watches touches only (passive
 // listeners, no `preventDefault`), never scroll events, so scrolling stays on the fast path.
+// An empty folder says so, unless `emptyNote` is false (local drafts are shown above it, App.jsx).
 import React, { memo, useEffect, useLayoutEffect, useReducer, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import MessageRow from './MessageRow.jsx';
@@ -97,7 +98,7 @@ const PullIndicator = memo(function PullIndicator({ scrollRef, onRefresh, refres
 });
 
 /** `accountOf(row)`: the row's account, in a list that spans accounts (All Inboxes); else null. */
-function MessageList({ cache, onOpen, onSwipe, onRefresh, refreshing = false, demoSwipe = null, accountOf = null }) {
+function MessageList({ cache, onOpen, onSwipe, onRefresh, refreshing = false, demoSwipe = null, accountOf = null, emptyNote = true }) {
   const t = useT();
   const scrollRef = useRef(null);
   const [, rerender] = useReducer((n) => n + 1, 0);
@@ -146,7 +147,7 @@ function MessageList({ cache, onOpen, onSwipe, onRefresh, refreshing = false, de
       <PullIndicator scrollRef={scrollRef} onRefresh={onRefresh} refreshing={refreshing} />
       <div ref={scrollRef} className="mv-list" data-mv-list data-total={total}>
         {total === 0 && cache.total != null ? (
-          <p className="mv-list__empty">{t('mobile.list.empty')}</p>
+          emptyNote && <p className="mv-list__empty">{t('mobile.list.empty')}</p>
         ) : (
           <div className="mv-list__inner" style={{ height: `${virtualizer.getTotalSize()}px` }}>
             {items.map((it) => {

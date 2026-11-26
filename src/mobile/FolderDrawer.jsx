@@ -6,8 +6,11 @@
 // Inboxes is open (`activeFolder` is ALL_INBOXES) the drawer names no account: All Inboxes is its
 // one entry, in place of the address and folders of the account kept in front, as desktop's
 // sidebar swaps to its unified list (UnifiedFolderList reads desktop's account store, so it is not
-// reused; the engine lists no unified folder but All Inboxes, so the drawer offers none). Below the
-// folders, Drafts (the local drafts, with their count) opens the drafts list, and Follow up
+// reused; the engine lists no unified folder but All Inboxes, so the drawer offers none). There is
+// one Drafts: when the account has a Drafts folder (`draftsFolder`, folders.js) that folder's row
+// counts the phone's local drafts (the folder lists them on top, App.jsx) and carries
+// `data-mv-drafts`; otherwise, and in All Inboxes, a Drafts row below the folders (the local
+// drafts, with their count) opens the drafts list. Follow up
 // (shown while there are follow-up reminders, with the count that found no reply) opens the
 // reminders list; in All Inboxes both are every shown account's. The footer's Settings opens the
 // settings screen.
@@ -21,7 +24,7 @@ import React from 'react';
 import { Bell, File, Pencil, Plus, Settings } from 'lucide-react';
 import Sheet from './Sheet.jsx';
 import { useT } from './i18n.js';
-import { folderLabel, iconMailbox, ALL_INBOXES } from './folders.js';
+import { folderLabel, iconMailbox, draftsFolder, ALL_INBOXES } from './folders.js';
 import { Avatar } from './AccountSwitcher.jsx';
 import { AllInboxesIcon, ChevronDownIcon } from './icons.jsx';
 import { getMailboxIcon } from '../utils/mailboxIcon.js';
@@ -60,6 +63,8 @@ function DrawerHead({ account, allInboxes, onSwitchAccount }) {
 export default function FolderDrawer({ account, folders, activeFolder, onSelect, onClose, onSwitchAccount, drafts = 0, onDrafts, followUps = 0, followUpsDue = 0, onFollowUps, onSettings, views = [], viewCounts = {}, onView, onEditViews, onNewView }) {
   const t = useT();
   const allInboxes = activeFolder === ALL_INBOXES;
+  // The account's Drafts folder is the one Drafts: the local drafts are counted on it.
+  const draftsPath = allInboxes ? null : draftsFolder(folders)?.path ?? null;
   return (
     <Sheet kind="drawer" label={t('mobile.drawer.title')} onClose={onClose}>
       <div className="mv-drawer__head">
@@ -86,6 +91,7 @@ export default function FolderDrawer({ account, folders, activeFolder, onSelect,
               );
             }
             const active = f.path === activeFolder;
+            const localDrafts = f.path === draftsPath && drafts > 0;
             return (
               <li key={f.path}>
                 <button
@@ -93,11 +99,14 @@ export default function FolderDrawer({ account, folders, activeFolder, onSelect,
                   className={active ? 'mv-folder mv-folder--active' : 'mv-folder'}
                   style={style}
                   aria-current={active ? 'true' : undefined}
+                  data-mv-drafts={f.path === draftsPath ? true : undefined}
                   onClick={() => onSelect(f.path)}
                 >
                   <FolderGlyph folder={f} />
                   <span className="mv-folder__name" dir="auto">{folderLabel(f)}</span>
-                  {f.unseen > 0 && (
+                  {localDrafts ? (
+                    <span className="mv-folder__count" aria-label={t('mobile.drafts.count', { count: drafts })}>{drafts}</span>
+                  ) : f.unseen > 0 && (
                     <span className="mv-folder__count" aria-label={t('mobile.unreadCount', { count: f.unseen })}>{f.unseen}</span>
                   )}
                 </button>
@@ -130,7 +139,7 @@ export default function FolderDrawer({ account, folders, activeFolder, onSelect,
           ))}
         </div>
       )}
-      {onDrafts && (
+      {onDrafts && !draftsPath && (
         <div className="mv-drawer__local">
           <button type="button" className="mv-folder" data-mv-drafts onClick={onDrafts}>
             <span className="mv-folder__icon"><File size={16} aria-hidden="true" /></span>

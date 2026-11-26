@@ -26,6 +26,14 @@ export function folderLabel(folder) {
   return key ? t(key) : folder.name || folder.path;
 }
 
+/**
+ * The account's Drafts folder (special use `\Drafts`, any case) when it can be opened, else null.
+ * While there is one it is the drawer's one Drafts and lists the phone's local drafts on top.
+ */
+export function draftsFolder(folders) {
+  return (folders || []).find((f) => !f.noselect && String(f.specialUse || '').toLowerCase() === '\\drafts') || null;
+}
+
 /** Desktop's spelling of each special use, for its mailbox glyphs (src/utils/mailboxIcon.js). */
 const SPECIAL_CANONICAL = {
   '\\inbox': '\\Inbox', '\\sent': '\\Sent', '\\drafts': '\\Drafts', '\\trash': '\\Trash', '\\junk': '\\Junk',

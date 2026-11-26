@@ -4,7 +4,8 @@
 // row's actions (open, read, flag, delete, swipe) go to that row's own account and folder, and a
 // refresh syncs every account's inbox. While it is open nothing on screen names one account: the
 // header's account button and the folder drawer say All Inboxes, the drawer's Drafts and Follow up
-// count every account's, and a lapsed sign-in shows for every account in the list.
+// count every account's, and a lapsed sign-in shows for every account in the list. Out of All
+// Inboxes, an account's Drafts folder lists that account's local drafts above its messages.
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import React from 'react';
 import { readFileSync } from 'node:fs';
@@ -623,5 +624,71 @@ describe('All Inboxes in the app', () => {
     engine.calls = [];
     await act(async () => { await store().refresh(); });
     expect(callsOf('mobile.sync.refresh')).toEqual([{ accountId: 'a1' }, { accountId: 'a2' }]);
+  });
+});
+
+describe('the Drafts folder in the app', () => {
+  let offsetHeight;
+  let offsetWidth;
+  beforeEach(() => {
+    offsetHeight = vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(800);
+    offsetWidth = vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(375);
+    engine.folders = { a1: [inbox(3), { ...folder('Drafts'), specialUse: '\\Drafts' }, folder('Sent')], a2: [inbox(4)] };
+    engine.drafts = [draft('d1', 'a1'), draft('d2', 'a2'), draft('d3', 'a1')];
+  });
+  afterEach(() => {
+    offsetHeight.mockRestore();
+    offsetWidth.mockRestore();
+    vi.restoreAllMocks();
+  });
+
+  async function mountApp() {
+    window.history.replaceState({}, '', '/mobile.html');
+    vi.resetModules();
+    const { default: App } = await import('../App.jsx');
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    render(<App />);
+    await waitFor(() => expect(document.querySelector('[data-index="0"][data-loaded="1"]')).toBeTruthy());
+  }
+  async function openFolder(label) {
+    fireEvent.click(screen.getByRole('button', { name: t('mobile.drawer.open') }));
+    const drawer = screen.getByRole('dialog', { name: t('mobile.drawer.title') });
+    fireEvent.click(within(drawer).getByText(label).closest('button'));
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(label));
+  }
+
+  it('lists the open account\'s local drafts above the list, outside it, and a tap opens one in compose', async () => {
+    await mountApp();
+    await openFolder(t('sidebar.drafts'));
+    const block = await waitFor(() => {
+      const el = document.querySelector('[data-mv-local-drafts]');
+      expect(el.textContent).toContain('Draft d1');
+      return el;
+    });
+    expect(block.textContent).toContain('Draft d3');
+    expect(block.textContent).not.toContain('Draft d2');
+    // Outside the virtual scroller, before it, as the outbox row is.
+    await waitFor(() => expect(document.querySelector('[data-mv-list]')).toBeTruthy());
+    const list = document.querySelector('[data-mv-list]');
+    expect(list.contains(block)).toBe(false);
+    expect(block.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // The server's Drafts folder is empty: no empty-folder note under the local drafts.
+    expect(document.querySelector('.mv-list__empty')).toBeNull();
+    // Each row has its delete, as on the drafts screen.
+    expect(within(block).getByRole('button', { name: t('mobile.drafts.delete', { subject: 'Draft d1' }) })).toBeTruthy();
+    fireEvent.click(within(block).getByText('Draft d1'));
+    await waitFor(() => expect(document.querySelector('.mv-compose__from')?.textContent).toBe('a1@example.test'));
+    expect(callsOf('mobile.drafts.get')).toEqual([{ id: 'd1' }]);
+  });
+
+  it('another folder shows no local drafts, and the empty note is back where there are none', async () => {
+    await mountApp();
+    expect(document.querySelector('[data-mv-local-drafts]')).toBeNull();
+    await openFolder('Sent');
+    expect(document.querySelector('[data-mv-local-drafts]')).toBeNull();
+    engine.drafts = [draft('d2', 'a2')];
+    await openFolder(t('sidebar.drafts'));
+    await waitFor(() => expect(document.querySelector('.mv-list__empty')).toBeTruthy());
+    expect(document.querySelector('[data-mv-local-drafts]')).toBeNull();
   });
 });
