@@ -61,6 +61,9 @@ export const PREF_DEFAULTS = Object.freeze({
   badgeMode: 'unread',
   // The viewer's bar, in order (quickActions.js; Settings > Appearance > Quick actions).
   quickActionsReader: Object.freeze(['toggleRead', 'flag', 'move', 'delete']),
+  // The list row's wheel and the selection bar: desktop's `quickActions` object, `{}` until
+  // changed or imported (quickActions/config.js puts the phone's defaults under it).
+  quickActions: Object.freeze({}),
   // Settings > Logs: Standard masks addresses in the engine's log file, Verbose keeps them.
   logVerbosity: 'standard',
   // Settings > AI providers (settings/AiProviders.jsx; the engine's `ai.rs` reads them): off, no endpoint.

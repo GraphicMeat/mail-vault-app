@@ -106,7 +106,7 @@ async function use(el) {
     await act(async () => { fireEvent.change(el, { target: { value: '#123456' } }); fireEvent.blur(el); });
     return '#123456';
   }
-  if (el.classList.contains('account-settings-drag-handle')) {
+  if (el.classList.contains('account-settings-drag-handle') || el.classList.contains('quick-actions-chip-grip')) {
     const last = !el.closest('li')?.nextElementSibling;
     await act(async () => { fireEvent.keyDown(el, { key: last ? 'ArrowUp' : 'ArrowDown' }); });
     return null;

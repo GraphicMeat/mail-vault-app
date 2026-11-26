@@ -144,6 +144,8 @@ describe('local labels on the phone', () => {
     engine.tags = [WORK, HOME];
     render(<Settings onClose={() => {}} page="appearance" />);
     fireEvent.click(screen.getByRole('tab', { name: t('quickActions.title') }));
+    // The labels sit under the viewer bar's tab.
+    fireEvent.click(screen.getByRole('tab', { name: t('quickActions.surface.reader') }));
     await flush();
     const list = document.querySelector('.quick-actions-label-list');
     expect(within(list).getByText(t('quickActions.localLabels'))).toBeTruthy();

@@ -107,6 +107,12 @@ function phoneGlobalSettings(s, theme) {
   const reader = normalizeQuickActions(s.quickActions).defaults.reader.entries.map(e => e.action);
   const stock = DEFAULT_QUICK_ACTIONS.defaults.reader.entries.map(e => e.action);
   if (reader.join() !== stock.join()) out.quickActionsReader = reader;
+  // The list row's wheel and the selection bar, in desktop's own shape: only a surface the person
+  // changed, and of the scopes (a folder, a view) only those naming no desktop account, whose ids
+  // the phone does not share (unified inbox and search). Nothing changed sends nothing, so the
+  // phone keeps its own wheel.
+  const quickActions = phoneQuickActions(s.quickActions);
+  if (quickActions) out.quickActions = quickActions;
   // AI with an endpoint, the phone's one provider: the switch, URL, model and review choice. Never
   // the key, nor the desktop's consent (the phone reviews its first send itself). The phone leaves
   // out a loopback URL: that server runs on this computer, not on the phone.
@@ -125,6 +131,33 @@ function phoneGlobalSettings(s, theme) {
       .map(tpl => ({ name: String(tpl.name || ''), body: tpl.body }));
   }
   return out;
+}
+
+/** The row and selection surfaces of `value` the person changed, with the account-free overrides: or null. */
+function phoneQuickActions(value) {
+  const normalized = normalizeQuickActions(value);
+  const stock = normalizeQuickActions({});
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const surfaces = ['row', 'selection'];
+  const defaults = {};
+  for (const surface of surfaces) {
+    if (!same(normalized.defaults[surface], stock.defaults[surface])) defaults[surface] = normalized.defaults[surface];
+  }
+  const overrides = {};
+  for (const [key, config] of Object.entries(normalized.overrides)) {
+    let accountId;
+    try { accountId = JSON.parse(key)[1]; } catch { continue; }
+    if (accountId !== null) continue;
+    const own = Object.fromEntries(surfaces.filter(surface => config[surface]).map(surface => [surface, config[surface]]));
+    if (Object.keys(own).length) overrides[key] = own;
+  }
+  const linked = normalized.styleLinks.global === true;
+  if (!Object.keys(defaults).length && !Object.keys(overrides).length && !linked) return null;
+  return {
+    ...(Object.keys(defaults).length ? { defaults } : {}),
+    ...(Object.keys(overrides).length ? { overrides } : {}),
+    ...(linked ? { styleLinks: { global: true, overrides: {} } } : {}),
+  };
 }
 
 function phoneAccountSettings(s, account) {

@@ -160,6 +160,12 @@ pub struct PhoneSettings {
     /// in the desktop's vocabulary: the phone maps them onto its viewer bar.
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
     pub quick_actions_reader: Option<Vec<String>>,
+    /// The list row's and the selection bar's quick actions as the desktop keeps them
+    /// (`quickActions`: `{ defaults: { row, selection }, overrides? }`, the shape of
+    /// `src/utils/quickActions.js`): the phone's wheel and bulk bar are drawn from it. An object
+    /// of at most [`MAX_QUICK_ACTIONS_BYTES`], else none.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "lenient_object")]
+    pub quick_actions: Option<Value>,
     /// `aiSettings` when its provider is an endpoint ([`PhoneAiEndpoint`]).
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "lenient_object")]
     pub ai_endpoint: Option<PhoneAiEndpoint>,
@@ -252,6 +258,8 @@ impl PhoneAccountSettings {
 
 /// The most templates a code carries.
 pub const MAX_TEMPLATES: usize = 50;
+/// The most JSON bytes of the quick action configuration a code carries.
+pub const MAX_QUICK_ACTIONS_BYTES: usize = 32 * 1024;
 /// The most characters of one template body or signature html a code carries.
 pub const MAX_TEXT_CHARS: usize = 64 * 1024;
 /// Deflated bytes the settings may add to a code: two frames.
@@ -292,6 +300,9 @@ fn clip(s: &mut String, max: usize) {
 /// The global settings from the desktop's snapshot, capped.
 pub fn global_settings(v: Option<&Value>) -> Option<PhoneSettings> {
     let mut s: PhoneSettings = serde_json::from_value(v.filter(|v| v.is_object())?.clone()).ok()?;
+    if s.quick_actions.as_ref().is_some_and(|q| q.to_string().len() > MAX_QUICK_ACTIONS_BYTES) {
+        s.quick_actions = None;
+    }
     if let Some(t) = s.templates.as_mut() {
         t.truncate(MAX_TEMPLATES);
         for tpl in t.iter_mut() {
@@ -402,7 +413,7 @@ pub enum Degrade {
 
 /// Cuts `bundle`'s settings until they fit the code's settings budget: deflated, they add at most
 /// [`SETTINGS_BUDGET_BYTES`]; inflated, at most [`SETTINGS_PLAIN_BYTES`]; and the whole code stays
-/// within [`super::MAX_FRAMES`]. Drops templates, then `data:` images in signatures, then
+/// within [`super::MAX_FRAMES`]. Drops templates, then the quick action layout, then `data:` images in signatures, then
 /// signatures, then every setting. Never touches an account's sign-in. Deflates only (no
 /// sealing), so it is cheap.
 pub fn fit(bundle: &mut PhoneBundle) -> Degrade {
@@ -428,6 +439,14 @@ pub fn fit(bundle: &mut PhoneBundle) -> Degrade {
     }
     if let Some(s) = bundle.settings.as_mut() {
         s.templates = None;
+    }
+    if fits(bundle) {
+        return Degrade::NoTemplates;
+    }
+    // The quick action layout is next (still reported as the templates going: both are the
+    // person's own content, not a scalar).
+    if let Some(s) = bundle.settings.as_mut() {
+        s.quick_actions = None;
     }
     if fits(bundle) {
         return Degrade::NoTemplates;

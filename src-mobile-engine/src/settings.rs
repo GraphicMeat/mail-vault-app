@@ -46,6 +46,8 @@ pub(crate) enum Kind {
     Text(usize),
     /// A JSON list of at most this many bytes.
     List(usize),
+    /// A JSON object of at most this many bytes (the page checks its shape).
+    Object(usize),
     /// One of these numbers (desktop's `textScale`).
     Num(&'static [f64]),
 }
@@ -137,6 +139,11 @@ pub(crate) const PREFS: &[(&str, Kind, &str)] = &[
     // The viewer's bar, in order (Settings > Appearance > Quick actions; the page keeps the
     // phone's actions only, at most four: src/mobile/quickActions.js). The rest are under More.
     ("quickActionsReader", Kind::List(1024), "[\"toggleRead\",\"flag\",\"move\",\"delete\"]"),
+    // The list row's wheel and the selection bar (Settings > Appearance > Quick actions): desktop's
+    // `quickActions` (`{ defaults: { row, selection, reader }, overrides, styleLinks }`, normalized
+    // by the page with src/utils/quickActions.js). `{}` is desktop's defaults, with the wheel for
+    // the row. The viewer's own bar stays `quickActionsReader`.
+    ("quickActions", Kind::Object(64 * 1024), "{}"),
     // Settings > Logs: Standard masks addresses in the log file, Verbose keeps them (`logs.rs`).
     ("logVerbosity", Kind::OneOf(&["standard", "verbose"]), "\"standard\""),
     // Settings > AI (`ai.rs`): desktop's `aiSettings` with the phone's one provider, an
@@ -163,6 +170,7 @@ pub(crate) fn encode(kind: Kind, value: &Value) -> Option<String> {
         Kind::Int(lo, hi) => value.as_i64().filter(|n| (lo..=hi).contains(n)).map(|n| n.to_string()),
         Kind::Text(max) => value.as_str().filter(|s| s.chars().count() <= max && !s.contains(['\n', '\r'])).map(str::to_string),
         Kind::List(max) => value.is_array().then(|| value.to_string()).filter(|s| s.len() <= max),
+        Kind::Object(max) => value.is_object().then(|| value.to_string()).filter(|s| s.len() <= max),
         Kind::Num(allowed) => value.as_f64().filter(|n| allowed.contains(n)).map(|n| json!(n).to_string()),
     }
 }
@@ -179,7 +187,7 @@ pub(crate) fn decode(kind: Kind, stored: Option<String>, default: &str) -> Value
         },
         Kind::OneOf(_) | Kind::Text(_) => Some(json!(s)),
         Kind::Int(..) => s.parse::<i64>().ok().map(|n| json!(n)),
-        Kind::List(_) => serde_json::from_str::<Value>(&s).ok(),
+        Kind::List(_) | Kind::Object(_) => serde_json::from_str::<Value>(&s).ok(),
         Kind::Num(_) => s.parse::<f64>().ok().map(|n| json!(n)),
     };
     v.filter(|v| encode(kind, v).is_some()).unwrap_or_else(fallback)

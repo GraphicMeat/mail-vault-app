@@ -404,6 +404,31 @@ fn the_viewer_quick_actions_default_to_the_old_toolbar_and_import_in_the_phone_v
     assert_eq!(p["quickActionsReader"], json!(["toggleRead", "flag", "move", "delete"]));
 }
 
+#[test]
+fn the_row_and_selection_quick_actions_are_an_object_pref_and_import_as_one() {
+    let tmp = tempfile::tempdir().unwrap();
+    let e = open(tmp.path());
+    // Nothing set: the page's own defaults (desktop's, with the wheel for the row) apply.
+    assert_eq!(e.rpc("mobile.prefs.get", json!({})).unwrap()["quickActions"], json!({}));
+    let cfg = json!({ "defaults": { "row": { "mode": "radial", "entries": [{ "id": "reply", "action": "reply" }] } } });
+    let after = e.rpc("mobile.prefs.set", json!({ "quickActions": cfg })).unwrap();
+    assert_eq!(after["quickActions"], cfg);
+    for bad in [json!("row"), json!(["row"]), json!(3), json!({ "defaults": { "noise": "x".repeat(70_000) } })] {
+        assert_eq!(e.rpc("mobile.prefs.set", json!({ "quickActions": bad })).unwrap_err().code(), "INVALID");
+    }
+    assert_eq!(e.rpc("mobile.prefs.get", json!({})).unwrap()["quickActions"], cfg);
+
+    // A desktop import carries it, the reader's list is untouched.
+    let tmp = tempfile::tempdir().unwrap();
+    let e = open(tmp.path());
+    let mut s = desk_settings();
+    s.quick_actions = Some(cfg.clone());
+    import(&e, &code(vec![imap("ann@example.test")], Some(s)));
+    let p = e.rpc("mobile.prefs.get", json!({})).unwrap();
+    assert_eq!(p["quickActions"], cfg);
+    assert_eq!(p["quickActionsReader"], json!(["toggleRead", "flag", "move", "delete"]));
+}
+
 /// Desktop's AI on an endpoint arrives as the phone's AI settings; never a key or a review (the
 /// bundle has neither), and a loopback URL (the desktop's own computer) not at all.
 #[test]

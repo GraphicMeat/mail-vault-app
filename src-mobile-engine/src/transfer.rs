@@ -577,6 +577,10 @@ fn apply_global(c: &Connection, s: &PhoneSettings) -> rusqlite::Result<()> {
     if let Some(bar) = s.quick_actions_reader.as_deref().map(phone_reader_actions).filter(|b| !b.is_empty()) {
         values.push(("quickActionsReader", json!(bar)));
     }
+    // The row wheel and selection bar, as the desktop keeps them (the page normalizes).
+    if let Some(q) = &s.quick_actions {
+        values.push(("quickActions", q.clone()));
+    }
     // AI on an endpoint; a loopback URL is the desktop's own computer, not the phone.
     if let Some(ai) = &s.ai_endpoint {
         let url = ai.endpoint_url.as_deref().map(str::trim).unwrap_or("");

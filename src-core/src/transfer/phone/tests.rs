@@ -716,6 +716,49 @@ fn the_reader_quick_actions_are_carried_in_the_desktop_vocabulary() {
     assert_eq!(got.language.as_deref(), Some("de"));
 }
 
+#[test]
+fn the_row_and_selection_quick_actions_are_carried_as_the_desktop_keeps_them() {
+    let cfg = json!({
+        "defaults": {
+            "row": { "mode": "radial", "entries": [{ "id": "reply", "action": "reply" }, { "id": "delete", "action": "delete" }], "palette": "semantic" },
+            "selection": { "mode": "inline", "entries": [{ "id": "markRead", "action": "markRead" }], "selectionActionLimit": 3 },
+        },
+    });
+    let mut s = desktop_settings();
+    s["quickActions"] = cfg.clone();
+    let (b, _) = phone_bundle_with_settings(&json!([gmail_oauth()]), Some(&s));
+    assert_eq!(b.settings.unwrap().quick_actions, Some(cfg));
+    // Another shape, or a configuration too big for a code, loses only that setting.
+    for bad in [json!(["row"]), json!("row"), json!({ "defaults": { "row": { "noise": "x".repeat(40_000) } } })] {
+        s["quickActions"] = bad;
+        let (b, _) = phone_bundle_with_settings(&json!([gmail_oauth()]), Some(&s));
+        let got = b.settings.unwrap();
+        assert_eq!(got.quick_actions, None);
+        assert_eq!(got.language.as_deref(), Some("de"));
+    }
+}
+
+#[test]
+fn quick_actions_stay_while_dropping_templates_is_enough_and_go_right_after() {
+    let small = json!({ "defaults": { "row": { "mode": "radial", "entries": [{ "id": "reply", "action": "reply" }] } } });
+    let (accounts, mut s) = heavy(|i| json!({ "html": format!("<p>User {i}</p>"), "text": format!("User {i}") }), 20);
+    s["quickActions"] = small.clone();
+    let (d, b) = fit_of(&accounts, &s);
+    assert_eq!(d, Degrade::NoTemplates);
+    let got = b.settings.unwrap();
+    assert!(got.templates.is_none());
+    assert_eq!(got.quick_actions, Some(small));
+
+    // A configuration that is itself too much for the code goes before anything else of the person's.
+    let (accounts, mut s) = heavy(|i| json!({ "html": format!("<p>User {i}</p>"), "text": format!("User {i}") }), 0);
+    s["quickActions"] = json!({ "defaults": { "row": { "noise": noise(77, 30_000) } } });
+    let (d, b) = fit_of(&accounts, &s);
+    assert_eq!(d, Degrade::NoTemplates);
+    let got = b.settings.unwrap();
+    assert!(got.quick_actions.is_none());
+    assert_eq!(got.language.as_deref(), Some("de"));
+}
+
 // ── tags ────────────────────────────────────────────────────────────────────
 
 fn tag_store() -> rusqlite::Connection {

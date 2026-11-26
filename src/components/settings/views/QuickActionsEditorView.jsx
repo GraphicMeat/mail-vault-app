@@ -1,0 +1,532 @@
+// Settings > Appearance > Quick actions, the editor both apps render: the surface tabs, each
+// surface's action strip (reorder, remove, add, custom colors), the layout and palette choices,
+// what each layout asks, and the scope (All views or the current view). It owns what the person is
+// looking at (the surface, the scope choice) and reads and writes the configuration through the
+// four reducers of `store` (the settings store's on desktop, the phone's prefs on the phone), so it
+// reaches no store. The desktop's container adds the presets, the live sample drawn with the real
+// list row, bar and wheel (`renderPresets`, `renderSample`) and desktop's surfaces; the phone's
+// shows `surfaces` row and selection, then `extraTabs` (its viewer bar).
+//
+// Props: `quickActions` (the saved value), `scope` (the scope the list shows now, or null),
+// `scopeAccount` (its account's email), `surfaces`, `extraTabs` (`[{ id, label, content }]`),
+// `labels` / `templates` / `folders` (what a tag, template or move action can pick), `activeAccountId`
+// (a saved move names it), `createLabel(name)`, `store` (`setSurface(surface, scope, config)`,
+// `setStyle(surface, scope, updates)`, `setStyleLink(scope, linked, surface)`,
+// `resetScope(scope, surface)`), `defaults` (what a surface resets to: desktop's, or the phone's).
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeft, GripVertical, MoreHorizontal, Plus, X } from "lucide-react";
+import { ChoiceCards } from "../../ui/ChoiceCards";
+import { SettingsTabs } from "../../ui/SettingsTabs";
+import { SegmentedChoice } from "../../ui/SegmentedChoice";
+import { ToggleSwitch } from "../../ui/ToggleSwitch";
+import { TomSelectField } from "../../ui/TomSelectField";
+import {
+  DEFAULT_QUICK_ACTIONS,
+  insertQuickActionEntry,
+  isQuickActionStyleLinked,
+  normalizeQuickActions,
+  QUICK_ACTION_MODES,
+  QUICK_ACTION_PALETTES,
+  QUICK_ACTION_SURFACE_ACTIONS as SURFACE_ACTIONS,
+  quickActionScopeKey,
+  RADIAL_CATEGORIES,
+  resolveQuickActions,
+} from "../../../utils/quickActions";
+import { quickActionColorFor } from "../../../utils/quickActionColors";
+import { QUICK_ACTION_ICONS as ICONS } from "../../../utils/quickActionIcons";
+import { useT, useViewEnv } from "./viewContext";
+import "../../../styles/quick-actions.css";
+
+const LABELS = {
+  archive: "common.archive",
+  unarchive: "rowMenu.unarchive",
+  delete: "common.delete",
+  deleteServer: "rowMenu.deleteServer",
+  deleteEverywhere: "rowMenu.deleteEverywhere",
+  toggleRead: "quickActions.action.toggleRead",
+  markRead: "rowMenu.markRead",
+  markUnread: "rowMenu.markUnread",
+  star: "rowMenu.star",
+  unstar: "rowMenu.unstar",
+  tag: "quickActions.action.tag",
+  move: "quickActions.action.move",
+  spam: "quickActions.action.spam",
+  reply: "emailActionBar.reply",
+  replyAll: "emailActionBar.replyAll",
+  forward: "emailActionBar.forward",
+  replyTemplate: "quickActions.action.replyTemplate",
+  export: "common.export",
+  newMessage: "quickActions.action.newMessage",
+  open: "chat.bubble.openNewWindow",
+  source: "emailActionBar.source",
+  theme: "emailActionBar.dark",
+  snooze: "snooze.action",
+  unsubscribe: "unsubscribe.action",
+  goToMailbox: "rowMenu.goToMailbox",
+};
+const EMPTY_ARRAY = Object.freeze([]);
+// Literal keys, so a build that renders this names them.
+const SURFACE_LABELS = {
+  row: "quickActions.surface.row",
+  selection: "quickActions.surface.selection",
+  reader: "quickActions.surface.reader",
+};
+const newEntry = (action, params = {}) => ({
+  id: action === "tag"
+    ? `tag:${params.tagId}`
+    : action === "replyTemplate"
+    ? `replyTemplate:${params.templateId}`
+    : action === "move" && params.mailbox
+    ? `move:${params.accountId || ""}:${params.mailbox}`
+    : action,
+  action,
+  ...(Object.keys(params).length ? { params } : {}),
+});
+
+/**
+ * The actions of one surface as chips in one strip, in the order they show.
+ * A chip's grip moves it with the arrow keys; a chip dragged onto another takes
+ * its place; × removes it. With custom colors each chip carries its own color.
+ */
+function ActionStrip({ entries, palette, onReorder, onRemove, onColor, children }) {
+  const t = useT();
+  const strip = useRef(null);
+  const dragged = useRef(null);
+  const ids = entries.map((entry) => entry.id);
+  const move = (from, to) => {
+    if (from < 0 || to < 0 || to >= ids.length || from === to) return;
+    const next = [...ids];
+    next.splice(to, 0, next.splice(from, 1)[0]);
+    onReorder(next);
+  };
+  // Pointer drag, not HTML5 drag and drop: Tauri's file-drop handling eats
+  // HTML5 drag events on Windows (as in ViewEditorView). The grip captures the
+  // pointer; on release the chip under it takes the dragged chip's place.
+  const chipAt = (x, y) => [...(strip.current?.querySelectorAll("[data-entry]") || [])].findIndex((chip) => {
+    const r = chip.getBoundingClientRect();
+    return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+  });
+  return (
+    <div className="quick-actions-strip-row">
+      <ul ref={strip} className="quick-actions-strip" aria-label={t("quickActions.actionList")}>
+        {entries.map((entry, index) => (
+          <li key={entry.id} data-entry={entry.id} className="quick-actions-chip" data-colored={!!entry.editorColor}
+            data-dragging={dragged.current === entry.id || undefined}
+            style={entry.editorColor ? { "--quick-action-editor-color": entry.editorColor } : undefined}>
+            <button type="button" className="quick-actions-chip-grip" aria-label={t("quickActions.reorder", { name: entry.label })}
+              title={t("quickActions.reorderChipInstructions")}
+              onPointerDown={(event) => {
+                if (event.button !== 0) return;
+                dragged.current = entry.id;
+                event.currentTarget.setPointerCapture?.(event.pointerId);
+              }}
+              onPointerUp={(event) => {
+                const id = dragged.current;
+                dragged.current = null;
+                if (id) move(ids.indexOf(id), chipAt(event.clientX, event.clientY));
+              }}
+              onPointerCancel={() => { dragged.current = null; }}
+              onKeyDown={(event) => {
+                const step = { ArrowLeft: -1, ArrowUp: -1, ArrowRight: 1, ArrowDown: 1 }[event.key];
+                if (!step) return;
+                event.preventDefault();
+                move(index, index + step);
+              }}>
+              <GripVertical size={12} aria-hidden="true" />
+            </button>
+            <span className="quick-actions-chip-name">{entry.label}</span>
+            {palette === "custom" && (
+              <input type="color" className="quick-actions-chip-color" aria-label={`${t("quickActions.color")} ${entry.label}`}
+                value={entry.color || "#a0a0b6"} onChange={(event) => onColor(index, event.target.value)} />
+            )}
+            <button type="button" className="quick-actions-remove" aria-label={`${t("quickActions.removeAction")} ${entry.label}`}
+              title={t("quickActions.removeAction")} onClick={() => onRemove(index)}>
+              <X size={13} aria-hidden="true" />
+            </button>
+          </li>
+        ))}
+      </ul>
+      {children}
+    </div>
+  );
+}
+
+/**
+ * Every action this surface can show, in one searchable list grouped the way
+ * new actions are placed. An action that needs a folder, a label or a template
+ * asks for it here, in place of the list, before it is added.
+ */
+function AddActionPicker({ surface, present, labels, templates, folders, getActionLabel, onAdd, onCreateLabel }) {
+  const t = useT();
+  const { registerPopoverLayer } = useViewEnv();
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [asking, setAsking] = useState(null);
+  const [newLabel, setNewLabel] = useState("");
+  const root = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const away = (event) => { if (!root.current?.contains(event.target)) close(); };
+    document.addEventListener("pointerdown", away);
+    // A layer of its own on the Settings dialog's Escape stack: Escape closes
+    // this list and leaves Settings open.
+    const unregister = registerPopoverLayer(close);
+    return () => { document.removeEventListener("pointerdown", away); unregister?.(); };
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The search box goes away when an action asks for its folder, label or
+  // template: focus moves to that list rather than falling to the page.
+  useEffect(() => {
+    if (open && asking) root.current?.querySelector(".quick-actions-picker button")?.focus();
+  }, [open, asking]);
+  // Settings scrolls: an add button near the bottom opens its list out of view otherwise.
+  useEffect(() => {
+    if (open) root.current?.querySelector(".quick-actions-picker")?.scrollIntoView?.({ block: "nearest" });
+  }, [open, asking]);
+  const close = () => { setOpen(false); setQuery(""); setAsking(null); setNewLabel(""); };
+  const add = (action, params) => { onAdd(action, params); close(); };
+  const pick = (action) => (["move", "tag", "replyTemplate"].includes(action) ? setAsking(action) : add(action));
+  const needle = query.trim().toLowerCase();
+  const groups = Object.entries(RADIAL_CATEGORIES).map(([category, actions]) => [category,
+    actions.filter((action) => SURFACE_ACTIONS[surface].includes(action))
+      .filter((action) => !needle || getActionLabel(action).toLowerCase().includes(needle))])
+    .filter(([, actions]) => actions.length);
+  const choice = (key, label, onClick, disabled = false) =>
+    <button key={key} type="button" className="quick-actions-picker-item" disabled={disabled} onClick={onClick}>{label}</button>;
+  return (
+    <div className="quick-actions-add" ref={root}>
+      <button type="button" className="quick-actions-add-button" aria-haspopup="dialog" aria-expanded={open}
+        aria-label={t("quickActions.addAction")} title={t("quickActions.addAction")} onClick={() => (open ? close() : setOpen(true))}>
+        <Plus size={14} aria-hidden="true" />
+      </button>
+      {open && (
+        <div className="quick-actions-picker" role="dialog" aria-label={t("quickActions.addAction")}
+>
+          {!asking && <>
+            <input type="search" autoFocus value={query} onChange={(event) => setQuery(event.target.value)}
+              placeholder={t("quickActions.findAction")} aria-label={t("quickActions.findAction")} />
+            <div className="quick-actions-picker-list">
+              {groups.map(([category, actions]) => (
+                <div key={category} role="group" aria-label={t(`quickActions.category.${category}`)}>
+                  <p className="quick-actions-picker-group">{t(`quickActions.category.${category}`)}</p>
+                  {actions.map((action) => {
+                    const Icon = ICONS[action];
+                    const added = !["move", "tag", "replyTemplate"].includes(action) && present.has(action);
+                    return <button key={action} type="button" data-action={action} className="quick-actions-picker-item"
+                      disabled={added} onClick={() => pick(action)}>
+                      {Icon && <Icon size={13} aria-hidden="true" />}
+                      {getActionLabel(action)}
+                    </button>;
+                  })}
+                </div>
+              ))}
+              {!groups.length && <p className="quick-actions-picker-empty">{t("quickActions.noActionMatch")}</p>}
+            </div>
+          </>}
+          {asking && <button type="button" className="quick-actions-picker-back" onClick={() => setAsking(null)}>
+            <ArrowLeft size={13} aria-hidden="true" />{t("common.back")}
+          </button>}
+          {asking === "move" && <div className="quick-actions-picker-list" role="group" aria-label={t("quickActions.param.folder")}>
+            <p className="quick-actions-picker-group">{t("quickActions.param.folder")}</p>
+            {choice("each", t("quickActions.param.folderPicker"), () => add("move"), present.has("move"))}
+            {folders.map((item) => choice(item.path, item.name || item.path, () => add("move", { mailbox: item.path }), present.has(`move:${item.path}`)))}
+          </div>}
+          {asking === "tag" && <div className="quick-actions-picker-list" role="group" aria-label={t("quickActions.param.label")}>
+            <p className="quick-actions-picker-group">{t("quickActions.param.label")}</p>
+            {labels.map((label) => choice(label.id, label.name, () => add("tag", { tagId: label.id }), present.has(`tag:${label.id}`)))}
+            <form className="quick-actions-picker-new" onSubmit={async (event) => {
+              event.preventDefault();
+              const name = newLabel.trim();
+              if (!name) return;
+              const label = await onCreateLabel(name);
+              if (label) add("tag", { tagId: label.id });
+            }}>
+              <input value={newLabel} maxLength={80} onChange={(event) => setNewLabel(event.target.value)}
+                placeholder={t("quickActions.param.labelName")} aria-label={t("quickActions.param.labelName")} />
+              <button type="submit" disabled={!newLabel.trim()}>{t("quickActions.param.createLabel")}</button>
+            </form>
+          </div>}
+          {asking === "replyTemplate" && <div className="quick-actions-picker-list" role="group" aria-label={t("quickActions.param.template")}>
+            <p className="quick-actions-picker-group">{t("quickActions.param.template")}</p>
+            {templates.map((item) => choice(item.id, item.name, () => add("replyTemplate", { templateId: item.id }), present.has(`replyTemplate:${item.id}`)))}
+            {!templates.length && <p className="quick-actions-picker-empty">{t("quickActions.param.unavailable")}</p>}
+          </div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const layoutLabelKey = (mode) => `quickActions.layout.${mode === "favorite-menu" ? "favoriteMenu" : mode}`;
+
+// A small drawing of each layout: a row's right end with what appears there.
+// `dots`: buttons on the row; `more`: the menu's ⋯; `ring`: the wheel.
+const MODE_PICTURES = {
+  inline: { dots: 4 },
+  menu: { dots: 0, more: true },
+  radial: { dots: 0, ring: true },
+  'favorite-menu': { dots: 1, more: true },
+};
+function ModePicture({ mode }) {
+  const { dots, more, ring } = MODE_PICTURES[mode];
+  return <span className="quick-actions-mode-picture" data-mode={mode} aria-hidden="true">
+    {Array.from({ length: dots }, (_, i) => <i key={i} />)}
+    {ring && <span className="quick-actions-mode-ring" />}
+    {more && <MoreHorizontal size={14} />}
+  </span>;
+}
+
+/** The four layouts as light tiles, a radio group named Layout. */
+export function QuickActionModeTiles({ value, onChange }) {
+  const t = useT();
+  return <ChoiceCards label={t('quickActions.layout')} value={value} onChange={onChange} className="quick-actions-mode-tiles"
+    options={QUICK_ACTION_MODES.map(mode => ({
+      value: mode,
+      label: t(layoutLabelKey(mode)),
+      preview: <ModePicture mode={mode} />,
+    }))} />;
+}
+
+/** The color styles as three dots, a radio group named Color style. */
+export function QuickActionPaletteDots({ value, onChange }) {
+  const t = useT();
+  return <ChoiceCards label={t('quickActions.palette')} value={value} onChange={onChange} className="quick-actions-palette-dots"
+    options={QUICK_ACTION_PALETTES.map(palette => ({
+      value: palette,
+      label: t(`quickActions.palette.${palette}`),
+      preview: <span className="quick-actions-palette-dot" data-palette={palette} aria-hidden="true" />,
+    }))} />;
+}
+
+export function QuickActionsEditorView({
+  quickActions, scope, scopeAccount = "", surfaces, extraTabs = [], labels = EMPTY_ARRAY, templates = EMPTY_ARRAY,
+  folders = EMPTY_ARRAY, activeAccountId = "", createLabel = async () => null, store, defaults = DEFAULT_QUICK_ACTIONS,
+  renderPresets = () => null, renderSample = () => null,
+}) {
+  const t = useT();
+  const [surface, setSurfaceId] = useState(surfaces[0]);
+  // Only what the person picked. Until then each surface opens on the scope
+  // that actually governs the current view: a view with its own override shown
+  // as "All views" made every edit there look ignored.
+  const [scopeChoices, setScopeChoices] = useState({});
+  const extra = extraTabs.find((tab) => tab.id === surface);
+  const editing = extra ? surfaces[0] : surface;
+  const scopeKey = quickActionScopeKey(scope);
+  const normalized = useMemo(() => normalizeQuickActions(quickActions), [quickActions]);
+  // The view sets some of this surface itself, so All views does not fully
+  // reach it: said whichever scope is being edited.
+  const viewDiffers = !!(scopeKey && normalized.overrides[scopeKey]?.[editing]);
+  const scopeChoice = scopeChoices[editing] || (viewDiffers ? "current" : "global");
+  const pickScope = (choice) => setScopeChoices((choices) => ({ ...choices, [editing]: choice }));
+  const isGlobal = scopeChoice === "global" || !scope;
+  const scopeName = scope?.view === "explorer"
+    ? t("quickActions.scope.kind.explorer")
+    : scope ? t(`quickActions.scope.kind.${scope.kind}`) : "";
+  const scopeDescription = [scopeName, scopeAccount, scope?.mailbox].filter(Boolean).join(" · ");
+  const resolved = isGlobal
+    ? { config: normalized.defaults[editing], inherited: false }
+    : resolveQuickActions(normalized, editing, scope);
+  const config = resolved.config;
+  const linkedStyle = isQuickActionStyleLinked(normalized, isGlobal ? null : scope);
+
+  const persist = (next) => store.setSurface(editing, isGlobal ? null : scope, next);
+  const persistStyle = (updates) => store.setStyle(editing, isGlobal ? null : scope, updates);
+  const resetSurface = () => {
+    const base = defaults.defaults[editing];
+    persist(base);
+    if (linkedStyle) persistStyle({
+      mode: base.mode,
+      palette: base.palette,
+      radialPagination: base.radialPagination,
+      radialLayout: base.radialLayout,
+    });
+  };
+  const inheritAllViews = () => {
+    // Pinned: once the override is gone the fallback would jump to All views.
+    if (!isGlobal) pickScope("current");
+    store.resetScope(scope, editing);
+  };
+  const setMode = (mode) => persistStyle({ mode });
+  const updateEntry = (index, updates) =>
+    persist({
+      ...config,
+      entries: config.entries.map((entry, i) =>
+        i === index ? { ...entry, ...updates } : entry
+      ),
+    });
+  const removeEntry = (index) =>
+    persist({
+      ...config,
+      entries: config.entries.filter((_, i) => i !== index),
+    });
+  const reorderEntries = (ids) => {
+    const byId = new Map(config.entries.map((entry) => [entry.id, entry]));
+    persist({ ...config, entries: ids.map((id) => byId.get(id)).filter(Boolean) });
+  };
+  const addAction = (action, params = {}) => {
+    const item = newEntry(action, action === "move" && params.mailbox
+      ? { mailbox: params.mailbox, accountId: activeAccountId || "" }
+      : params);
+    if (config.entries.some((entry) => entry.id === item.id)) return;
+    persist({ ...config, entries: insertQuickActionEntry(config.entries, item) });
+  };
+
+  const getLabel = (entry) => {
+    if (entry.action === "tag") {
+      return labels.find((item) => item.id === entry.params?.tagId)?.name ||
+        t("quickActions.action.tag");
+    }
+    if (entry.action === "move" && entry.params?.mailbox) {
+      return `${t("quickActions.action.move")}: ${entry.params.mailbox}`;
+    }
+    if (entry.action === "replyTemplate") {
+      return templates.find((item) => item.id === entry.params?.templateId)
+        ?.name || t("quickActions.action.replyTemplate");
+    }
+    return t(LABELS[entry.action] || "quickActions.title");
+  };
+  // Tom Select rebuilds its list whenever `options` changes identity, so the
+  // list only changes when a label or an entry does.
+  const favoriteKey = JSON.stringify([
+    { value: "", label: t("quickActions.param.autoFavorite") },
+    ...config.entries.map((item) => ({ value: item.id, label: getLabel(item) })),
+  ]);
+  const favoriteOptions = useMemo(() => JSON.parse(favoriteKey), [favoriteKey]);
+  // `move:<mailbox>` marks a folder already saved, whichever account it was saved from.
+  const present = new Set(config.entries.flatMap((entry) => [entry.id,
+    ...(entry.action === "move" && entry.params?.mailbox ? [`move:${entry.params.mailbox}`] : [])]));
+  const selectionChoices = editing === "selection" && ["inline", "favorite-menu"].includes(config.mode);
+
+  return (
+    <div className="quick-actions-settings-simple">
+      {renderPresets(isGlobal ? null : scope)}
+      <SettingsTabs
+        tabs={[
+          ...surfaces.map((name) => ({ id: name, label: t(SURFACE_LABELS[name]) })),
+          ...extraTabs.map((tab) => ({ id: tab.id, label: tab.label })),
+        ]}
+        value={surface}
+        onChange={setSurfaceId}
+        label={t("quickActions.surface")}
+      >
+        {extra ? extra.content : <>
+        {renderSample(surface, config)}
+
+        <ActionStrip
+          entries={config.entries.map((entry) => ({ ...entry, label: getLabel(entry), editorColor: quickActionColorFor(entry, config.palette) }))}
+          palette={config.palette}
+          onReorder={reorderEntries}
+          onRemove={removeEntry}
+          onColor={(index, color) => updateEntry(index, { color })}
+        >
+          <AddActionPicker surface={surface} present={present} labels={labels} templates={templates} folders={folders}
+            getActionLabel={(action) => t(LABELS[action] || "quickActions.title")}
+            onAdd={addAction} onCreateLabel={(name) => createLabel(name)} />
+        </ActionStrip>
+
+        <div className="quick-actions-look">
+          <div className="quick-actions-choice-field">
+            <span>{t("quickActions.layout")}</span>
+            <QuickActionModeTiles value={config.mode} onChange={setMode} />
+          </div>
+          <div className="quick-actions-choice-field">
+            <span>{t("quickActions.palette")}</span>
+            <QuickActionPaletteDots value={config.palette} onChange={(palette) => persistStyle({ palette })} />
+          </div>
+        </div>
+
+        {/* One line, only for the layout chosen: what that layout asks. */}
+        {(config.mode === "radial" || config.mode === "favorite-menu" || selectionChoices) && (
+          <div className="quick-actions-context" data-mode={config.mode}>
+            {config.mode === "radial" && <>
+              <SegmentedChoice label={t("quickActions.radialLayout")}
+                value={config.radialLayout === "categories" ? "categories" : "flat"}
+                onChange={(value) => persistStyle({ radialLayout: value })}
+                options={[
+                  { value: "flat", label: t("quickActions.radialLayout.flat") },
+                  { value: "categories", label: t("quickActions.radialLayout.categories") },
+                ]} />
+              {config.radialLayout !== "categories" && (
+                <SegmentedChoice label={t("quickActions.radialPagination")}
+                  value={config.radialPagination ? "pages" : "all"}
+                  onChange={(value) => persistStyle({ radialPagination: value === "pages" })}
+                  options={[
+                    { value: "all", label: t("quickActions.radialPagination.all") },
+                    { value: "pages", label: t("quickActions.radialPagination.pages") },
+                  ]} />
+              )}
+            </>}
+            {config.mode === "favorite-menu" && (
+              <label className="quick-actions-favorite-row">
+                {t("quickActions.favorite")}
+                <TomSelectField
+                  label={t("quickActions.favorite")}
+                  value={config.favoriteId || ""}
+                  placeholder={t("quickActions.param.autoFavorite")}
+                  options={favoriteOptions}
+                  onChange={(favoriteId) =>
+                    persist({ ...config, favoriteId: favoriteId || null })}
+                />
+              </label>
+            )}
+            {selectionChoices && <>
+              <SegmentedChoice label={t("quickActions.selectionDisplay")}
+                value={config.selectionDisplay || "icon-label"}
+                onChange={(selectionDisplay) => persist({ ...config, selectionDisplay })}
+                options={[
+                  { value: "icon-label", label: t("quickActions.selectionDisplay.iconLabel") },
+                  { value: "icon-only", label: t("quickActions.selectionDisplay.iconOnly") },
+                ]} />
+              {config.mode === "inline" && config.selectionDisplay !== "icon-only" && (
+                <label className="quick-actions-selection-limit">
+                  {t("quickActions.selectionLimit")}
+                  <input
+                    aria-label={t("quickActions.selectionLimit")}
+                    type="number"
+                    min="1"
+                    max="6"
+                    value={config.selectionActionLimit || 3}
+                    onChange={(event) =>
+                      persist({
+                        ...config,
+                        selectionActionLimit: Number(event.target.value),
+                      })}
+                  />
+                </label>
+              )}
+            </>}
+          </div>
+        )}
+
+        <div className="quick-actions-footer">
+          <label className="quick-actions-link-switch">
+            <ToggleSwitch label={t("quickActions.sameLook")} active={linkedStyle}
+              onClick={() => store.setStyleLink(isGlobal ? null : scope, !linkedStyle, editing)} />
+            <span>{t("quickActions.sameLook")}</span>
+          </label>
+          <span className="quick-actions-scope">
+            <SegmentedChoice
+              label={t("quickActions.scope")}
+              value={scopeChoice}
+              onChange={pickScope}
+              options={[
+                { value: "global", label: t("quickActions.scope.global") },
+                { value: "current", label: t("quickActions.scope.current"), disabled: !scopeKey },
+              ]}
+            />
+            {scopeKey && <span className="quick-actions-choice-hint">{scopeDescription}</span>}
+          </span>
+          <span className="quick-actions-scope-status text-xs text-mail-text-muted">
+            {/* No "customize" step: an edit on Current view stores what it changes. */}
+            {viewDiffers && <>
+              <span role="status">{t("quickActions.scope.differs")}</span>
+              <button type="button" onClick={inheritAllViews}>{t("quickActions.scope.useGlobal")}</button>
+            </>}
+            {!isGlobal && !viewDiffers && <span role="status">{t("quickActions.scope.inherited")}</span>}
+            {isGlobal && <button type="button" onClick={resetSurface}>{t("common.resetToDefault")}</button>}
+          </span>
+        </div>
+        </>}
+      </SettingsTabs>
+    </div>
+  );
+}

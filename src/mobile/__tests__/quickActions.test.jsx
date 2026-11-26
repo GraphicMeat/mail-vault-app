@@ -6,6 +6,7 @@ import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import React from 'react';
 import { render, screen, cleanup, fireEvent, act } from '@testing-library/react';
 import { t } from '../i18n.js';
+import { QUICK_ACTION_PRESETS } from '../../utils/quickActionPresets.js';
 
 const engine = vi.hoisted(() => ({ calls: [], prefs: {} }));
 
@@ -148,31 +149,58 @@ describe('Settings > Appearance > Quick actions', () => {
     // Desktop's Appearance tab of that name.
     fireEvent.click(screen.getByRole('tab', { name: t('quickActions.title') }));
   };
-  // Desktop's quick action views: the action list by its rows, the presets as cards.
+  const surfaceTab = (name) => fireEvent.click(screen.getByRole('tab', { name: t(`quickActions.surface.${name}`) }));
+  // Desktop's quick action views: the action list by its rows (the viewer's bar), the strip's chips
+  // (the row and the selection bar), the presets as cards.
   const barRows = () => [...document.querySelectorAll('.quick-actions-entry-list li')].map((r) => r.getAttribute('data-account-id'));
+  const chips = () => [...document.querySelectorAll('.quick-actions-chip')].map((c) => c.getAttribute('data-entry'));
   const preset = (id) => screen.getByRole('button', { name: t(qa.READER_PRESETS.find((p) => p.id === id).labelKey) });
+  const savedRow = () => sets().at(-1).quickActions.defaults.row.entries.map((e) => e.action);
 
   it('is a tab of Appearance, as on desktop; Back goes to the list', () => {
     open();
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(t('settings.appearance.appearance'));
     expect(screen.getByRole('tab', { name: t('quickActions.title') }).getAttribute('aria-selected')).toBe('true');
+    surfaceTab('reader');
     expect(barRows()).toEqual(['toggleRead', 'flag', 'move', 'delete']);
     fireEvent.click(screen.getByRole('button', { name: t('common.back') }));
     expect(document.querySelector('[data-mv-settings-on]').getAttribute('data-mv-settings-on')).toBe('root');
   });
 
-  it('applies a preset', async () => {
+  it('opens on the list row, then the selection bar, then the viewer bar', () => {
+    open();
+    expect(chips()).toEqual(['toggleRead', 'star', 'unstar', 'reply', 'replyAll', 'forward', 'move', 'spam', 'deleteServer']);
+    expect(screen.getByRole('radiogroup', { name: t('quickActions.layout') })).toBeTruthy();
+    surfaceTab('selection');
+    expect(chips()).toEqual(['markRead', 'markUnread', 'star', 'unstar', 'move', 'spam', 'deleteServer']);
+  });
+
+  it('saves a row edit as desktop\'s object and keeps the viewer bar apart', async () => {
+    open();
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: `${t('quickActions.removeAction')} ${t('quickActions.action.spam')}` })); });
+    await flush();
+    expect(sets()).toHaveLength(1);
+    expect(Object.keys(sets()[0])).toEqual(['quickActions']);
+    expect(savedRow()).toEqual(['toggleRead', 'star', 'unstar', 'reply', 'replyAll', 'forward', 'move', 'deleteServer']);
+    expect(chips()).not.toContain('spam');
+  });
+
+  it('applies a preset to the wheel, the selection bar and the viewer bar', async () => {
     open();
     expect(preset('mailvault').getAttribute('aria-pressed')).toBe('true');
     await act(async () => { fireEvent.click(preset('outlook')); });
     await flush();
-    expect(sets()).toEqual([{ quickActionsReader: ['reply', 'replyAll', 'forward', 'delete'] }]);
-    expect(barRows()).toEqual(['reply', 'replyAll', 'forward', 'delete']);
+    expect(sets()).toHaveLength(1);
+    expect(sets()[0].quickActionsReader).toEqual(['reply', 'replyAll', 'forward', 'delete']);
+    expect(savedRow()).toEqual(QUICK_ACTION_PRESETS.find((p) => p.id === 'outlook').surfaces.row.entries.map((e) => e.action));
     expect(preset('outlook').getAttribute('aria-pressed')).toBe('true');
+    surfaceTab('reader');
+    expect(barRows()).toEqual(['reply', 'replyAll', 'forward', 'delete']);
   });
 
-  it('removes, reorders and adds, never past four', async () => {
+  it('removes, reorders and adds on the viewer bar, never past four', async () => {
     open();
+    surfaceTab('reader');
     const handle = (a) => screen.getByRole('button', { name: t('quickActions.reorder', { name: t(a === 'flag' ? 'mobile.actions.flag' : 'common.delete') }) });
     const add = () => screen.getByRole('button', { name: t('quickActions.addAction') });
     const pickAdd = (a) => fireEvent.change(screen.getByRole('combobox', { name: t('quickActions.action') }), { target: { value: a } });
@@ -180,7 +208,6 @@ describe('Settings > Appearance > Quick actions', () => {
     await act(async () => { fireEvent.keyDown(handle('flag'), { key: 'ArrowUp' }); });
     await flush();
     expect(barRows()).toEqual(['flag', 'toggleRead', 'move', 'delete']);
-    expect(screen.getByTestId('quick-actions-preset-custom')).toBeTruthy();
     // Four on the bar: nothing more can be added.
     pickAdd('reply');
     expect(add().disabled).toBe(true);

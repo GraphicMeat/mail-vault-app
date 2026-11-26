@@ -108,6 +108,30 @@ it('leaves the reader quick actions out while they are the desktop default, so t
   expect(sent().settings).not.toHaveProperty('quickActionsReader');
 });
 
+it('sends the row and selection quick actions only once changed, with the scopes that name no desktop account', async () => {
+  const { normalizeQuickActions, setQuickActionSurface, DEFAULT_QUICK_ACTIONS } = await import('../../../utils/quickActions');
+  const row = { ...DEFAULT_QUICK_ACTIONS.defaults.row, entries: [{ id: 'reply', action: 'reply' }, { id: 'delete', action: 'delete' }] };
+  let qa = normalizeQuickActions({});
+  qa = setQuickActionSurface(qa, 'row', null, row);
+  const unified = { kind: 'unified', accountId: null, mailbox: 'INBOX', view: 'list', viewMode: 'all' };
+  const oneAccount = { kind: 'mailbox', accountId: 'a', mailbox: 'INBOX', view: 'list', viewMode: 'all' };
+  qa = setQuickActionSurface(qa, 'row', unified, { ...row, entries: [{ id: 'forward', action: 'forward' }] });
+  qa = setQuickActionSurface(qa, 'row', oneAccount, { ...row, entries: [{ id: 'spam', action: 'spam' }] });
+  useSettingsStore.setState({ quickActions: qa });
+  await phoneQr({ password: 'correct horse battery' });
+  const sentQa = sent().settings.quickActions;
+  expect(Object.keys(sentQa.defaults)).toEqual(['row']);
+  expect(sentQa.defaults.row.entries.map(e => e.action)).toEqual(['reply', 'delete']);
+  const scopes = Object.keys(sentQa.overrides).map(key => JSON.parse(key)[1]);
+  expect(scopes).toEqual([null]);
+  expect(sent().settings).not.toHaveProperty('quickActionsReader');
+  // Untouched: nothing goes, the phone keeps its own wheel.
+  mockDaemonCall.mockClear();
+  useSettingsStore.setState({ quickActions: pristine.quickActions });
+  await phoneQr({ password: 'correct horse battery' });
+  expect(sent().settings).not.toHaveProperty('quickActions');
+});
+
 it('sends an endpoint AI setup without its key or consent, and nothing for an on-device provider', async () => {
   useSettingsStore.setState({ aiSettings: { enabled: true, provider: 'endpoint', endpointUrl: ' https://ai.example.test/v1 ', endpointModel: 'llama3', endpointConsented: true, skipPreview: true } });
   await phoneQr({ password: 'correct horse battery' });
