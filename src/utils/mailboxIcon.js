@@ -17,7 +17,7 @@ export const MAILBOX_ICONS = {
 
 /**
  * A folder with no special use is a folder. The fallback used to be Inbox,
- * which was invisible while the list was flat and mostly special folders — and
+ * which was invisible while the list was flat and mostly special folders, and
  * turned all 59 of a nested reader's folders into inboxes the moment it wasn't.
  */
 export function getMailboxIcon(mailbox) {
