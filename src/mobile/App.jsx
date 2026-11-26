@@ -25,16 +25,16 @@
 // its Sent copy the way a notification tap opens a message. Its saved views (desktop's) open their
 // mail in ViewResults.jsx, a row opening as a search result does.
 // The header row is the menu button, the titles and the search button. The titles are the folder
-// (with the message count beside it, which gives way first) over the account button. Under the
-// header, the status strip (StatusBar) says what is waiting to reach the server and a sync that
-// runs or failed (with Retry); it exists only while there is something to say. The sign-in
-// banners and the outbox row (Outbox.jsx, while anything is unsent) follow, then the local drafts
-// (in the Drafts folder), then the list.
+// (with the message count beside it, which gives way first) over the account button and the status
+// line (issues/StatusLine.jsx: checking, updated N min ago, or a failed update that is one tap to
+// retry, with what waits to reach the server). Under the header, one issue row stands for every
+// account that needs the user (issues/IssuesHost.jsx), then the outbox row (Outbox.jsx, while
+// anything is unsent), then the local drafts (in the Drafts folder), then the list.
 //
 // All Inboxes keeps an account in front (compose's From), but nothing on screen names it: the
 // header's account button shows the shown accounts' avatars and is named All Inboxes (desktop's
 // account chooser does the same), the drawer lists no account's folders, Drafts and Follow up
-// count every shown account's, and the sign-in banners show for every shown account.
+// count every shown account's, and the issue row counts every shown account.
 //
 // Conversations (`threadMode` grouped or expandable): a list row that stands for several messages
 // opens them on a screen of their own (ThreadView.jsx), under the viewer; a swipe on it acts on all
@@ -60,10 +60,11 @@ import Viewer from './Viewer.jsx';
 import ThreadView from './ThreadView.jsx';
 import ChatView from './ChatView.jsx';
 import AddAccount from './AddAccount.jsx';
-import AccountSwitcher, { Avatar, ReauthBanner, RefusedBanner } from './AccountSwitcher.jsx';
+import AccountSwitcher, { Avatar, hasIssue } from './AccountSwitcher.jsx';
+import IssuesHost from './issues/IssuesHost.jsx';
+import StatusLine from './issues/StatusLine.jsx';
 import FolderDrawer from './FolderDrawer.jsx';
 import { folderLabel, draftsFolder } from './folders.js';
-import { errorKey } from './errors.js';
 import { runPerfGate } from './perf.js';
 import { useT } from './i18n.js';
 import { useBackLayer } from './backStack.js';
@@ -186,52 +187,6 @@ async function probeRun(target) {
 /** How long a pull-to-refresh spinner waits for the engine's sync state before giving up. */
 const REFRESH_SPIN_MS = 20_000;
 
-function PendingChip({ pending }) {
-  const t = useT();
-  if (!pending) return null;
-  return <span className="mv-chip mv-chip--pending" role="status">{t('mobile.actions.waiting', { count: pending })}</span>;
-}
-
-function SyncChip({ sync, onRetry }) {
-  const t = useT();
-  if (sync?.state === 'syncing') {
-    return (
-      <span className="mv-chip" role="status">
-        <span className="mv-chip__spinner" aria-hidden="true" />
-        {t('mobile.sync.syncing')}
-      </span>
-    );
-  }
-  if (sync?.state === 'error') {
-    return (
-      <>
-        <span className="mv-chip mv-chip--error" aria-hidden="true">{t('mobile.sync.failed')}</span>
-        <Button variant="link" size="touch" className="mv-statusbar__retry" onClick={onRetry} aria-label={`${t('mobile.sync.failed')}. ${t(errorKey(sync.code))} ${t('common.retry')}`}>
-          {t('common.retry')}
-        </Button>
-      </>
-    );
-  }
-  return null;
-}
-
-/**
- * The status strip under the header: what is waiting to reach the server, and a sync that is
- * running or failed. Rendered only while there is something to say, so an idle list keeps its
- * height.
- */
-function StatusBar({ sync, onRetry }) {
-  const pending = useMobileStore((s) => s.pending);
-  const syncing = sync?.state === 'syncing' || sync?.state === 'error';
-  if (!pending && !syncing) return null;
-  return (
-    <div className="mv-statusbar">
-      <PendingChip pending={pending} />
-      <SyncChip sync={sync} onRetry={onRetry} />
-    </div>
-  );
-}
-
 /**
  * The header's account button: the account in front (avatar, address, chevron), or in All
  * Inboxes the shown accounts' avatars (at most three, then how many more) and the chevron, so the
@@ -251,12 +206,12 @@ function AccountButton({ account, allInboxes, shownAccounts, onOpen }) {
     >
       {allInboxes ? (
         <span className="mv-header__avatars" aria-hidden="true">
-          {shown.map((a) => <Avatar key={a.id} account={a} small />)}
+          {shown.map((a) => <Avatar key={a.id} account={a} small issue={hasIssue(a)} />)}
           {more > 0 && <span className="mv-header__more">+{more}</span>}
         </span>
       ) : (
         <>
-          <Avatar account={account} small />
+          <Avatar account={account} small issue={hasIssue(account)} />
           <span className="mv-header__email" dir="auto">{account.email}</span>
         </>
       )}
@@ -308,6 +263,7 @@ function App() {
   const [followUpsOpen, setFollowUpsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(DEMO_SETTINGS);
   const [searchOpen, setSearchOpen] = useState(DEMO_SEARCH);
+  const pending = useMobileStore((s) => s.pending);
   const drafts = useMobileStore((s) => s.drafts);
   const followUps = useMobileStore((s) => s.followUps);
   const [pulled, setPulled] = useState(false);
@@ -826,6 +782,12 @@ function App() {
     setSettingsOpen(true);
   }, []);
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
+  // The issues sheet's Update password: Settings > Accounts > that account's Mail Server.
+  const onUpdatePassword = useCallback((accountId) => {
+    setPanel(null);
+    setSettingsAt({ page: 'accounts', section: 'connection', account: accountId, newView: false });
+    setSettingsOpen(true);
+  }, []);
   // Settings > Accounts' Add account: the phone's own sign-in flow, in place of Settings.
   const onSettingsAddAccount = useCallback(() => {
     setSettingsOpen(false);
@@ -911,8 +873,6 @@ function App() {
   // Both "Sign in again" controls run the store's one reauth, whose busy and error state the
   // banner shows; the switcher opens that account first, so its banner is the one on screen.
   const reauthState = useMobileStore((s) => s.reauthState);
-  const onReauth = useCallback((id) => useMobileStore.getState().reauth(id), []);
-  const onRetrySignIn = useCallback((id) => useMobileStore.getState().retrySignIn(id), []);
   const onSwitcherReauth = useCallback(async (id) => {
     setPanel(null);
     const store = useMobileStore.getState();
@@ -1014,9 +974,12 @@ function App() {
               <span className="mv-header__count">{t('common.messageCount', { count: total })}</span>
             )}
           </div>
-          {account && (
-            <AccountButton account={account} allInboxes={allInboxes} shownAccounts={shownAccounts} onOpen={() => setPanel('switcher')} />
-          )}
+          <div className="mv-header__sub">
+            {account && (
+              <AccountButton account={account} allInboxes={allInboxes} shownAccounts={shownAccounts} onOpen={() => setPanel('switcher')} />
+            )}
+            <StatusLine sync={sync} pending={pending} accountCount={allInboxes ? shownAccounts.length : 1} onRetry={onRefresh} />
+          </div>
         </div>
         {listState === 'ready' && !chatView && (
           <Button variant="ghost" size="touch" icon data-mv-select-open aria-label={t('mobile.quickActions.select')} onClick={beginSelect}>
@@ -1028,13 +991,7 @@ function App() {
         </Button>
       </header>
       )}
-      <StatusBar sync={sync} onRetry={onRefresh} />
-      {(allInboxes ? shownAccounts : [account]).map((a) => (
-        <React.Fragment key={a?.id ?? 'none'}>
-          <ReauthBanner account={a} state={reauthState} onReauth={onReauth} />
-          <RefusedBanner account={a} onRetry={onRetrySignIn} />
-        </React.Fragment>
-      ))}
+      <IssuesHost accounts={shownAccounts} onUpdatePassword={onUpdatePassword} />
       <OutboxRow initialOpen={DEMO_OUTBOX} />
       {folderDrafts.length > 0 && (
         <DraftRows
@@ -1170,7 +1127,7 @@ function App() {
       {draftsOpen && <DraftsList onOpen={onOpenDraft} onClose={closeDrafts} />}
       {followUpsOpen && <FollowUpList onOpen={onOpenFollowUp} onClose={closeFollowUps} />}
       {openView && <ViewResults view={openView} onOpen={onOpenResult} onSwipe={onSwipe} onClose={closeView} />}
-      {settingsOpen && <Settings onClose={closeSettings} onReplayTour={onReplayTour} onAddAccount={onSettingsAddAccount} page={(DEMO_SETTINGS && QUERY.get('page')) || settingsAt.page} section={DEMO_SETTINGS ? QUERY.get('section') : null} newView={settingsAt.newView} />}
+      {settingsOpen && <Settings onClose={closeSettings} onReplayTour={onReplayTour} onAddAccount={onSettingsAddAccount} page={(DEMO_SETTINGS && QUERY.get('page')) || settingsAt.page} section={DEMO_SETTINGS ? QUERY.get('section') : (settingsAt.section || null)} account={settingsAt.account || null} newView={settingsAt.newView} />}
       {paywall && <Premium feature={paywall.feature} signIn={paywall.signIn} onClose={closePaywall} />}
       {compose && (
         <Compose

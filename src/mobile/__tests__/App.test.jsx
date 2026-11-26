@@ -4,7 +4,8 @@
 // folder and message, from the event or (a cold launch) from the shell's held tap on mount.
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import React from 'react';
-import { render, cleanup, act, waitFor, screen, fireEvent } from '@testing-library/react';
+import { render, cleanup, act, waitFor, screen, fireEvent, within } from '@testing-library/react';
+import { t } from '../i18n.js';
 
 const engine = vi.hoisted(() => ({ handlers: new Map(), calls: [], taps: [], refused: false, prefs: {} }));
 
@@ -87,6 +88,7 @@ const count = (method) => engine.calls.filter(([m]) => m === method).length;
 
 afterEach(() => {
   cleanup();
+  try { window.sessionStorage.clear(); } catch { /* none */ }
   engine.refused = false;
   engine.prefs = {};
   engine.calls.length = 0;
@@ -181,25 +183,41 @@ describe('App', () => {
     expect(document.querySelector('.mv-settings')).toBeNull();
   });
 
-  it('a refused password says so and Retry asks the engine for one try', async () => {
+  it('a refused password is one issue row; Fix lists it and Try again asks the engine for one try', async () => {
     engine.refused = true;
     const { App: Fresh, store } = await fresh();
     render(<Fresh />);
-    const banner = await waitFor(() => {
-      const el = document.querySelector('.mv-refused');
+    const row = await waitFor(() => {
+      const el = document.querySelector('[data-mv-issue-row]');
       expect(el).toBeTruthy();
       return el;
     });
-    expect(banner.textContent).toContain('a1@example.test');
-    await act(async () => { banner.querySelector('button').click(); });
+    expect(row.textContent).toContain('a1@example.test');
+    await act(async () => { within(row).getByRole('button', { name: t('mobile.issues.fix') }).click(); });
+    const sheet = screen.getByRole('dialog', { name: t('mobile.issues.refusedOne', { email: 'a1@example.test' }) });
+    await act(async () => { within(sheet).getByRole('button', { name: t('mobile.refused.retry') }).click(); });
     expect(engine.calls.filter(([m]) => m === 'mobile.accounts.retrySignIn')).toEqual([['mobile.accounts.retrySignIn', { accountId: 'a1' }]]);
-    // A pass that signs in lifts it.
+    // A pass that signs in lifts it, row and sheet.
     await act(async () => { emit('mobile.sync.state', { accountId: 'a1', state: 'idle' }); });
-    await waitFor(() => expect(document.querySelector('.mv-refused')).toBeNull());
+    await waitFor(() => expect(document.querySelector('[data-mv-issue-row]')).toBeNull());
+    expect(screen.queryByRole('dialog', { name: t('mobile.issues.refusedOne', { email: 'a1@example.test' }) })).toBeNull();
     expect(store.getState().accounts.find((a) => a.id === 'a1').authRefused).toBe(false);
     // A refusal that comes back as an event shows it again.
     await act(async () => { emit('mobile.sync.state', { accountId: 'a1', state: 'error', code: 'AUTH_FAILED', held: true }); });
-    await waitFor(() => expect(document.querySelector('.mv-refused')).toBeTruthy());
+    await waitFor(() => expect(document.querySelector('[data-mv-issue-row]')).toBeTruthy());
+  });
+
+  it('dismissing the issue row hides it until the issues change', async () => {
+    engine.refused = true;
+    const { App: Fresh } = await fresh();
+    render(<Fresh />);
+    const row = await waitFor(() => {
+      const el = document.querySelector('[data-mv-issue-row]');
+      expect(el).toBeTruthy();
+      return el;
+    });
+    await act(async () => { within(row).getByRole('button', { name: t('mobile.issues.dismiss') }).click(); });
+    expect(document.querySelector('[data-mv-issue-row]')).toBeNull();
   });
 
   it('a search result from another account moves within that account\'s folders', async () => {

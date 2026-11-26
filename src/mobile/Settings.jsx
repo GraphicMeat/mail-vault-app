@@ -103,10 +103,11 @@ export function placeOf(page) {
 
 /**
  * `page`: the page to open on (the first screen, `'root'`, by default): see `placeOf`; `section`:
- * that page's section to open on (Appearance's, Mail preferences', an account's). `newView`: Views
+ * that page's section to open on (Appearance's, Mail preferences', an account's); `account`: the
+ * account Accounts opens on (the issues sheet's Update password). `newView`: Views
  * opens on a new view (once).
  */
-export default function Settings({ onClose, onReplayTour, onAddAccount, version = APP_VERSION, page: startPage = 'root', section: startSection = null, newView = false }) {
+export default function Settings({ onClose, onReplayTour, onAddAccount, version = APP_VERSION, page: startPage = 'root', section: startSection = null, account: startAccount = null, newView = false }) {
   const t = useT();
   const [place, setPlace] = useState(() => ({ ...placeOf(startPage), ...(startSection ? { section: startSection } : {}) }));
   const [query, setQuery] = useState('');
@@ -208,7 +209,7 @@ export default function Settings({ onClose, onReplayTour, onAddAccount, version 
     body = (
       <>
         {reauthCode && <p className="settings-form text-sm text-mail-danger" role="alert">{t(errorKey(reauthCode))}</p>}
-        <Accounts section={place.section} onSectionChange={(section) => setPlace((p) => ({ ...p, section }))} onAddAccount={onAddAccount}
+        <Accounts account={startAccount} section={place.section} onSectionChange={(section) => setPlace((p) => ({ ...p, section }))} onAddAccount={onAddAccount}
           onExport={() => go({ nav: 'accounts', sub: 'transfer' })} />
       </>
     );

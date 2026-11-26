@@ -338,15 +338,16 @@ function Advanced({ account, settings, write, onRemoved }) {
 
 /**
  * `section` / `onSectionChange`: the open section (the shell's, so a search result lands on it).
+ * `account`: the account to open on, the first by default.
  * `onAddAccount`: the phone's own sign-in flow. `onExport`: desktop's "Move to another computer"
  * Export under the list, the phone's transfer page.
  */
-export default function Accounts({ section: sectionProp, onSectionChange, onAddAccount, onExport }) {
+export default function Accounts({ account: startAccount = null, section: sectionProp, onSectionChange, onAddAccount, onExport }) {
   const t = useT();
   const accounts = useMobileStore((s) => s.accounts);
   const reauthState = useMobileStore((s) => s.reauthState);
   const syncState = useMobileStore((s) => s.syncState);
-  const [selectedId, setSelectedId] = useState(accounts[0]?.id || null);
+  const [selectedId, setSelectedId] = useState(accounts.find((a) => a.id === startAccount)?.id || accounts[0]?.id || null);
   // The list sits over the selected account on the phone: a tap brings that account into view.
   const layout = useRef(null);
   const reveal = useRef(false);

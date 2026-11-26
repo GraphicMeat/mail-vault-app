@@ -129,6 +129,33 @@ body {
 .mv-header__avatars .mv-avatar + .mv-avatar { margin-inline-start: -6px; }
 .mv-header__more { margin-inline-start: 6px; font-size: 0.75rem; font-weight: 500; }
 
+/* The sub-line under the list title: the account button and the status line side by side, the
+   status wrapping under it when the address is long (issues/StatusLine.jsx). */
+.mv-header__sub { display: flex; flex-wrap: wrap; align-items: center; column-gap: 8px; max-width: 100%; min-width: 0; }
+.mv-status-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--mail-text-muted);
+}
+.mv-status-line__spinner {
+  flex: none;
+  width: 11px;
+  height: 11px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: mv-spin 0.8s linear infinite;
+}
+.mv-status-line__retry { min-height: 28px; padding: 0; color: var(--mv-danger); font-weight: 600; text-align: start; }
+
+.mv-avatar { outline: 2px solid var(--mail-surface); }
+.mv-header__avatars .mv-avatar + .mv-avatar { margin-inline-start: -6px; }
+.mv-header__more { margin-inline-start: 6px; font-size: 0.75rem; font-weight: 500; }
+
 /* The status strip under the header (StatusBar in App.jsx): only while something is pending,
    syncing or failed. */
 .mv-statusbar {
@@ -162,23 +189,7 @@ body {
 .mv-avatar--all { background: var(--mail-accent-fill); color: #fff; }
 .mv-avatar--add { background: var(--mail-surface-hover); color: var(--mail-accent-text); font-size: 1.25rem; font-weight: 500; }
 
-/* Sync progress: a chip, never a modal. */
-.mv-chip {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 28px;
-  padding: 0 10px;
-  border: 1px solid var(--mail-border);
-  border-radius: 999px;
-  background: none;
-  color: var(--mail-text-muted);
-  font: inherit;
-  font-size: 0.75rem;
-  font-weight: 500;
-}
-.mv-chip--error { color: var(--mv-danger); border-color: transparent; padding: 0; }
+/* The pull indicator's spinner, and Compose's busy Send. */
 .mv-chip__spinner, .mv-pull__spinner {
   width: 12px;
   height: 12px;
@@ -189,7 +200,7 @@ body {
 }
 @keyframes mv-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) {
-  .mv-chip__spinner, .mv-pull__spinner { animation-duration: 2.4s; }
+  .mv-chip__spinner, .mv-pull__spinner, .mv-status-line__spinner { animation-duration: 2.4s; }
 }
 
 .mv-list-wrap { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
@@ -939,20 +950,45 @@ body {
 .mv-fab:active { transform: scale(0.96); }
 [dir="rtl"] .mv-fab { right: auto; left: calc(var(--mv-safe-left) + 16px); }
 
-/* A parked account's banner between the header and the list: sign in again. */
-.mv-reauth {
+/* The one issue row between the header and the list (issues/IssueRow.jsx), and its sheet. */
+.mv-issue {
   flex: none;
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 4px 12px;
-  padding: 8px calc(var(--mv-safe-right) + 16px) 8px calc(var(--mv-safe-left) + 16px);
+  gap: 8px;
+  padding: 6px calc(var(--mv-safe-right) + 4px) 6px calc(var(--mv-safe-left) + 16px);
   border-bottom: 1px solid var(--mail-border);
-  background: color-mix(in srgb, var(--mv-danger) 10%, var(--mail-surface));
+  background: color-mix(in srgb, var(--mv-flag) 12%, var(--mail-surface));
   color: var(--mail-text);
 }
-.mv-reauth__text { flex: 1 1 12rem; margin: 0; overflow-wrap: anywhere; }
-.mv-reauth__error { flex-basis: 100%; margin: 0; color: var(--mv-danger); }
+.mv-issue__icon { flex: none; color: var(--mv-flag); }
+.mv-issue__text { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 0.8125rem; }
+.mv-issue__text b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.mv-issue__text span { color: var(--mail-text-muted); font-size: 0.75rem; }
+.mv-issue__fix { flex: none; min-height: 36px; padding-inline: 14px; font-weight: 600; }
+.mv-issues__note { margin: 0 8px 8px; color: var(--mail-text-muted); font-size: 0.8125rem; }
+.mv-issue-list { list-style: none; margin: 0 0 12px; padding: 0; border: 1px solid var(--mail-border); border-radius: 12px; background: var(--mail-bg); }
+.mv-issue-account { padding: 10px 12px; }
+.mv-issue-account + .mv-issue-account { border-top: 1px solid var(--mail-border); }
+.mv-issue-account__head { display: flex; align-items: center; gap: 12px; }
+.mv-issue-account__text { min-width: 0; display: flex; flex-direction: column; }
+.mv-issue-account__email { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.mv-issue-account__text small { color: var(--mail-text-muted); }
+.mv-issue-account__error { margin: 6px 0 0; color: var(--mv-danger); font-size: 0.8125rem; }
+.mv-issue-account__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+.mv-issue-account__actions:empty { display: none; }
+/* An avatar of an account that needs the user. */
+.mv-avatar { position: relative; }
+.mv-avatar__dot {
+  position: absolute;
+  top: -2px;
+  inset-inline-end: -2px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--mv-flag);
+  outline: 2px solid var(--mail-surface);
+}
 
 /* The outbox row between the header and the list (never inside the virtual scroller). */
 .mv-outbox-row {

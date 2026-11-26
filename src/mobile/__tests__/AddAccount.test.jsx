@@ -3,7 +3,8 @@ import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import React from 'react';
 import { render, screen, cleanup, fireEvent, act } from '@testing-library/react';
 import AddAccount from '../AddAccount.jsx';
-import { ReauthBanner } from '../AccountSwitcher.jsx';
+import IssuesSheet from '../issues/IssuesSheet.jsx';
+import { accountIssues } from '../issues/accountIssues.js';
 import AccountSwitcher from '../AccountSwitcher.jsx';
 import { oauthSignIn, oauthReauth, cancelOAuth } from '../oauth.js';
 import { useMobileStore } from '../store.js';
@@ -382,30 +383,34 @@ describe('needs_auth', () => {
   const parked = { id: 'a1', email: 'ada@gmail.test', displayName: 'ada@gmail.test', needsAuth: true, provider: 'google', kind: 'imap' };
   const other = { id: 'a2', email: 'bo@example.test', needsAuth: false };
 
-  // The app's wiring: the banner and the switcher both run the store's one reauth.
+  // The app's wiring: the issues sheet and the switcher both run the store's one reauth.
   function Harness() {
     const accounts = useMobileStore((s) => s.accounts);
     const state = useMobileStore((s) => s.reauthState);
     const reauth = (id) => useMobileStore.getState().reauth(id);
+    const issues = accountIssues(accounts);
     return (
       <>
-        <ReauthBanner account={accounts.find((a) => a.id === 'a1')} state={state} onReauth={reauth} />
+        {issues.length > 0 && (
+          <IssuesSheet issues={issues} accounts={accounts} reauthState={state} syncState={{}} onReauth={reauth}
+            onRetry={vi.fn()} onUpdatePassword={vi.fn()} onHide={vi.fn()} onClose={vi.fn()} />
+        )}
         <AccountSwitcher accounts={accounts} activeAccountId="a1" unread={{}} onSelect={vi.fn()} onAdd={vi.fn()} onReauth={reauth} reauthBusy={Boolean(state?.busy)} onClose={vi.fn()} />
       </>
     );
   }
 
-  const bannerButton = () => screen.getAllByRole('button').find((b) => b.dataset.mvReauth === 'banner');
+  const bannerButton = () => screen.getAllByRole('button').find((b) => b.dataset.mvIssueAction === 'signIn');
   const rowButton = () => screen.getAllByRole('button').find((b) => b.dataset.mvReauth === 'row');
 
   beforeEach(() => {
     useMobileStore.setState({ accounts: [parked, other], activeAccountId: 'a1', reauthState: null, syncState: {} });
   });
 
-  it('needs_auth account shows a Sign in again banner that starts reauth', async () => {
+  it('a needs_auth account\'s issues sheet starts reauth, sharing its busy state with the switcher', async () => {
     const engine = oauthEngine();
     render(<Harness />);
-    expect(screen.getByRole('status').textContent).toContain('ada@gmail.test');
+    expect(screen.getByRole('dialog', { name: t('mobile.issues.signInOne', { email: 'ada@gmail.test' }) })).toBeTruthy();
     await act(async () => { fireEvent.click(bannerButton()); });
     expect(calls('mobile.oauth.reauth')).toEqual([['mobile.oauth.reauth', { accountId: 'a1' }]]);
     expect(openAuthSheet).toHaveBeenCalledWith(engine.url);
@@ -418,10 +423,10 @@ describe('needs_auth', () => {
     await act(async () => { engine.finish.resolve({ ok: true, account: { ...parked, needsAuth: false } }); });
     expect(closeAuthSheet).toHaveBeenCalledTimes(1);
     expect(useMobileStore.getState().accounts.find((a) => a.id === 'a1').needsAuth).toBe(false);
-    expect(screen.queryByRole('status')).toBeNull();
+    expect(bannerButton()).toBeUndefined();
   });
 
-  it('a failed reauth started from the switcher shows its error on the banner', async () => {
+  it('a failed reauth started from the switcher shows its error on the account\'s row', async () => {
     const engine = oauthEngine();
     render(<Harness />);
     await act(async () => { fireEvent.click(rowButton()); });
@@ -436,11 +441,6 @@ describe('needs_auth', () => {
     await act(async () => { fireEvent.click(bannerButton()); });
     await act(async () => { again.finish.resolve({ ok: false, code: 'CANCELLED' }); });
     expect(screen.queryByRole('alert')).toBeNull();
-  });
-
-  it('shows no banner for an account that signs in fine', () => {
-    const { container } = render(<ReauthBanner account={{ ...parked, needsAuth: false }} state={null} onReauth={vi.fn()} />);
-    expect(container.textContent).toBe('');
   });
 
   it('the switcher offers Sign in again on a needs_auth row only', () => {

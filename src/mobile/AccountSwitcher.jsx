@@ -2,13 +2,13 @@
 // (every inbox as one list, with their unread count), then every account with its inbox unread
 // count, the open one checked, plus "Add account". Removing an account lives in Settings > the
 // account, not here. An account whose provider sign-in lapsed (`needsAuth`) offers "Sign in
-// again"; `ReauthBanner` says the same above the message list. `AllInboxesIcon` (icons.jsx, re-exported
+// again"; the issue row above the message list says the same (issues/IssueRow.jsx), and an avatar
+// of an account with an issue wears a warning dot. `AllInboxesIcon` (icons.jsx, re-exported
 // here) is the All Inboxes glyph, also worn by the drawer while All Inboxes is open. The open row's
 // check and Add account's plus are icons.
-import React, { useState } from 'react';
+import React from 'react';
 import Sheet from './Sheet.jsx';
 import { useT } from './i18n.js';
-import { errorKey } from './errors.js';
 import { accountColor } from './accountColor.js';
 import { Button } from '../components/ui/Button.jsx';
 import { AllInboxesIcon, CheckIcon, PlusIcon } from './icons.jsx';
@@ -23,15 +23,20 @@ export function initialOf(account) {
 
 /**
  * The avatar wears the account's colour (accountColor.js): the desktop's for an import, else the
- * one hashed from its address, so it matches the account's row dot in All Inboxes.
+ * one hashed from its address, so it matches the account's row dot in All Inboxes. `issue` adds
+ * the warning dot of an account that needs the user (issues/accountIssues.js).
  */
-export function Avatar({ account, small = false }) {
+export function Avatar({ account, small = false, issue = false }) {
   return (
     <span className={small ? 'mv-avatar mv-avatar--small' : 'mv-avatar'} style={{ backgroundColor: accountColor(account) }} aria-hidden="true">
       {initialOf(account)}
+      {issue && <span className="mv-avatar__dot" />}
     </span>
   );
 }
+
+/** Whether the account needs the user: a lapsed sign-in, a lost password or a refused one. */
+export const hasIssue = (account) => Boolean(account?.needsAuth || account?.authRefused);
 
 function AccountRow({ account, active, unread, onSelect, onReauth, reauthBusy }) {
   const t = useT();
@@ -44,7 +49,7 @@ function AccountRow({ account, active, unread, onSelect, onReauth, reauthBusy })
         aria-current={active ? 'true' : undefined}
         onClick={() => onSelect(account.id)}
       >
-        <Avatar account={account} />
+        <Avatar account={account} issue={hasIssue(account)} />
         <span className="mv-acct__text">
           {name && <span className="mv-acct__name" dir="auto">{name}</span>}
           <span className={name ? 'mv-acct__email mv-acct__email--sub' : 'mv-acct__email'} dir="auto">{account.email}</span>
@@ -107,66 +112,5 @@ export default function AccountSwitcher({ accounts, activeAccountId, unread, onS
         {t('sidebar.addAccount')}
       </button>
     </Sheet>
-  );
-}
-
-/**
- * The banner above the list while `account` is parked (`needsAuth`): its provider no longer
- * honours the sign-in, so nothing syncs until the user signs in again. `state` is the store's
- * `reauthState` ({ accountId, busy, code }), shared with the switcher's "Sign in again", so a run
- * started from either shows its progress and its error here. `onReauth(id)` starts one.
- */
-export function ReauthBanner({ account, state, onReauth }) {
-  const t = useT();
-  if (!account?.needsAuth) return null;
-  // A password account whose saved password was lost (the keychain move failed twice): it is
-  // entered again on the account's Mail Server page in Settings (`mobile.accounts.update`).
-  if (account.oauth === false) {
-    return (
-      <div className="mv-reauth">
-        <p className="mv-reauth__text" role="status" dir="auto">{t('mobile.reauth.passwordLost', { email: account.email })}</p>
-      </div>
-    );
-  }
-  const mine = state && state.accountId === account.id ? state : null;
-  const busy = Boolean(state?.busy);
-  return (
-    <div className="mv-reauth">
-      <p className="mv-reauth__text" role="status" dir="auto">{t('mobile.reauth.banner', { email: account.email })}</p>
-      {mine?.code && !busy && <p className="mv-reauth__error" role="alert">{t(errorKey(mine.code))}</p>}
-      <Button variant="link" size="touch" className="flex-none font-semibold" data-mv-reauth="banner" disabled={busy} aria-busy={busy} onClick={() => onReauth(account.id)}>
-        {mine?.busy ? t('mobile.add.signingIn') : t('mobile.reauth.action')}
-      </Button>
-    </div>
-  );
-}
-
-/**
- * The banner above the list while the server refuses `account`'s password: nothing dials it again
- * (servers block an address after a few failed logins) until the user's Retry, which the engine
- * tries exactly once. `onRetry(id)` asks for it.
- */
-export function RefusedBanner({ account, onRetry }) {
-  const t = useT();
-  const [busy, setBusy] = useState(false);
-  if (!account?.authRefused || account.needsAuth) return null;
-  return (
-    <div className="mv-reauth mv-refused">
-      <p className="mv-reauth__text" role="status" dir="auto">{t('mobile.refused.banner', { email: account.email })}</p>
-      <Button variant="link" size="touch" className="flex-none font-semibold" data-mv-reauth="banner"
-        disabled={busy}
-        aria-busy={busy}
-        onClick={async () => {
-          setBusy(true);
-          try {
-            await onRetry(account.id);
-          } finally {
-            setBusy(false);
-          }
-        }}
-      >
-        {t('mobile.refused.retry')}
-      </Button>
-    </div>
   );
 }

@@ -88,21 +88,18 @@ export const PullIndicator = memo(function PullIndicator({ scrollRef, onRefresh,
     if (el) el.style.transform = offset ? `translateY(${offset}px)` : '';
   }, [scrollRef, offset]);
 
-  const status = refreshing ? 'refreshing' : pull >= PULL_TRIGGER ? 'release' : pull > 0 ? 'pull' : null;
-  const statusText = {
-    refreshing: t('mobile.list.refreshing'),
-    release: t('mobile.list.release'),
-    pull: t('mobile.list.pull'),
-  }[status];
+  // The spinner is the whole indicator: no words while pulling or refreshing. Screen readers
+  // hear that a refresh runs, from the label no one else sees.
+  const showing = refreshing || pull > 0;
   return (
     <div
       className={refreshing ? 'mv-pull mv-pull--busy' : 'mv-pull'}
-      style={{ transform: `translateY(${offset}px)`, opacity: status ? 1 : 0 }}
+      style={{ transform: `translateY(${offset}px)`, opacity: showing ? 1 : 0 }}
       role="status"
       aria-live="polite"
     >
-      {status && <span className="mv-pull__spinner" aria-hidden="true" />}
-      {statusText}
+      {showing && <span className="mv-pull__spinner" aria-hidden="true" />}
+      {refreshing && <span className="mv-visually-hidden">{t('mobile.list.refreshing')}</span>}
     </div>
   );
 });

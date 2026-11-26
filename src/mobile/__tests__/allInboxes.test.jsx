@@ -471,16 +471,16 @@ describe('All Inboxes in the app', () => {
     await mountUnified();
     await syncState('a1', 'idle');
     await syncState('a2', 'syncing');
-    expect(screen.getByText(t('mobile.sync.syncing'))).toBeTruthy();
+    expect(screen.getByText(t('mobile.status.checkingMany', { accounts: 2 }))).toBeTruthy();
     await syncState('a2', 'error', 'NETWORK');
-    const chip = screen.getByRole('button', { name: new RegExp(t('mobile.sync.failed')) });
+    const chip = screen.getByRole('button', { name: t('mobile.status.failed') });
     expect(chip).toBeTruthy();
     // Retry syncs every inbox again.
     engine.calls = [];
     await act(async () => { fireEvent.click(chip); });
     expect(callsOf('mobile.sync.refresh')).toEqual([{ accountId: 'a1' }, { accountId: 'a2' }]);
     await syncState('a2', 'idle');
-    expect(screen.queryByRole('button', { name: new RegExp(t('mobile.sync.failed')) })).toBeNull();
+    expect(screen.queryByRole('button', { name: t('mobile.status.failed') })).toBeNull();
   });
 
   it('the pull spinner runs until every account\'s pass is done', async () => {
@@ -542,22 +542,23 @@ describe('All Inboxes in the app', () => {
     expect(button.querySelector('.mv-header__more').textContent).toBe('+2');
   });
 
-  it('the status strip is there only while something is pending, syncing or failed', async () => {
+  it('the status line sits under the title: checking, failed with a retry, updated, and the outbox count', async () => {
     await mountUnified();
+    expect(document.querySelector('.mv-statusbar')).toBeNull();
     await syncState('a1', 'idle');
     await syncState('a2', 'idle');
-    expect(document.querySelector('.mv-statusbar')).toBeNull();
+    const line = () => document.querySelector('.mv-header [data-mv-status-line]');
+    expect(line().textContent).toContain(t('mobile.status.updatedNow'));
     await syncState('a2', 'syncing');
-    expect(document.querySelector('.mv-statusbar').textContent).toContain(t('mobile.sync.syncing'));
+    expect(line().textContent).toContain(t('mobile.status.checkingMany', { accounts: 2 }));
     await syncState('a2', 'error', 'NETWORK');
-    const strip = document.querySelector('.mv-statusbar');
-    expect(within(strip).getByRole('button', { name: new RegExp(t('mobile.sync.failed')) })).toBeTruthy();
+    expect(within(line()).getByRole('button', { name: t('mobile.status.failed') })).toBeTruthy();
     await syncState('a2', 'idle');
-    expect(document.querySelector('.mv-statusbar')).toBeNull();
+    expect(line().textContent).toContain(t('mobile.status.updatedNow'));
     await act(async () => { storeModule.useMobileStore.setState({ pending: 2 }); });
-    expect(document.querySelector('.mv-statusbar').textContent).toContain(t('mobile.actions.waiting', { count: 2 }));
+    expect(line().textContent).toContain(t('mobile.actions.waiting', { count: 2 }));
     await act(async () => { storeModule.useMobileStore.setState({ pending: 0 }); });
-    expect(document.querySelector('.mv-statusbar')).toBeNull();
+    expect(line().textContent).not.toContain(t('mobile.actions.waiting', { count: 2 }));
   });
 
   it('one account in front: the account button names it under the folder title', async () => {
@@ -616,7 +617,8 @@ describe('All Inboxes in the app', () => {
   it('a lapsed sign-in shows for any account in the list, not only the one in front', async () => {
     engine.accounts = [acct('a1'), { ...acct('a2'), needsAuth: true, oauth: true }];
     await mountUnified();
-    expect(screen.getByText(t('mobile.reauth.banner', { email: 'a2@example.test' }))).toBeTruthy();
+    expect(screen.getByText(t('mobile.issues.signInOne', { email: 'a2@example.test' }))).toBeTruthy();
+    expect(document.querySelectorAll('[data-mv-issue-row]').length).toBe(1);
   });
 
   it('pull to refresh syncs every account', async () => {
