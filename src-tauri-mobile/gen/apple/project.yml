@@ -53,8 +53,8 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
-        CFBundleShortVersionString: 2.25.0
-        CFBundleVersion: "2250000"
+        CFBundleShortVersionString: 2.25.1
+        CFBundleVersion: "2250100"
         ITSAppUsesNonExemptEncryption: false
     entitlements:
       path: mailvault-mobile_iOS/mailvault-mobile_iOS.entitlements

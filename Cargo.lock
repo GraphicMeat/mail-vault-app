@@ -5107,7 +5107,7 @@ dependencies = [
 
 [[package]]
 name = "mailvault"
-version = "2.25.0"
+version = "2.25.1"
 dependencies = [
  "base64 0.22.1",
  "block2",

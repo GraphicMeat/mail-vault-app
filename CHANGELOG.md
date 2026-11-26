@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.25.1] - 2026-11-26
+
 - Added: the Premium sign-in code fills itself in. After Sign In to Premium, MailVault looks for the code mail in that account's Inbox and Spam folder and signs in as soon as it arrives.
 - Changed: the Premium sign-in code email has a new design that reads well on a phone, a tablet or a computer, in light and dark mode, with the MailVault icon. It no longer says to enter the code on your phone.
 - Fixed: asking for a new sign-in code within 10 minutes could leave you with no working code: the new code was not always emailed, and the first one stopped working. Every code sent in the last 10 minutes now works, until one of them is used.
