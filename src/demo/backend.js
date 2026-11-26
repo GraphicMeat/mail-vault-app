@@ -1504,7 +1504,7 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
           emit('delete-queue-changed', {});
           emit('demo:state', { type: 'journal' });
         }
-        if ((args?.reason || 'manual') !== 'manual') emit('delete-queue-status', { kept: 0, online: true });
+        if ((args?.reason || 'manual') !== 'manual') emit('delete-queue-status', { kept: 0, refused: 0, online: true });
         return counts;
       }
       case 'delete_queue.cancel': {

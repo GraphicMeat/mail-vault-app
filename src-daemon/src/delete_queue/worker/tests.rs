@@ -97,7 +97,7 @@ async fn a_pass_lands_imap_and_jmap_entries_and_drops_entries_no_account_can_sen
     assert_eq!(landed.len(), 2, "{seen:?}");
     assert!(seen.iter().any(|(n, _)| n == "delete-queue-changed"));
     let status: Vec<&Value> = seen.iter().filter(|(n, _)| n == "delete-queue-status").map(|(_, p)| p).collect();
-    assert_eq!(status, vec![&json!({"kept": 0, "online": true})]);
+    assert_eq!(status, vec![&json!({"kept": 0, "refused": 0, "online": true})]);
     assert_eq!(seen.last().unwrap().0, "delete-queue-status", "after the pass");
 }
 
@@ -193,6 +193,43 @@ async fn a_pass_skips_a_uid_a_submit_holds() {
     assert_eq!(pass(&f.s, "retry").await.done, 1, "sent once the submit let go");
 }
 
+/// The daily reminder is for what the server refused a background pass, never
+/// for the delete the user just made: a uid a submit still holds (sent now,
+/// or refused in the submit's own rounds) is owed but not `refused`.
+#[tokio::test]
+async fn the_status_counts_as_refused_only_what_a_pass_was_refused() {
+    let f = fixture(vec![]);
+    script(&f.s, |_, uid| Some(Err(Refusal::Server(format!("refused {uid}")))));
+    queue(&f, "acc1", "INBOX", &[1], json!({"mode": "trash", "bin": true}));
+    let mine = queue(&f, "acc1", "INBOX", &[2, 3], json!({"mode": "trash", "bin": true}));
+    op_journal::note_failures(&f.s.app_dir, mine, &[(3, "refused 3".into())]).unwrap();
+    let (held, ..) = crate::delete_queue::claim(&f.s, "acc1", "INBOX", &[2, 3]);
+    let mut rx = f.s.events.subscribe();
+    let counts = pass(&f.s, "retry").await;
+    assert_eq!((counts.failed, counts.skipped, counts.kept), (1, 2, 3), "{counts:?}");
+    let status: Vec<Value> = events(&mut rx).into_iter().filter(|(n, _)| n == "delete-queue-status").map(|(_, p)| p).collect();
+    assert_eq!(status, vec![json!({"kept": 3, "refused": 1, "online": true})]);
+    drop(held);
+}
+
+/// A delete no pass can send (its account busy, its credentials locked)
+/// writes no reason, yet it has not gone through either: once it is older
+/// than a tick the reminder counts it.
+#[tokio::test]
+async fn the_status_counts_an_unsent_delete_once_it_is_older_than_a_tick() {
+    let f = fixture(vec![]);
+    queue(&f, "acc1", "INBOX", &[1], json!({"mode": "trash", "bin": true}));
+    let _closing = f.s.account_lifecycle.try_close(lease("acc1"), "acc1").unwrap();
+    let status = |rx: &mut tokio::sync::broadcast::Receiver<Arc<str>>| -> Vec<Value> { events(rx).into_iter().filter(|(n, _)| n == "delete-queue-status").map(|(_, p)| p).collect() };
+    let mut rx = f.s.events.subscribe();
+    f.s.clock.set(mailvault_core::clock::now_ms());
+    pass(&f.s, "retry").await;
+    assert_eq!(status(&mut rx), vec![json!({"kept": 1, "refused": 0, "online": true})], "just queued");
+    f.s.clock.set(mailvault_core::clock::now_ms() + i64::try_from(TIMING.every.as_millis()).unwrap() + 1_000);
+    pass(&f.s, "retry").await;
+    assert_eq!(status(&mut rx), vec![json!({"kept": 1, "refused": 1, "online": true})], "a tick later, still unsent");
+}
+
 /// The unit of work is one uid: the UI is waited for before each send, and
 /// the journal lock is free while a send is on the wire.
 #[tokio::test]
@@ -278,7 +315,7 @@ async fn offline_a_pass_sends_nothing_and_the_status_says_so() {
     assert_eq!(entry(&f, id).unwrap().attempts, 0);
     assert_eq!(f.srv.count_commands("SELECT"), 0);
     let status: Vec<Value> = events(&mut rx).into_iter().filter(|(n, _)| n == "delete-queue-status").map(|(_, p)| p).collect();
-    assert_eq!(status, vec![json!({"kept": 1, "online": false})]);
+    assert_eq!(status, vec![json!({"kept": 1, "refused": 0, "online": false})]);
 }
 
 #[tokio::test]
@@ -296,7 +333,7 @@ async fn the_run_rpc_answers_the_counts_and_a_manual_run_emits_no_status() {
     assert_eq!(r.result.unwrap()["kept"], 0);
     assert!(!events(&mut rx).iter().any(|(n, _)| n == "delete-queue-status"));
     route(&f.s, "delete_queue.run", &json!({"reason": "launch"}), json!(3)).await.unwrap();
-    assert!(events(&mut rx).iter().any(|(n, p)| n == "delete-queue-status" && *p == json!({"kept": 0, "online": true})));
+    assert!(events(&mut rx).iter().any(|(n, p)| n == "delete-queue-status" && *p == json!({"kept": 0, "refused": 0, "online": true})));
 }
 
 // ── triggers ───────────────────────────────────────────────────────────────

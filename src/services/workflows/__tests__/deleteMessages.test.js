@@ -804,19 +804,24 @@ describe('delete-queue-changed, one read at a time', () => {
 });
 
 describe('delete-queue-status', () => {
-  it('raises the daily reminder only when something is still owed', async () => {
+  it('raises the daily reminder only for what the server refused a pass', async () => {
     useSettingsStore.setState({ pendingActionsRemindedAt: 0 });
     useMailStore.setState({ pendingActionsReminder: null });
 
-    expect(await onDeleteQueueStatus({ kept: 0, online: true })).toBe(false);
+    expect(await onDeleteQueueStatus({ kept: 0, refused: 0, online: true })).toBe(false);
     expect(useMailStore.getState().pendingActionsReminder).toBeNull();
 
-    expect(await onDeleteQueueStatus({ kept: 2, online: true })).toBe(true);
+    // Owed but never refused (the delete the user just made, still in
+    // flight): nothing to remind of.
+    expect(await onDeleteQueueStatus({ kept: 1, refused: 0, online: true })).toBe(false);
+    expect(useMailStore.getState().pendingActionsReminder).toBeNull();
+
+    expect(await onDeleteQueueStatus({ kept: 3, refused: 2, online: true })).toBe(true);
     expect(useMailStore.getState().pendingActionsReminder).toEqual({ count: 2 });
 
     // The 24 h guard holds for the next five-minute pass.
     useMailStore.setState({ pendingActionsReminder: null });
-    expect(await onDeleteQueueStatus({ kept: 2, online: true })).toBe(false);
+    expect(await onDeleteQueueStatus({ kept: 2, refused: 2, online: true })).toBe(false);
     expect(useMailStore.getState().pendingActionsReminder).toBeNull();
   });
 });

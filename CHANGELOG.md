@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Fixed: "Some server actions have not gone through" could pop up right after you deleted an email, counting the delete that was still on its way to the server. It now shows only for changes the server has actually refused on a retry, still at most once a day.
 - Changed: Settings > Accounts lists accounts in their sidebar groups. Move a group up or down from its header and the sidebar follows. Drag the line between the account list and the account's settings to make the list wider.
 
 ## [2.25.1] - 2026-11-26

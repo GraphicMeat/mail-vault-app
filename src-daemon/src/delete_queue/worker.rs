@@ -30,7 +30,8 @@
 //! uid is no longer owed, so no later pass (nor Retry now) takes it up. The
 //! entry stays listed until the user cancels it. The journal lock
 //! is taken per read or write, never across a send. Every pass but a manual
-//! one ends with `delete-queue-status {kept, online}`.
+//! one ends with `delete-queue-status {kept, refused, online}`: `refused`
+//! (the daily reminder) leaves out the delete the user just made.
 //!
 //! Backoff: an entry whose last refusal is a bin capture the delete needed
 //! (`E_BIN_CAPTURE:`, say a Gmail body fetch that times out every time) is
@@ -205,9 +206,33 @@ async fn pass_with(state: &Arc<DaemonState>, reason: &str, backoff: bool) -> Pas
         counts.done, counts.failed, counts.dropped, counts.skipped, counts.kept
     );
     if reason != MANUAL {
-        state.events.emit("delete-queue-status", json!({ "kept": counts.kept, "online": state.net.is_online() }));
+        let refused = if counts.kept == 0 { 0 } else { refused_by_a_pass(state).await };
+        state.events.emit("delete-queue-status", json!({ "kept": counts.kept, "refused": refused, "online": state.net.is_online() }));
     }
     counts
+}
+
+/// The uids still owed that have not gone through: what the app's daily
+/// reminder counts. One a pass sent and the server refused, or one queued
+/// longer than a tick ago that no pass could send (credentials locked, the
+/// account busy). Never the delete the user just made: a submit holds it, or
+/// it was journalled since the last tick and no pass has tried it yet.
+async fn refused_by_a_pass(state: &Arc<DaemonState>) -> u32 {
+    let entries = delete_entries(state).await.unwrap_or_default();
+    let now = u64::try_from(state.clock.now_ms()).unwrap_or(0);
+    let tick = u64::try_from(TIMING.every.as_millis()).unwrap_or(u64::MAX);
+    let q = &state.delete_queue;
+    n(entries
+        .iter()
+        .map(|e| {
+            let stale = now.saturating_sub(e.at) >= tick;
+            e.uids
+                .iter()
+                .filter(|uid| !q.holds(&e.account_id, &e.mailbox, **uid))
+                .filter(|uid| stale || e.failures.get(uid).is_some_and(|f| f.passes > 0))
+                .count()
+        })
+        .sum())
 }
 
 #[cfg(test)]

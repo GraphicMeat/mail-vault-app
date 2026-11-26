@@ -1653,15 +1653,17 @@ async function _relistQueue() {
 }
 
 /**
- * `delete-queue-status {kept, online}`, after every background pass (every
- * five minutes, mostly `kept: 0`): the daily reminder, only while something
- * is still owed and the link is up. Its 24 h guard is its own.
+ * `delete-queue-status {kept, refused, online}`, after every background pass
+ * (every five minutes, mostly all 0): the daily reminder, only for what a pass
+ * sent and the server refused, while the link is up. `kept` also holds the
+ * delete the user just made, still in flight, which is no reminder's business.
+ * Its 24 h guard is its own.
  */
 export async function onDeleteQueueStatus(payload) {
-  const { kept = 0, online = true } = payload || {};
-  if (!kept || online === false) return false;
+  const { refused = 0, online = true } = payload || {};
+  if (!refused || online === false) return false;
   const { remindOfUnfinished } = await import('./pendingActionsReminder');
-  return remindOfUnfinished(kept);
+  return remindOfUnfinished(refused);
 }
 
 // A batch delete that landed on the server: queue its sidecar prune, and stamp

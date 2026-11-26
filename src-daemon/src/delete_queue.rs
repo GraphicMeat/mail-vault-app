@@ -242,6 +242,11 @@ impl QueueState {
         self.inner.lock().unwrap_or_else(|p| p.into_inner())
     }
 
+    /// Whether a submit is sending this uid right now.
+    pub(crate) fn holds(&self, account_id: &str, mailbox: &str, uid: u32) -> bool {
+        self.lock().held.contains(&(account_id.to_owned(), mailbox.to_owned(), uid))
+    }
+
     #[cfg(test)]
     pub(crate) fn held(&self) -> usize {
         self.lock().held.len()
