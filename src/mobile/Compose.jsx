@@ -66,6 +66,7 @@ import { useBackLayer } from './backStack.js';
 import { useMobileStore } from './store.js';
 import { useT } from './i18n.js';
 import { useAiAction } from './AiActions.jsx';
+import { Button } from '../components/ui/Button.jsx';
 
 /** Quiet time after the last edit before the draft is saved. */
 export const AUTOSAVE_MS = 1500;
@@ -651,15 +652,16 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
           {t('common.back')}
         </button>
         <h1 className="mv-compose__title">{title}</h1>
-        <button type="button" className="mv-iconbtn" aria-label={t('mobile.compose.attach')} disabled={locked.current} onClick={() => setAttaching(true)}>
+        <Button variant="ghost" size="touch" icon aria-label={t('mobile.compose.attach')} disabled={locked.current} onClick={() => setAttaching(true)}>
           <PaperclipIcon />
-        </button>
-        <button type="button" className="mv-iconbtn" data-mv-send-later-open aria-label={t('mobile.compose.sendLater')} disabled={!canSend} onClick={() => trySend(true)}>
+        </Button>
+        <Button variant="ghost" size="touch" icon data-mv-send-later-open aria-label={t('mobile.compose.sendLater')} disabled={!canSend} onClick={() => trySend(true)}>
           <ClockIcon />
-        </button>
-        <button
-          type="button"
-          className={`mv-compose__send${sending ? ' mv-compose__send--busy' : ''}`}
+        </Button>
+        <Button
+          variant="primary"
+          size="touch"
+          className={sending ? 'mv-send--busy' : undefined}
           data-mv-send
           aria-label={sending ? t('mobile.compose.sending') : t('compose.send')}
           aria-busy={sending ? 'true' : undefined}
@@ -668,7 +670,7 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
         >
           {sending && <span className="mv-chip__spinner" aria-hidden="true" />}
           {sending ? t('mobile.compose.sending') : t('compose.send')}
-        </button>
+        </Button>
       </header>
       <div ref={scroller} className="mv-compose__scroll">
         {error && <p className="mv-compose__error" role="alert">{typeof error === 'string' ? t(error) : t(error.key, error.vars)}</p>}
@@ -699,7 +701,7 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
             <RecipientField label={t('mobile.compose.bcc')} entries={bcc.entries} text={bcc.text} readOnly={loading || locked.current} onChange={(v) => { if (!locked.current) { setBcc(v); edit('bcc'); } }} />
           </>
         ) : (
-          <button type="button" className="mv-compose__more" onClick={() => setShowCc(true)}>{t('mobile.compose.showCc')}</button>
+          <Button variant="link" size="touch" className="self-start mv-btn-flush" onClick={() => setShowCc(true)}>{t('mobile.compose.showCc')}</Button>
         )}
         {hint && <p className="mv-compose__hint">{hint}</p>}
         <div className="mv-compose__line">
@@ -714,14 +716,14 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
           />
         </div>
         {templates.length > 0 && (
-          <button type="button" className="mv-compose__more" data-mv-templates-open disabled={loading || locked.current} onClick={() => setPicking(true)}>
+          <Button variant="link" size="touch" className="self-start mv-btn-flush" data-mv-templates-open disabled={loading || locked.current} onClick={() => setPicking(true)}>
             {t('compose.templates')}
-          </button>
+          </Button>
         )}
         {aiEnabled && (
-          <button type="button" className="mv-compose__more" data-mv-ai-open disabled={loading || locked.current || ai.busy} onClick={() => setAiPicking(true)}>
+          <Button variant="link" size="touch" className="self-start mv-btn-flush" data-mv-ai-open disabled={loading || locked.current || ai.busy} onClick={() => setAiPicking(true)}>
             {t('settings.tab.aiProviders')}
-          </button>
+          </Button>
         )}
         {remindOffered && (
           <div className="mv-compose__line" data-mv-remind>

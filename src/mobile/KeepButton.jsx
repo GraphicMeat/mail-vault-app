@@ -5,6 +5,7 @@ import { useKeepStore } from './keep.js';
 import { useT } from './i18n.js';
 import { BookmarkIcon } from './icons.jsx';
 import { keepId } from '../shared/keep';
+import { Button } from '../components/ui/Button.jsx';
 
 export default function KeepButton({ accountId, folder, row }) {
   const t = useT();
@@ -12,9 +13,7 @@ export default function KeepButton({ accountId, folder, row }) {
   const kept = useKeepStore((s) => s.items.some((item) => keepId(item) === keepId(identity)));
   const label = t(kept ? 'keep.remove' : 'keep.add');
   return (
-    <button
-      type="button"
-      className="mv-iconbtn"
+    <Button variant="ghost" size="touch" icon
       data-mv-keep
       aria-pressed={kept}
       aria-label={label}
@@ -26,6 +25,6 @@ export default function KeepButton({ accountId, folder, row }) {
       })}
     >
       <BookmarkIcon filled={kept} />
-    </button>
+    </Button>
   );
 }

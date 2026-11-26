@@ -9,6 +9,7 @@ import Sheet from './Sheet.jsx';
 import { useT } from './i18n.js';
 import { errorKey } from './errors.js';
 import { accountColor } from './accountColor.js';
+import { Button } from '../components/ui/Button.jsx';
 
 /** The avatar letter: the display name's first letter, else the address's. */
 export function initialOf(account) {
@@ -50,9 +51,9 @@ function AccountRow({ account, active, unread, onSelect, onReauth, reauthBusy })
         <span className="mv-acct__check" aria-hidden="true">{active ? '✓' : ''}</span>
       </button>
       {account.needsAuth && account.oauth !== false && onReauth && (
-        <button type="button" className="mv-textbtn mv-acct__reauth" disabled={reauthBusy} onClick={() => onReauth(account.id)}>
+        <Button variant="link" size="touch" className="flex-none font-semibold" data-mv-reauth="row" disabled={reauthBusy} onClick={() => onReauth(account.id)}>
           {t('mobile.reauth.action')}
-        </button>
+        </Button>
       )}
     </li>
   );
@@ -138,9 +139,9 @@ export function ReauthBanner({ account, state, onReauth }) {
     <div className="mv-reauth">
       <p className="mv-reauth__text" role="status" dir="auto">{t('mobile.reauth.banner', { email: account.email })}</p>
       {mine?.code && !busy && <p className="mv-reauth__error" role="alert">{t(errorKey(mine.code))}</p>}
-      <button type="button" className="mv-reauth__btn" disabled={busy} aria-busy={busy} onClick={() => onReauth(account.id)}>
+      <Button variant="link" size="touch" className="flex-none font-semibold" data-mv-reauth="banner" disabled={busy} aria-busy={busy} onClick={() => onReauth(account.id)}>
         {mine?.busy ? t('mobile.add.signingIn') : t('mobile.reauth.action')}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -157,9 +158,7 @@ export function RefusedBanner({ account, onRetry }) {
   return (
     <div className="mv-reauth mv-refused">
       <p className="mv-reauth__text" role="status" dir="auto">{t('mobile.refused.banner', { email: account.email })}</p>
-      <button
-        type="button"
-        className="mv-reauth__btn"
+      <Button variant="link" size="touch" className="flex-none font-semibold" data-mv-reauth="banner"
         disabled={busy}
         aria-busy={busy}
         onClick={async () => {
@@ -172,7 +171,7 @@ export function RefusedBanner({ account, onRetry }) {
         }}
       >
         {t('mobile.refused.retry')}
-      </button>
+      </Button>
     </div>
   );
 }

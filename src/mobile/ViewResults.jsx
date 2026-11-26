@@ -11,6 +11,7 @@ import MessageRow from './MessageRow.jsx';
 import { rowHeight } from './prefs.js';
 import { useT } from './i18n.js';
 import { viewLabel } from '../utils/viewLabel.js';
+import { Button } from '../components/ui/Button.jsx';
 
 /** Pixels from the end at which the next page loads. */
 const NEAR_END = 600;
@@ -108,7 +109,7 @@ export default function ViewResults({ view, onOpen, onSwipe: swipeAction, onClos
         {list.state === 'failed' && (
           <p className="mv-search__note" role="alert">
             {t('views.unavailable.error')}{' '}
-            <button type="button" className="mv-textbtn" onClick={retry}>{t('common.retry')}</button>
+            <Button variant="link" size="touch" onClick={retry}>{t('common.retry')}</Button>
           </p>
         )}
         {list.state !== 'loading' && list.state !== 'unavailable' && list.rows.length === 0 && list.state !== 'failed' && (

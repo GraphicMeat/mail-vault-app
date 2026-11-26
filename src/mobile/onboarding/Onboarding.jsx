@@ -20,6 +20,7 @@ import LanguageStep from './LanguageStep.jsx';
 import AccountStep from './AccountStep.jsx';
 import FreeStep from './FreeStep.jsx';
 import PremiumStep from './PremiumStep.jsx';
+import { Button } from '../../components/ui/Button.jsx';
 
 export default function Onboarding({ steps, onAdd, onOAuth, onOAuthCancel, onFinish }) {
   const t = useT();
@@ -71,15 +72,15 @@ export default function Onboarding({ steps, onAdd, onOAuth, onOAuthCancel, onFin
     <KeyboardLayer className="mv-tour" scroll=".mv-tour__body" data-testid={`onboarding-${step}`}>
       <header className="mv-tour__bar">
         {index > 0 ? (
-          <button type="button" className="mv-textbtn" onClick={back} disabled={finishing} data-testid="onboarding-back">
+          <Button variant="link" size="touch" onClick={back} disabled={finishing} data-testid="onboarding-back">
             {t('common.back')}
-          </button>
+          </Button>
         ) : <span />}
         <span className="mv-tour__progress" role="status">{t('onboarding.progress', { current: index + 1, total: steps.length })}</span>
         {!last ? (
-          <button type="button" className="mv-textbtn" onClick={finish} disabled={finishing} data-testid="onboarding-skip">
+          <Button variant="link" size="touch" onClick={finish} disabled={finishing} data-testid="onboarding-skip">
             {t('onboarding.skipTour')}
-          </button>
+          </Button>
         ) : <span />}
       </header>
       <div ref={bodyRef} className={`mv-tour__body mv-tour__body--${step}`}>
@@ -96,17 +97,17 @@ export default function Onboarding({ steps, onAdd, onOAuth, onOAuthCancel, onFin
       </div>
       <footer className="mv-tour__actions">
         {step === 'account' ? (
-          <button type="button" className="mv-textbtn mv-tour__later" onClick={next}>
+          <Button variant="link" size="touch" fullWidth className="mt-2" onClick={next}>
             {t('onboarding.skipAccount')}
-          </button>
+          </Button>
         ) : last ? (
-          <button type="button" className="mv-primary" onClick={finish} disabled={finishing} data-testid="onboarding-continue">
+          <Button variant="primary" size="touch" fullWidth className="mt-2" onClick={finish} disabled={finishing} data-testid="onboarding-continue">
             {t('onboarding.getStarted')}
-          </button>
+          </Button>
         ) : (
-          <button type="button" className="mv-primary" onClick={next} data-testid="onboarding-continue">
+          <Button variant="primary" size="touch" fullWidth className="mt-2" onClick={next} data-testid="onboarding-continue">
             {t('common.continue')}
-          </button>
+          </Button>
         )}
       </footer>
     </KeyboardLayer>

@@ -16,6 +16,7 @@ import { faqUrl } from '../services/faqUrl.js';
 import { appLink } from '../services/appLink.js';
 import settingsShot from './assets/import/desktop-settings.png';
 import qrShot from './assets/import/desktop-qr.png';
+import { Button } from '../components/ui/Button.jsx';
 
 const MIN_PASSWORD = 12;
 // The class that makes the page see-through while the camera runs behind it (mobile.css).
@@ -187,9 +188,9 @@ export default function ImportFromDesktop({ onImport, onDone, onCancel }) {
               </ul>
             </>
           )}
-          <button type="button" className="mv-primary" onClick={() => onDone?.({ imported: result.imported })}>
+          <Button variant="primary" size="touch" fullWidth className="mt-2" onClick={() => onDone?.({ imported: result.imported })}>
             {t('common.done')}
-          </button>
+          </Button>
         </div>
       </section>
     );
@@ -200,9 +201,9 @@ export default function ImportFromDesktop({ onImport, onDone, onCancel }) {
     return (
       <section className="mv-add mv-import" aria-labelledby="mv-import-title">
         <div className="mv-add__bar">
-          <button type="button" className="mv-textbtn" disabled={busy} onClick={() => { setFrames(null); setPassword(''); setErrorCode(null); setStep('intro'); }}>
+          <Button variant="link" size="touch" disabled={busy} onClick={() => { setFrames(null); setPassword(''); setErrorCode(null); setStep('intro'); }}>
             {t('common.back')}
-          </button>
+          </Button>
         </div>
         <h1 id="mv-import-title" className="mv-add__title">{t('mobile.import.passwordTitle')}</h1>
         <p className="mv-add__lead">{t('mobile.import.passwordHint')}</p>
@@ -222,18 +223,18 @@ export default function ImportFromDesktop({ onImport, onDone, onCancel }) {
                 disabled={busy}
                 onChange={(e) => setPassword(e.target.value)}
               />
-              <button type="button" className="mv-textbtn" aria-controls="mv-import-password" onClick={() => setShowPassword((v) => !v)}>
+              <Button variant="link" size="touch" aria-controls="mv-import-password" onClick={() => setShowPassword((v) => !v)}>
                 {showPassword ? t('mobile.import.hide') : t('mobile.import.show')}
-              </button>
+              </Button>
             </div>
           </div>
           {errorCode && <p className="mv-add__error" role="alert">{t(ERROR_KEYS[errorCode] ?? 'mobile.import.failed')}</p>}
           {errorCode === 'INVALID' ? (
-            <button type="button" className="mv-primary" onClick={startScan}>{t('mobile.import.scanAgain')}</button>
+            <Button variant="primary" size="touch" fullWidth className="mt-2" onClick={startScan}>{t('mobile.import.scanAgain')}</Button>
           ) : (
-            <button type="submit" className="mv-primary" disabled={!canImport} aria-busy={busy}>
+            <Button variant="primary" size="touch" fullWidth className="mt-2" type="submit" disabled={!canImport} aria-busy={busy}>
               {busy ? t('mobile.import.importing') : t('mobile.import.import')}
-            </button>
+            </Button>
           )}
         </form>
       </section>
@@ -252,13 +253,19 @@ export default function ImportFromDesktop({ onImport, onDone, onCancel }) {
                 {t(scanError === 'denied' ? 'mobile.import.cameraDenied' : 'mobile.import.scanFailed')}
               </p>
               {scanError === 'denied' && (
-                <button type="button" className="mv-primary" onClick={() => { openCameraSettings().catch(() => {}); }}>
+                <Button variant="primary" size="touch" fullWidth className="mt-2" onClick={() => { openCameraSettings().catch(() => {}); }}>
                   {t('mobile.import.openSettings')}
-                </button>
+                </Button>
               )}
-              <button type="button" className={scanError === 'denied' ? 'mv-textbtn' : 'mv-primary'} onClick={startScan}>
+              <Button
+                variant={scanError === 'denied' ? 'link' : 'primary'}
+                size="touch"
+                fullWidth={scanError !== 'denied'}
+                className={scanError === 'denied' ? undefined : 'mt-2'}
+                onClick={startScan}
+              >
                 {t('mobile.import.scanAgain')}
-              </button>
+              </Button>
             </>
           ) : (
             <p className="mv-import-scan__progress" role="status" aria-live="polite">
@@ -266,7 +273,7 @@ export default function ImportFromDesktop({ onImport, onDone, onCancel }) {
               {notOurs && <span className="mv-import-scan__hint">{t('mobile.import.notOurs')}</span>}
             </p>
           )}
-          <button type="button" className="mv-textbtn" onClick={cancelScanning}>{t('common.cancel')}</button>
+          <Button variant="link" size="touch" onClick={cancelScanning}>{t('common.cancel')}</Button>
         </div>
       </section>
     );
@@ -276,7 +283,7 @@ export default function ImportFromDesktop({ onImport, onDone, onCancel }) {
     <section className="mv-add mv-import" aria-labelledby="mv-import-title">
       <div className="mv-add__bar">
         {onCancel && (
-          <button type="button" className="mv-textbtn" onClick={onCancel}>{t('common.back')}</button>
+          <Button variant="link" size="touch" onClick={onCancel}>{t('common.back')}</Button>
         )}
       </div>
       <h1 id="mv-import-title" className="mv-add__title">{t('mobile.import.title')}</h1>
@@ -294,7 +301,7 @@ export default function ImportFromDesktop({ onImport, onDone, onCancel }) {
         <a className="mv-import__faq" href={importFaqUrl(getMobileLocale())} target="_blank" rel="noopener noreferrer">
           {t('mobile.import.faq')}
         </a>
-        <button type="button" className="mv-primary" onClick={startScan}>{t('mobile.import.scan')}</button>
+        <Button variant="primary" size="touch" fullWidth className="mt-2" onClick={startScan}>{t('mobile.import.scan')}</Button>
       </div>
     </section>
   );

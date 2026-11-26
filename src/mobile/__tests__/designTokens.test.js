@@ -16,7 +16,8 @@ describe('the phone follows the design system', () => {
   it('white text on a fill uses accent-fill', () => {
     const offenders = own.filter(([, b]) => /color:\s*#fff\b/.test(b) && /background:\s*var\(--mail-accent\)/.test(b)).map(([s]) => s);
     expect(offenders).toEqual([]);
-    for (const sel of ['.mv-fab', '.mv-primary', '.mv-compose__send', '.mv-avatar', '.mv-avatar--all', '.mv-premium__primary', '.mv-swipe__act--move']) {
+    // The primary buttons are desktop's Button (`primary`: bg-mail-accent-fill), phoneButtons.test.js.
+    for (const sel of ['.mv-fab', '.mv-avatar', '.mv-avatar--all', '.mv-swipe__act--move']) {
       expect(body(sel), sel).toMatch(/background: var\(--mail-accent-fill\)/);
     }
     expect(body(".mv-search__chip[aria-pressed='true']")).toMatch(/background: var\(--mail-accent-fill\)/);
@@ -36,7 +37,6 @@ describe('the phone follows the design system', () => {
       }
     }
     expect(off).toEqual([]);
-    expect(body('.mv-compose__send')).toMatch(/border-radius: 8px/);
   });
 
   it('the toast and the compose button separate by tone, not shadow', () => {

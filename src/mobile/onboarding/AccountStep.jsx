@@ -8,6 +8,7 @@ import { useT } from '../i18n.js';
 import { useMobileStore } from '../store.js';
 import ImportFromDesktop from '../ImportFromDesktop.jsx';
 import AddAccount from '../AddAccount.jsx';
+import { Button } from '../../components/ui/Button.jsx';
 
 export default function AccountStep({ flow, onFlow, onAdd, onOAuth, onOAuthCancel, onAdded }) {
   const t = useT();
@@ -59,9 +60,9 @@ export default function AccountStep({ flow, onFlow, onAdd, onOAuth, onOAuthCance
       <h1 className="mv-tour__title">{t('mobile.onboarding.accountTitle')}</h1>
       <p className="mv-tour__lead">{t('mobile.onboarding.accountLead')}</p>
       <div className="mv-tour__choices">
-        <button type="button" className="mv-primary" disabled={busy} onClick={() => onFlow('import')}>
+        <Button variant="primary" size="touch" fullWidth disabled={busy} onClick={() => onFlow('import')}>
           {t('mobile.import.entry')}
-        </button>
+        </Button>
         <button type="button" className="mv-provider" disabled={busy} onClick={() => onFlow('manual')}>
           {t('mobile.onboarding.addManually')}
         </button>

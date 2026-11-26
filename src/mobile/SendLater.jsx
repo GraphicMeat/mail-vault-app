@@ -13,6 +13,7 @@ import Sheet from './Sheet.jsx';
 import { formatSendTime } from './format.js';
 import { openPaywall, usePremium } from './premium.js';
 import { useT } from './i18n.js';
+import { Button } from '../components/ui/Button.jsx';
 
 /** Core `send::schedule::FREE_DELAY_MINUTES`. */
 export const FREE_DELAY_MS = 5 * 60_000;
@@ -135,9 +136,9 @@ export default function SendLater({ title, onPick, onClose }) {
         {Number.isFinite(customAt) && (
           <p className="mv-schedule__about">{t('mobile.schedule.about', { time: formatSendTime(customAt, now) })}</p>
         )}
-        <button type="button" className="mv-outbox__btn mv-schedule__confirm" disabled={!custom} onClick={() => choose(customAt)}>
+        <Button variant="secondary" size="touch" className="self-end" disabled={!custom} onClick={() => choose(customAt)}>
           {t('mobile.schedule.confirm')}
-        </button>
+        </Button>
       </div>
       {problem && <p className="mv-compose__error" role="alert">{t(problem)}</p>}
       <div className="mv-sheet__actions">

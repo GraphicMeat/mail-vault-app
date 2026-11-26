@@ -18,6 +18,7 @@ import KeyboardLayer from './KeyboardLayer.jsx';
 import { useT, getMobileLocale } from './i18n.js';
 import { errorKey } from './errors.js';
 import { PREMIUM_FEATURES, MANAGE_URL, storeOf, premiumSummary, introText } from './premium.js';
+import { Button } from '../components/ui/Button.jsx';
 
 const APP_VERSION = import.meta.env?.MV_APP_VERSION || '';
 const TERMS_URL = 'https://mailvaultapp.com/terms.html';
@@ -108,9 +109,9 @@ function WebSignIn({ startOpen, onDone }) {
   }
   if (step === 'closed') {
     return (
-      <button type="button" className="mv-premium__linkbtn" onClick={() => setStep('email')}>
+      <Button variant="link" size="touch" fullWidth className="mt-5 justify-start mv-btn-flush" onClick={() => setStep('email')}>
         {t('mobile.premium.web.prompt')}
-      </button>
+      </Button>
     );
   }
   // A code that can no longer be used (expired, spent, locked) asks for a new one.
@@ -142,21 +143,21 @@ function WebSignIn({ startOpen, onDone }) {
       {problem && <p className="mv-premium__error" role="alert">{t(errorKey(problem))}</p>}
       {noPremium && <p className="mv-premium__error" role="alert">{t('mobile.premium.web.noPremium')}</p>}
       <div className="mv-premium__row">
-        <button type="button" className="mv-textbtn" disabled={busy} onClick={() => { setStep('closed'); setProblem(null); setNoPremium(false); }}>
+        <Button variant="link" size="touch" disabled={busy} onClick={() => { setStep('closed'); setProblem(null); setNoPremium(false); }}>
           {t('common.cancel')}
-        </button>
+        </Button>
         {step === 'email' && (
-          <button type="submit" className="mv-premium__primary" disabled={busy || !email.includes('@')}>
+          <Button variant="primary" size="touch" type="submit" disabled={busy || !email.includes('@')}>
             {busy ? t('mobile.premium.web.sending') : t('mobile.premium.web.sendCode')}
-          </button>
+          </Button>
         )}
         {step === 'code' && needNewCode && (
-          <button type="button" className="mv-premium__primary" disabled={busy} onClick={start}>{t('mobile.premium.web.newCode')}</button>
+          <Button variant="primary" size="touch" disabled={busy} onClick={start}>{t('mobile.premium.web.newCode')}</Button>
         )}
         {step === 'code' && !needNewCode && (
-          <button type="submit" className="mv-premium__primary" disabled={busy || !code.trim()}>
+          <Button variant="primary" size="touch" type="submit" disabled={busy || !code.trim()}>
             {busy ? t('mobile.premium.web.verifying') : t('mobile.premium.web.verify')}
-          </button>
+          </Button>
         )}
       </div>
     </form>
@@ -290,9 +291,9 @@ export default function Premium({ feature = null, signIn = false, onClose }) {
           )}
           {premium.source === 'web' && (
             // Releases this phone's place among the account's devices.
-            <button type="button" className="mv-premium__linkbtn" data-mv-web-sign-out disabled={Boolean(action)} onClick={signOut}>
+            <Button variant="link" size="touch" fullWidth className="mt-5 justify-start mv-btn-flush" data-mv-web-sign-out disabled={Boolean(action)} onClick={signOut}>
               {t('mobile.premium.web.signOut')}
-            </button>
+            </Button>
           )}
           {result?.code && <p className="mv-premium__error" role="alert">{t(errorKey(result.code))}</p>}
         </>
@@ -303,7 +304,7 @@ export default function Premium({ feature = null, signIn = false, onClose }) {
           {products.state === 'failed' && (
             <div>
               <p className="mv-premium__error" role="alert">{t(products.code === 'UNAVAILABLE' ? 'mobile.error.UNAVAILABLE' : 'mobile.premium.products.none')}</p>
-              <button type="button" className="mv-textbtn" onClick={loadProducts}>{t('common.retry')}</button>
+              <Button variant="link" size="touch" onClick={loadProducts}>{t('common.retry')}</Button>
             </div>
           )}
           {products.state === 'ready' && products.list.length === 0 && (
@@ -330,12 +331,12 @@ export default function Premium({ feature = null, signIn = false, onClose }) {
             </div>
           )}
           <div className="mv-premium__row mv-premium__row--stack">
-            <button type="button" className="mv-premium__primary" disabled={!chosen || Boolean(action)} aria-busy={action === 'buy' || undefined} onClick={subscribe}>
+            <Button variant="primary" size="touch" disabled={!chosen || Boolean(action)} aria-busy={action === 'buy' || undefined} onClick={subscribe}>
               {action === 'buy' ? t('mobile.premium.subscribing') : t('mobile.premium.subscribe')}
-            </button>
-            <button type="button" className="mv-textbtn" disabled={Boolean(action)} aria-busy={action === 'restore' || undefined} onClick={restore}>
+            </Button>
+            <Button variant="link" size="touch" disabled={Boolean(action)} aria-busy={action === 'restore' || undefined} onClick={restore}>
               {action === 'restore' ? t('mobile.premium.restoring') : t('mobile.premium.restore')}
-            </button>
+            </Button>
           </div>
           {result?.kind && <p className="mv-premium__note" role="status">{t(`mobile.premium.result.${result.kind}`)}</p>}
           {result?.code && <p className="mv-premium__error" role="alert">{t(errorKey(result.code))}</p>}

@@ -15,6 +15,7 @@ import { formatSendTime } from './format.js';
 import { useMobileStore } from './store.js';
 import { useBackLayer } from './backStack.js';
 import { useT } from './i18n.js';
+import { Button } from '../components/ui/Button.jsx';
 
 // Literal keys, so the catalog tests can see every one.
 const STATE_KEYS = Object.freeze({
@@ -60,15 +61,15 @@ function ScheduledList({ rows, now, onMove }) {
                 <span className="mv-outbox__state">{t('mobile.schedule.about', { time: formatSendTime(r.scheduledMs, now) })}</span>
               </div>
               <div className="mv-outbox__actions">
-                <button type="button" className="mv-outbox__btn" aria-label={t('mobile.outbox.changeTimeOf', { subject })} onClick={() => onMove(r)}>
+                <Button variant="secondary" size="touch" aria-label={t('mobile.outbox.changeTimeOf', { subject })} onClick={() => onMove(r)}>
                   {t('mobile.outbox.changeTime')}
-                </button>
-                <button type="button" className="mv-outbox__btn" aria-label={t('mobile.outbox.sendNowOf', { subject })} onClick={() => store().retryOutbox(r.id)}>
+                </Button>
+                <Button variant="secondary" size="touch" aria-label={t('mobile.outbox.sendNowOf', { subject })} onClick={() => store().retryOutbox(r.id)}>
                   {t('mobile.outbox.sendNow')}
-                </button>
-                <button type="button" className="mv-outbox__btn mv-outbox__btn--danger" aria-label={t('mobile.outbox.cancelOf', { subject })} onClick={() => store().discardOutbox(r.id)}>
+                </Button>
+                <Button variant="dangerTint" size="touch" aria-label={t('mobile.outbox.cancelOf', { subject })} onClick={() => store().discardOutbox(r.id)}>
                   {t('common.cancel')}
-                </button>
+                </Button>
               </div>
             </li>
           );
@@ -115,12 +116,12 @@ export function OutboxSheet({ rows: all, onClose }) {
                 </div>
                 {actionable && (
                   <div className="mv-outbox__actions">
-                    <button type="button" className="mv-outbox__btn" aria-label={t('mobile.outbox.retry', { subject })} onClick={() => store().retryOutbox(r.id)}>
+                    <Button variant="secondary" size="touch" aria-label={t('mobile.outbox.retry', { subject })} onClick={() => store().retryOutbox(r.id)}>
                       {t('common.retry')}
-                    </button>
-                    <button type="button" className="mv-outbox__btn mv-outbox__btn--danger" aria-label={t('mobile.outbox.discard', { subject })} onClick={() => store().discardOutbox(r.id)}>
+                    </Button>
+                    <Button variant="dangerTint" size="touch" aria-label={t('mobile.outbox.discard', { subject })} onClick={() => store().discardOutbox(r.id)}>
                       {t('common.discard')}
-                    </button>
+                    </Button>
                   </div>
                 )}
               </li>

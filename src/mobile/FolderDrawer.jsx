@@ -21,6 +21,7 @@ import { folderLabel, ALL_INBOXES } from './folders.js';
 import { AllInboxesIcon } from './AccountSwitcher.jsx';
 import { ViewIcon } from '../components/ViewIcon.jsx';
 import { viewLabel } from '../utils/viewLabel.js';
+import { Button } from '../components/ui/Button.jsx';
 
 export default function FolderDrawer({ account, folders, activeFolder, onSelect, onClose, drafts = 0, onDrafts, followUps = 0, followUpsDue = 0, onFollowUps, onSettings, views = [], viewCounts = {}, onView, onEditViews, onNewView }) {
   const t = useT();
@@ -76,14 +77,14 @@ export default function FolderDrawer({ account, folders, activeFolder, onSelect,
           <div className="mv-drawer__heading-row">
             <h3 className="mv-drawer__heading">{t('views.section')}</h3>
             {onEditViews && (
-              <button type="button" className="mv-iconbtn mv-drawer__heading-action" data-mv-views-edit aria-label={t('views.edit')} title={t('views.edit')} onClick={onEditViews}>
+              <Button variant="ghost" size="touch" icon data-mv-views-edit aria-label={t('views.edit')} title={t('views.edit')} onClick={onEditViews}>
                 <Pencil size={16} aria-hidden="true" />
-              </button>
+              </Button>
             )}
             {onNewView && (
-              <button type="button" className="mv-iconbtn mv-drawer__heading-action" data-mv-views-new aria-label={t('views.new')} title={t('views.new')} onClick={onNewView}>
+              <Button variant="ghost" size="touch" icon data-mv-views-new aria-label={t('views.new')} title={t('views.new')} onClick={onNewView}>
                 <Plus size={16} aria-hidden="true" />
-              </button>
+              </Button>
             )}
           </div>
           {views.map((v) => (

@@ -7,6 +7,7 @@ import Sheet from './Sheet.jsx';
 import TagChips from './TagChips.jsx';
 import { useT } from './i18n.js';
 import { ensureTags, useRowTags, useTagStore } from './tags.js';
+import { Button } from '../components/ui/Button.jsx';
 
 /** `accountId`, `folder`, `uid`: the open message. */
 export default function TagSheet({ accountId, folder, uid, onClose }) {
@@ -48,7 +49,7 @@ export default function TagSheet({ accountId, folder, uid, onClose }) {
       <form className="mv-tags__new" onSubmit={create}>
         <input className="mv-input" value={name} maxLength={80} aria-label={t('quickActions.param.labelName')}
           placeholder={t('quickActions.param.labelName')} onChange={(e) => setName(e.target.value)} />
-        <button type="submit" className="mv-outbox__btn" disabled={!name.trim() || busy}>{t('common.create')}</button>
+        <Button variant="secondary" size="touch" type="submit" disabled={!name.trim() || busy}>{t('common.create')}</Button>
       </form>
       <div className="mv-sheet__actions">
         <button type="button" className="mv-sheet__action" onClick={onClose}>{t('common.close')}</button>

@@ -24,6 +24,7 @@ import { errorKey } from './errors.js';
 import { useT } from './i18n.js';
 import { useKeyboardViewport } from './keyboardViewport.js';
 import { parseSearchQuery } from '../utils/searchQuery.js';
+import { Button } from '../components/ui/Button.jsx';
 
 /** Quiet time after the last keystroke before the search runs. */
 export const SEARCH_DEBOUNCE_MS = 250;
@@ -253,9 +254,9 @@ export default function Search({ onOpen, onSwipe: swipeAction, onClose, initialQ
             <div className="mv-search__recent">
               <div className="mv-search__recent-head">
                 <h2 className="mv-search__heading">{t('mobile.search.recent')}</h2>
-                <button type="button" className="mv-search__link" onClick={() => useMobileStore.getState().clearRecentSearches()}>
+                <Button variant="link" size="touch" onClick={() => useMobileStore.getState().clearRecentSearches()}>
                   {t('common.clear')}
-                </button>
+                </Button>
               </div>
               <ul className="mv-search__recent-list">
                 {recent.map((q) => (
@@ -276,9 +277,9 @@ export default function Search({ onOpen, onSwipe: swipeAction, onClose, initialQ
             {rowsView.slice(0, firstServer)}
             {local.state === 'more' && <p className="mv-search__note" role="status">{t('mobile.search.searching')}</p>}
             {local.state === 'done' && local.cursor != null && local.rows.length >= AUTO_ROWS && (
-              <button type="button" className="mv-search__server-btn" data-mv-search-more onClick={() => loadMore(true)}>
+              <Button variant="secondary" size="touch" data-mv-search-more onClick={() => loadMore(true)}>
                 {t('mobile.search.more')}
-              </button>
+              </Button>
             )}
             {firstServer < rowsView.length && (
               <>
@@ -302,9 +303,9 @@ export default function Search({ onOpen, onSwipe: swipeAction, onClose, initialQ
                   <p className="mv-search__note">{t('mobile.search.serverNone')}</p>
                 )}
                 {server.state !== 'done' && (
-                  <button type="button" className="mv-search__server-btn" data-mv-search-server onClick={searchServer}>
+                  <Button variant="secondary" size="touch" data-mv-search-server onClick={searchServer}>
                     {t('mobile.search.server')}
-                  </button>
+                  </Button>
                 )}
               </>
             )}

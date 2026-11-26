@@ -395,8 +395,8 @@ describe('needs_auth', () => {
     );
   }
 
-  const bannerButton = () => screen.getAllByRole('button').find((b) => b.className.includes('mv-reauth__btn'));
-  const rowButton = () => screen.getAllByRole('button').find((b) => b.className.includes('mv-acct__reauth'));
+  const bannerButton = () => screen.getAllByRole('button').find((b) => b.dataset.mvReauth === 'banner');
+  const rowButton = () => screen.getAllByRole('button').find((b) => b.dataset.mvReauth === 'row');
 
   beforeEach(() => {
     useMobileStore.setState({ accounts: [parked, other], activeAccountId: 'a1', reauthState: null, syncState: {} });

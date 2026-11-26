@@ -8,6 +8,7 @@ import { displayText } from '../utils/bidiText.js';
 import { useMobileStore } from './store.js';
 import { formatEmailDate } from './format.js';
 import { useT } from './i18n.js';
+import { Button } from '../components/ui/Button.jsx';
 
 function CloseIcon() {
   return (
@@ -47,14 +48,12 @@ export default function FollowUpList({ onOpen, onClose }) {
                   <span className="mv-drafts__to" dir="auto">{t('followUp.to', { recipients: displayText(f.recipients, '') })}</span>
                   <span className="mv-drafts__when">{when}</span>
                 </button>
-                <button
-                  type="button"
-                  className="mv-iconbtn mv-drafts__delete"
+                <Button variant="ghost" size="touch" icon
                   aria-label={t('followUp.dismiss')}
                   onClick={() => useMobileStore.getState().dismissFollowUp(f.id)}
                 >
                   <CloseIcon />
-                </button>
+                </Button>
               </li>
             );
           })}

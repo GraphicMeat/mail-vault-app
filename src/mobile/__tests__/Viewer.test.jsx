@@ -308,7 +308,8 @@ describe('Viewer', () => {
     expect(before.getAttribute('srcdoc')).not.toContain('https:;');
     const button = screen.getByRole('button', { name: t('mobile.viewer.loadImages', { count: 3 }) });
     expect(button.textContent).toBe('Load images (3)');
-    expect(parseInt(getComputedStyle(button).minHeight, 10) || parseInt(button.style.minHeight, 10)).toBeGreaterThanOrEqual(44);
+    // Desktop's Button at the phone's `touch` size: `min-h-11`, a 44px minimum.
+    expect(button.classList.contains('min-h-11')).toBe(true);
     fireEvent.click(button);
     const after = frame();
     expect(after.getAttribute('srcdoc')).toContain('img-src data: cid: https:;');

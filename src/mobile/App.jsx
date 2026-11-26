@@ -77,6 +77,7 @@ import MovePicker from './MovePicker.jsx';
 import Sheet from './Sheet.jsx';
 import { rowUids } from './prefs.js';
 import { visibleAccounts, markReadPlan, afterDeletePick } from './prefs.js';
+import { Button } from '../components/ui/Button.jsx';
 
 function logLine(payload) {
   const line = `MV_MOBILE ${JSON.stringify(payload)}`;
@@ -855,7 +856,7 @@ function App() {
         ) : (
           <div className="mv-status">
             <p>{t('mobile.list.loadFailed')}</p>
-            <button type="button" onClick={start}>{t('common.retry')}</button>
+            <Button variant="secondary" size="touch" className="mt-3" onClick={start}>{t('common.retry')}</Button>
           </div>
         )}
       </div>
@@ -883,11 +884,11 @@ function App() {
   return (
     <div className="mv-kb-layer mv-app">
       <header className="mv-header">
-        <button type="button" className="mv-iconbtn" aria-label={t('mobile.drawer.open')} onClick={() => { setPanel('drawer'); ensureViews(); useViewStore.getState().loadCounts(); }}>
+        <Button variant="ghost" size="touch" icon aria-label={t('mobile.drawer.open')} onClick={() => { setPanel('drawer'); ensureViews(); useViewStore.getState().loadCounts(); }}>
           <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
             <path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
           </svg>
-        </button>
+        </Button>
         <div className="mv-header__titles">
           <h1 className="mv-header__title" dir="auto">{allInboxes ? t('sidebar.allInboxes') : folderLabel(folder)}</h1>
           {account && (
@@ -910,11 +911,11 @@ function App() {
           )}
         </div>
         <PendingChip />
-        <button type="button" className="mv-iconbtn" data-mv-search-open aria-label={t('mobile.search.open')} onClick={() => setSearchOpen(true)}>
+        <Button variant="ghost" size="touch" icon data-mv-search-open aria-label={t('mobile.search.open')} onClick={() => setSearchOpen(true)}>
           <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="11" cy="11" r="6.5" /><path d="m20 20-4.2-4.2" />
           </svg>
-        </button>
+        </Button>
         <SyncChip sync={sync} total={listState === 'ready' ? total : null} onRetry={onRefresh} />
       </header>
       {(allInboxes ? shownAccounts : [account]).map((a) => (
@@ -943,7 +944,7 @@ function App() {
       {listState === 'failed' && (
         <div className="mv-status">
           <p>{t('mobile.list.loadFailed')}</p>
-          <button type="button" onClick={loadList}>{t('common.retry')}</button>
+          <Button variant="secondary" size="touch" className="mt-3" onClick={loadList}>{t('common.retry')}</Button>
         </div>
       )}
       {!open && (
@@ -1030,15 +1031,15 @@ function App() {
           <div className="mv-sheet__grip" aria-hidden="true" />
           <h2 className="mv-sheet__title">{askTitle}</h2>
           <div className="mv-acct__actions" data-mv-confirm-delete>
-            <button type="button" className="mv-textbtn" data-mv-confirm-cancel onClick={() => setAskDelete(null)}>{t('common.cancel')}</button>
-            <button
-              type="button"
-              className={askDelete.kind === 'move' ? 'mv-textbtn' : 'mv-textbtn mv-textbtn--danger'}
+            <Button variant="secondary" size="touch" data-mv-confirm-cancel onClick={() => setAskDelete(null)}>{t('common.cancel')}</Button>
+            <Button
+              variant={askDelete.kind === 'move' ? 'primary' : 'danger'}
+              size="touch"
               data-mv-confirm-run
               onClick={() => { const { run } = askDelete; setAskDelete(null); run(); }}
             >
               {askDelete.kind === 'move' ? t('mobile.actions.move') : t('common.delete')}
-            </button>
+            </Button>
           </div>
         </Sheet>
       )}

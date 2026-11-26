@@ -55,6 +55,7 @@ import { useMobileStore } from './store.js';
 import { viewerTheme } from './prefs.js';
 import QuickReplies from './QuickReplies.jsx';
 import { AiResult, useAiAction } from './AiActions.jsx';
+import { Button } from '../components/ui/Button.jsx';
 
 /** Exactly this, never more: no `allow-same-origin`, no `allow-scripts`. */
 export const FRAME_SANDBOX = 'allow-popups allow-popups-to-escape-sandbox';
@@ -517,7 +518,7 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
         // retry asks again.
         <div className="mv-viewer__images" data-mv-attachments-unknown role="status">
           <span>{t('mobile.viewer.attachmentsUnknown')}</span>
-          <button type="button" style={{ minHeight: '44px' }} onClick={retry}>{t('common.retry')}</button>
+          <Button variant="link" size="touch" className="flex-none" onClick={retry}>{t('common.retry')}</Button>
         </div>
       )}
       {body?.truncated && (
@@ -529,9 +530,9 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
       {remoteImages > 0 && !remoteOn && (
         <div className="mv-viewer__images">
           <span>{pixelsKept ? t('mobile.viewer.imagesTrack') : t('mobile.viewer.imagesBlocked')}</span>
-          <button type="button" data-mv-load-images style={{ minHeight: '44px' }} onClick={() => setAllowRemote(true)}>
+          <Button variant="link" size="touch" className="flex-none" data-mv-load-images onClick={() => setAllowRemote(true)}>
             {t('mobile.viewer.loadImages', { count: remoteImages })}
-          </button>
+          </Button>
         </div>
       )}
       {state.phase === 'loading' && <p className="mv-viewer__notice" role="status">{t('mobile.viewer.loading')}</p>}
@@ -539,7 +540,7 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
       {state.phase === 'failed' && (
         <div className="mv-viewer__notice" role="alert">
           <p>{t('mobile.viewer.loadFailed', { reason: t(errorKey(state.code)) })}</p>
-          <button type="button" style={{ minHeight: '44px' }} onClick={retry}>{t('common.retry')}</button>
+          <Button variant="link" size="touch" className="flex-none" onClick={retry}>{t('common.retry')}</Button>
         </div>
       )}
       {/* OpenPGP (`pgp` from the engine): a body no imported key opens shows the notice instead

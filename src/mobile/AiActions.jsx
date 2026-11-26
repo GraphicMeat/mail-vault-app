@@ -10,6 +10,7 @@ import { useMobileStore } from './store.js';
 import { useBackLayer } from './backStack.js';
 import { useT } from './i18n.js';
 import Sheet from './Sheet.jsx';
+import { Button } from '../components/ui/Button.jsx';
 
 /** The catalog key of an engine refusal (`{ok: false, code}`). */
 export function aiErrorKey(code) {
@@ -41,10 +42,10 @@ export function AiReview({ review, busy, onCancel, onConfirm }) {
       {review.leavesDevice && <p className="mv-sheet__text" role="note">{t('ai.preview.leavesDevice')}</p>}
       <pre className="mv-ai__text" data-mv-ai-prompt dir="auto">{review.prompt}</pre>
       <div className="mv-acct__actions mv-ai__buttons">
-        <button type="button" className="mv-textbtn" onClick={onCancel}>{t('common.cancel')}</button>
-        <button type="button" className="mv-textbtn" data-mv-ai-send disabled={busy} onClick={onConfirm}>
+        <Button variant="secondary" size="touch" onClick={onCancel}>{t('common.cancel')}</Button>
+        <Button variant="primary" size="touch" data-mv-ai-send disabled={busy} onClick={onConfirm}>
           {busy ? t('compose.sending') : t('compose.send')}
-        </button>
+        </Button>
       </div>
     </Sheet>
   );
@@ -131,8 +132,8 @@ export function AiResult({ title, text, onClose, onUse }) {
       <h2 className="mv-sheet__title">{title}</h2>
       <p className="mv-ai__text" data-mv-ai-result dir="auto">{text}</p>
       <div className="mv-acct__actions mv-ai__buttons">
-        <button type="button" className="mv-textbtn" onClick={onClose}>{t('common.close')}</button>
-        {onUse && <button type="button" className="mv-textbtn" data-mv-ai-use onClick={onUse}>{t('ai.actions.useInReply')}</button>}
+        <Button variant="secondary" size="touch" onClick={onClose}>{t('common.close')}</Button>
+        {onUse && <Button variant="primary" size="touch" data-mv-ai-use onClick={onUse}>{t('ai.actions.useInReply')}</Button>}
       </div>
     </Sheet>
   );

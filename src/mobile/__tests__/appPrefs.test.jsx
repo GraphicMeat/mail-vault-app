@@ -165,7 +165,7 @@ describe('preferences in the app', () => {
     expect(document.querySelector('[data-mv-tool="delete"]')).toBeTruthy();
     await act(async () => { fireEvent.click(document.querySelector('[data-mv-tool="delete"]')); });
     const sheet = document.querySelector('[data-mv-confirm-delete]');
-    await act(async () => { fireEvent.click(sheet.querySelector('.mv-textbtn--danger')); });
+    await act(async () => { fireEvent.click(sheet.querySelector('[data-mv-confirm-run].bg-mail-danger-fill')); });
     expect(store.getState().undo).toMatchObject({ kind: 'delete', count: 1 });
   });
 
@@ -215,7 +215,7 @@ describe('preferences in the app', () => {
     expect(document.querySelector('[data-mv-confirm-delete]')).toBeTruthy();
     expect(store.getState().undo).toBe(null);
     expect(screen.getByText('Found 42')).toBeTruthy();
-    await act(async () => { fireEvent.click(document.querySelector('[data-mv-confirm-delete] .mv-textbtn--danger')); });
+    await act(async () => { fireEvent.click(document.querySelector('[data-mv-confirm-delete] [data-mv-confirm-run].bg-mail-danger-fill')); });
     expect(store.getState().undo).toMatchObject({ kind: 'delete', count: 1 });
     await waitFor(() => expect(screen.queryByText('Found 42')).toBe(null));
   });

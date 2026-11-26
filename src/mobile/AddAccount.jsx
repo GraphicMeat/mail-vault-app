@@ -18,6 +18,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useT } from './i18n.js';
 import { errorKey } from './errors.js';
 import ImportFromDesktop from './ImportFromDesktop.jsx';
+import { Button } from '../components/ui/Button.jsx';
 
 const DEFAULT_PORT = { ssl: 993, starttls: 143, none: 143 };
 const DEFAULT_SMTP_PORT = { ssl: 465, starttls: 587 };
@@ -231,13 +232,13 @@ export default function AddAccount({ onSubmit, onOAuth, onOAuthCancel, onCancel,
     <section className="mv-add" aria-labelledby="mv-add-title">
       <div className="mv-add__bar">
         {step === 'waiting' ? (
-          <button type="button" className="mv-textbtn" onClick={cancelFlow}>
+          <Button variant="link" size="touch" onClick={cancelFlow}>
             {t('common.cancel')}
-          </button>
+          </Button>
         ) : onCancel && (
-          <button type="button" className="mv-textbtn" onClick={onCancel} disabled={busy}>
+          <Button variant="link" size="touch" onClick={onCancel} disabled={busy}>
             {t('common.cancel')}
-          </button>
+          </Button>
         )}
       </div>
       <h1 id="mv-add-title" className="mv-add__title">{t('mobile.add.title')}</h1>
@@ -292,16 +293,14 @@ export default function AddAccount({ onSubmit, onOAuth, onOAuthCancel, onCancel,
             />
           </Field>
           <p className="mv-add__hint">{t('mobile.add.jmapHint')}</p>
-          <button
-            type="button"
-            className="mv-textbtn"
+          <Button variant="link" size="touch"
             aria-expanded={advanced}
             aria-controls="mv-add-jmap-advanced"
             disabled={busy}
             onClick={() => setAdvanced((v) => !v)}
           >
             {t('mobile.add.advanced')}
-          </button>
+          </Button>
           {advanced && (
             <div id="mv-add-jmap-advanced">
               <Field id="mv-add-jmap-url" label={t('mobile.add.jmapUrl')}>
@@ -323,20 +322,20 @@ export default function AddAccount({ onSubmit, onOAuth, onOAuthCancel, onCancel,
           {confirmHost && (
             <div className="mv-add__confirm" role="alert">
               <p dir="auto">{t('mobile.add.confirmHost', { host: confirmHost.host })}</p>
-              <button type="button" className="mv-primary" disabled={!canJmap} onClick={confirmJmapHost}>
+              <Button variant="primary" size="touch" fullWidth className="mt-2" disabled={!canJmap} onClick={confirmJmapHost}>
                 {t('mobile.add.confirmHostYes')}
-              </button>
+              </Button>
             </div>
           )}
           {errorCode && <p className="mv-add__error" role="alert">{t(errorKey(errorCode))}</p>}
           {!confirmHost && (
-            <button type="submit" className="mv-primary" disabled={!canJmap} aria-busy={busy}>
+            <Button variant="primary" size="touch" fullWidth className="mt-2" type="submit" disabled={!canJmap} aria-busy={busy}>
               {busy ? t('mobile.add.signingIn') : t('mobile.add.signIn')}
-            </button>
+            </Button>
           )}
-          <button type="button" className="mv-textbtn" disabled={busy} onClick={() => { setErrorCode(null); setConfirmHost(null); setStep('picker'); }}>
+          <Button variant="link" size="touch" disabled={busy} onClick={() => { setErrorCode(null); setConfirmHost(null); setStep('picker'); }}>
             {t('common.back')}
-          </button>
+          </Button>
         </form>
       ) : step === 'credentials' ? (
         <form className="mv-add__form" onSubmit={next} noValidate>
@@ -364,10 +363,10 @@ export default function AddAccount({ onSubmit, onOAuth, onOAuthCancel, onCancel,
               onChange={(e) => setPassword(e.target.value)}
             />
           </Field>
-          <button type="submit" className="mv-primary" disabled={!canNext}>{t('common.next')}</button>
-          <button type="button" className="mv-textbtn" onClick={() => setStep('picker')}>
+          <Button variant="primary" size="touch" fullWidth className="mt-2" type="submit" disabled={!canNext}>{t('common.next')}</Button>
+          <Button variant="link" size="touch" onClick={() => setStep('picker')}>
             {t('common.back')}
-          </button>
+          </Button>
         </form>
       ) : (
         <form className="mv-add__form" onSubmit={submit} noValidate>
@@ -465,12 +464,12 @@ export default function AddAccount({ onSubmit, onOAuth, onOAuthCancel, onCancel,
             </Field>
           </div>
           {errorCode && <p className="mv-add__error" role="alert">{t(errorKey(errorCode))}</p>}
-          <button type="submit" className="mv-primary" disabled={!canSubmit} aria-busy={busy}>
+          <Button variant="primary" size="touch" fullWidth className="mt-2" type="submit" disabled={!canSubmit} aria-busy={busy}>
             {busy ? t('mobile.add.signingIn') : t('mobile.add.signIn')}
-          </button>
-          <button type="button" className="mv-textbtn" disabled={busy} onClick={() => { setErrorCode(null); setStep('credentials'); }}>
+          </Button>
+          <Button variant="link" size="touch" disabled={busy} onClick={() => { setErrorCode(null); setStep('credentials'); }}>
             {t('common.back')}
-          </button>
+          </Button>
         </form>
       )}
     </section>

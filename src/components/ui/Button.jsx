@@ -39,12 +39,14 @@ const SIZES = {
   sm: 'px-3 py-1.5 text-sm gap-1.5',
   md: 'px-4 py-2 text-sm gap-2',
   lg: 'px-4 py-2.5 text-sm gap-2',
+  /** The phone: md's padding and type at a finger's 44px. */
+  touch: 'min-h-11 px-4 text-sm gap-2',
 };
 
 /** Square hit-areas for icon-only buttons. Glyph size stays the caller's. */
-const ICON_SIZES = { xs: 'p-1 min-w-7 min-h-7', sm: 'p-1.5 min-w-8 min-h-8', md: 'p-2 min-w-9 min-h-9', lg: 'p-2.5 min-w-10 min-h-10' };
+const ICON_SIZES = { xs: 'p-1 min-w-7 min-h-7', sm: 'p-1.5 min-w-8 min-h-8', md: 'p-2 min-w-9 min-h-9', lg: 'p-2.5 min-w-10 min-h-10', touch: 'min-w-11 min-h-11 p-2.5' };
 
-const SPINNER = { xs: 12, sm: 12, md: 14, lg: 14 };
+const SPINNER = { xs: 12, sm: 12, md: 14, lg: 14, touch: 14 };
 
 export const Button = forwardRef(function Button(
   {

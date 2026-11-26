@@ -116,22 +116,6 @@ body {
 .mv-header__email { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .mv-header__count { flex: none; font-size: 0.75rem; font-weight: 500; color: var(--mail-text-muted); }
 
-/* 44px square tap target around an icon. */
-.mv-iconbtn {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  padding: 0;
-  border: 0;
-  border-radius: 8px;
-  background: none;
-  color: var(--mail-text);
-}
-.mv-iconbtn:active { background: var(--mail-surface-hover); }
-
 .mv-avatar {
   flex: none;
   display: inline-flex;
@@ -480,17 +464,6 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
   color: var(--mail-text-muted);
 }
 .mv-viewer__images span { flex: 1; min-width: 0; padding: 6px 0; }
-.mv-viewer__images button,
-.mv-viewer__notice button {
-  flex: none;
-  border: 0;
-  border-radius: 8px;
-  padding: 0 12px;
-  background: none;
-  color: var(--mail-accent-text);
-  font: inherit;
-  font-weight: 600;
-}
 .mv-viewer__notice {
   margin: 24px calc(var(--mv-safe-right) + 16px) 0 calc(var(--mv-safe-left) + 16px);
   text-align: center;
@@ -590,16 +563,6 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
   padding: 24px;
   text-align: center;
   color: var(--mail-text-muted);
-}
-.mv-status button {
-  margin-top: 12px;
-  min-height: 44px;
-  padding: 0 16px;
-  border: 1px solid var(--mail-border);
-  border-radius: 8px;
-  background: var(--mail-surface);
-  color: var(--mail-text);
-  font: inherit;
 }
 
 .mv-list__empty { margin: 48px 24px; text-align: center; color: var(--mail-text-muted); }
@@ -742,31 +705,24 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 .mv-folder--active .mv-folder__icon, .mv-folder--active .mv-folder__count { color: inherit; }
 .mv-folder--heading { min-height: 36px; color: var(--mail-text-muted); font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
 
-/* Text buttons and the primary action. */
-.mv-textbtn {
-  min-height: 44px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: 8px;
+/* Buttons are desktop's Button (src/components/ui/Button.jsx, size `touch`), drawn for Tailwind's
+   preflight, which the phone scopes to `.mv-shared-ui` (vite.mobile.config.js). The phone's own
+   layers give a button that base here, at zero specificity, so every phone rule keeps its weight.
+   Desktop gives every button:focus-visible the same outline (index.css). */
+:where(.mv-kb-layer, .mv-overlay, .mv-toasts, .mv-viewer, .mv-thread, .mv-drafts) :where(button) {
+  box-sizing: border-box;
+  border: 0 solid var(--mail-border);
   background: none;
-  color: var(--mail-accent-text);
+  padding: 0;
   font: inherit;
-  font-weight: 500;
+  color: inherit;
 }
-.mv-textbtn--danger { color: var(--mv-danger); font-weight: 600; }
-.mv-textbtn:disabled { opacity: 0.5; }
-.mv-primary {
-  width: 100%;
-  min-height: 48px;
-  margin-top: 8px;
-  border: 0;
-  border-radius: 8px;
-  background: var(--mail-accent-fill);
-  color: #fff;
-  font: inherit;
-  font-weight: 600;
+:where(.mv-kb-layer, .mv-overlay, .mv-toasts, .mv-viewer, .mv-thread, .mv-drafts) :where(button):focus-visible {
+  outline: 2px solid var(--mail-accent);
+  outline-offset: 2px;
 }
-.mv-primary:disabled { opacity: 0.5; }
+/* A text button whose label lines up with the text around it (Cc/Bcc, a link row). */
+.mv-btn-flush { padding-inline: 0; }
 
 /* Add account: a full screen on first launch, an overlay from the switcher. */
 .mv-add {
@@ -776,7 +732,7 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
   padding: calc(var(--mv-safe-top) + 4px) calc(var(--mv-safe-right) + 20px) calc(var(--mv-safe-bottom) + 24px) calc(var(--mv-safe-left) + 20px);
 }
 .mv-add-overlay { z-index: 30; display: flex; background: var(--mail-bg); }
-.mv-add__bar { min-height: 44px; margin: 0 -12px; display: flex; }
+.mv-add__bar { min-height: 44px; margin: 0 -16px; display: flex; }
 .mv-add__title { margin: 8px 0 4px; font-size: 1.5rem; font-weight: 600; line-height: 1.25; }
 .mv-add__lead { margin: 0 0 20px; color: var(--mail-text-muted); }
 .mv-add__form { display: flex; flex-direction: column; gap: 14px; max-width: 480px; }
@@ -827,8 +783,7 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 }
 .mv-tour__bar > :first-child { justify-self: start; }
 .mv-tour__bar > :last-child { justify-self: end; }
-.mv-tour__bar .mv-textbtn { padding: 0 8px; text-align: start; }
-.mv-tour__bar > :last-child.mv-textbtn { text-align: end; }
+.mv-tour__bar > button { padding-inline: 8px; }
 .mv-tour__progress { font-size: 0.8125rem; color: var(--mail-text-muted); text-align: center; }
 .mv-tour__body {
   flex: 1;
@@ -848,7 +803,6 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
   display: flex;
   justify-content: center;
 }
-.mv-tour__later { width: 100%; min-height: 48px; margin-top: 8px; }
 .mv-tour__brand { margin: 16px 0 2px; font-size: 1.75rem; font-weight: 700; line-height: 1.2; text-align: center; }
 .mv-tour__brand-accent { color: var(--mail-accent-text); }
 .mv-tour__trust { margin: 0 0 24px; font-size: 0.875rem; color: var(--mail-text-muted); text-align: center; }
@@ -874,7 +828,6 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 .mv-tour__native { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mv-tour__check { flex-shrink: 0; }
 .mv-tour__choices { display: flex; flex-direction: column; gap: 10px; }
-.mv-tour__choices .mv-primary { margin-top: 0; }
 .mv-tour__features { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .mv-tour__feature { display: flex; flex-direction: column; gap: 2px; padding: 12px; border: 1px solid var(--mail-border); border-radius: 12px; }
 .mv-tour__feature-title { font-weight: 600; }
@@ -968,18 +921,6 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 }
 .mv-reauth__text { flex: 1 1 12rem; margin: 0; overflow-wrap: anywhere; }
 .mv-reauth__error { flex-basis: 100%; margin: 0; color: var(--mv-danger); }
-.mv-reauth__btn {
-  flex: none;
-  min-height: 44px;
-  padding: 0 4px;
-  border: 0;
-  background: none;
-  color: var(--mail-accent-text);
-  font: inherit;
-  font-weight: 600;
-}
-.mv-reauth__btn:disabled { opacity: 0.5; }
-.mv-acct__reauth { flex: none; color: var(--mail-accent-text); font-weight: 600; }
 
 /* The outbox row between the header and the list (never inside the virtual scroller). */
 .mv-outbox-row {
@@ -1006,17 +947,6 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 .mv-outbox__state { font-size: 0.8125rem; color: var(--mail-text-muted); }
 .mv-outbox__item--failed .mv-outbox__state, .mv-outbox__item--uncertain .mv-outbox__state { color: var(--mv-danger); }
 .mv-outbox__actions { display: flex; justify-content: flex-end; gap: 8px; }
-.mv-outbox__btn {
-  min-height: 44px;
-  padding: 0 16px;
-  border: 1px solid var(--mail-border);
-  border-radius: 8px;
-  background: none;
-  color: var(--mail-accent-text);
-  font: inherit;
-  font-weight: 500;
-}
-.mv-outbox__btn--danger { color: var(--mv-danger); }
 
 /* A sheet of plain actions (leave compose, attach, the viewer's More). */
 .mv-sheet__actions { display: flex; flex-direction: column; padding: 4px 0; }
@@ -1060,21 +990,8 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
   font-weight: 500;
 }
 .mv-compose__title { flex: 1; min-width: 0; margin: 0; font-size: 1rem; font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.mv-compose__send {
-  min-height: 44px;
-  min-width: 64px;
-  padding: 0 16px;
-  border: 0;
-  border-radius: 8px;
-  background: var(--mail-accent-fill);
-  color: #fff;
-  font: inherit;
-  font-weight: 600;
-}
-.mv-compose__send:disabled { opacity: 0.4; }
-.mv-compose__send { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
 /* Sending: a spinner and its own label, at full strength (not the dimmed "can't send" look). */
-.mv-compose__send--busy:disabled { opacity: 1; background: var(--mail-surface-hover); color: var(--mail-text); }
+.mv-send--busy:disabled { opacity: 1; background: var(--mail-surface-hover); color: var(--mail-text); }
 .mv-compose__scroll {
   flex: 1;
   min-height: 0;
@@ -1143,7 +1060,6 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
   background: none;
   color: inherit;
 }
-.mv-compose__more { align-self: flex-start; min-height: 44px; padding: 0; border: 0; background: none; color: var(--mail-accent-text); font: inherit; }
 .mv-compose__hint { margin: 6px 0 0; font-size: 0.8125rem; color: var(--mv-danger); }
 .mv-compose__note { margin: 6px 0 0; font-size: 0.8125rem; color: var(--mail-text-muted); }
 .mv-compose__files { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
@@ -1230,7 +1146,6 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 .mv-followup--unseen .mv-drafts__subject { font-weight: 700; color: var(--mail-text); }
 .mv-drafts__open:disabled { opacity: 1; cursor: default; }
 .mv-drafts__to { font-size: 0.8125rem; color: var(--mail-text-muted); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.mv-drafts__delete { color: var(--mail-text-muted); }
 .mv-drawer__local { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--mail-border); }
 
 /* Settings: a full-screen layer like the drafts list; every row is at least 44 pt. */
@@ -1412,7 +1327,6 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 .mv-search__note { margin: 16px; text-align: center; color: var(--mail-text-muted); font-size: 0.875rem; }
 .mv-search__heading { margin: 0; padding: 12px 16px 6px; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--mail-text-muted); }
 .mv-search__recent-head { display: flex; align-items: center; justify-content: space-between; padding-inline-end: calc(var(--mv-safe-right) + 4px); }
-.mv-search__link { min-height: 44px; padding: 0 12px; border: 0; background: none; color: var(--mail-accent-text); font: inherit; font-size: 0.875rem; font-weight: 500; }
 .mv-search__recent-list { list-style: none; margin: 0; padding: 0; }
 .mv-search__recent-item {
   width: 100%;
@@ -1427,16 +1341,6 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 }
 .mv-search__recent-item:active { background: var(--mail-surface-hover); }
 .mv-search__server { padding: 8px 16px 16px; display: flex; flex-direction: column; align-items: stretch; }
-.mv-search__server-btn {
-  min-height: 48px;
-  border: 1px solid var(--mail-border);
-  border-radius: 8px;
-  background: var(--mail-surface);
-  color: var(--mail-accent-text);
-  font: inherit;
-  font-weight: 600;
-}
-.mv-search__server-btn:active { background: var(--mail-surface-hover); }
 
 /* The Premium screen: a settings-style layer above Settings (12) and Compose (15). */
 .mv-premium { z-index: 16; }
@@ -1465,15 +1369,9 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 .mv-premium__plan-intro { font-size: 0.8125rem; color: var(--mail-text-muted); }
 .mv-premium__row { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 12px; }
 .mv-premium__row--stack { flex-direction: column; align-items: stretch; justify-content: flex-start; }
-.mv-premium__primary {
-  min-height: 48px; padding: 0 20px; border: 0; border-radius: 8px;
-  background: var(--mail-accent-fill); color: #fff; font: inherit; font-weight: 600;
-}
-.mv-premium__primary:disabled { opacity: 0.5; }
 .mv-premium__disclosure { margin-top: 20px; font-size: 0.8125rem; color: var(--mail-text-muted); }
 .mv-premium__disclosure p { margin: 6px 0; overflow-wrap: anywhere; }
 .mv-premium__legal a { display: inline-block; min-height: 44px; line-height: 44px; }
-.mv-premium__linkbtn { display: block; width: 100%; min-height: 48px; margin-top: 20px; padding: 0; border: 0; background: none; color: var(--mail-accent-text); font: inherit; text-align: start; }
 .mv-premium__web { margin-top: 20px; }
 .mv-premium__field { display: flex; flex-direction: column; gap: 4px; font-size: 0.875rem; }
 .mv-premium__field input { min-height: 44px; padding: 0 12px; border: 1px solid var(--mail-border); border-radius: 8px; background: var(--mail-bg); color: inherit; font: inherit; font-size: 1rem; }
@@ -1495,8 +1393,6 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
   color: var(--mail-text);
   font: inherit;
 }
-.mv-schedule__confirm { align-self: flex-end; }
-.mv-schedule__confirm:disabled { opacity: 0.5; }
 .mv-outbox__heading { margin: 8px 8px 0; font-size: 0.8125rem; font-weight: 600; color: var(--mail-text-muted); }
 .mv-outbox__item--scheduled .mv-outbox__actions { flex-wrap: wrap; }
 
@@ -1526,17 +1422,6 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.mv-qr__dismiss {
-  flex: none;
-  min-width: 44px;
-  min-height: 44px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  background: none;
-  color: var(--mail-text-muted);
-}
 /* AI review and result sheets (AiActions.jsx). */
 .mv-ai__text {
   margin: 0 16px 12px;
@@ -1558,7 +1443,6 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 /* The Views heading with desktop's Edit and New beside it (FolderDrawer.jsx). */
 .mv-drawer__heading-row { display: flex; align-items: center; padding-inline-end: 8px; }
 .mv-drawer__heading-row .mv-drawer__heading { flex: 1; }
-.mv-drawer__heading-action { color: var(--mail-text-muted); }
 .mv-folder__icon { display: inline-flex; color: var(--mail-text-muted); }
 .mv-view__note { margin: 8px 16px 0; font-size: 0.75rem; }
 /* Under the viewer (z 10), as search is, so a row opens over it. */
