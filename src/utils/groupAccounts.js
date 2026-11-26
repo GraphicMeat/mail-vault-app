@@ -15,3 +15,23 @@ export function groupAccounts(orderedAccounts, groupOf) {
   }
   return [...(ungrouped.accounts.length || !named.size ? [ungrouped] : []), ...named.values()];
 }
+
+const flatIds = sections => sections.flatMap(section => section.accounts.map(account => account.id));
+
+// The account order with group `name` swapped with its neighbour `delta` (-1 up, +1 down). Groups
+// take their place from the account order, so this is how a group moves. Ungrouped stays first;
+// null when the group cannot move.
+export function moveGroup(orderedAccounts, groupOf, name, delta) {
+  const sections = groupAccounts(orderedAccounts, groupOf);
+  const from = sections.findIndex(section => section.name !== null && section.name === name);
+  const to = from + delta;
+  if (from < 0 || to < 0 || to >= sections.length || sections[to].name === null) return null;
+  [sections[from], sections[to]] = [sections[to], sections[from]];
+  return flatIds(sections);
+}
+
+// The account order with section `name` (null: ungrouped) in the order `ids`.
+export function reorderWithinGroup(orderedAccounts, groupOf, name, ids) {
+  return groupAccounts(orderedAccounts, groupOf).flatMap(section => section.name === name
+    ? ids : section.accounts.map(account => account.id));
+}

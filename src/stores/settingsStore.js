@@ -73,6 +73,7 @@ const normalizeSidebarDensity = density => density === 'compact' ? 'compact' : '
 const normalizeListDensity = density => density === 'compact' ? 'compact' : 'comfortable';
 const normalizeSidebarBackupStatusLocation = location => ['row', 'hidden'].includes(location) ? location : 'avatar';
 const normalizeEmailListView = value => value === 'explorer' ? 'explorer' : 'list';
+export const ACCOUNT_LIST_MIN_WIDTH = 260;
 const normalizeExplorerGrouping = value => ['sender', 'conversation'].includes(value) ? value : 'date';
 const normalizeExplorerDateDepth = value => value === 'day' ? 'day' : 'month';
 // What a two-finger trackpad swipe on a message row does, per side.
@@ -439,6 +440,8 @@ export const useSettingsStore = create(
       
       // Account order (array of account IDs for drag-to-reorder)
       accountOrder: [],
+      // Settings > Accounts list column width in px; 260 is its minimum.
+      accountListWidth: ACCOUNT_LIST_MIN_WIDTH,
 
       // Hidden accounts { [accountId]: true } — hidden accounts don't sync and are invisible in sidebar
       hiddenAccounts: {},
@@ -994,6 +997,7 @@ export const useSettingsStore = create(
 
       // Account order management
       setAccountOrder: (order) => set({ accountOrder: order }),
+      setAccountListWidth: (width) => set({ accountListWidth: Math.max(ACCOUNT_LIST_MIN_WIDTH, Math.round(Number(width) || 0)) }),
       getOrderedAccounts: (accounts) => {
         const order = get().accountOrder;
         if (!order.length) return accounts;
@@ -1624,6 +1628,7 @@ export const useSettingsStore = create(
           fetchModes: {},
           customCategories: [],
           accountOrder: [],
+          accountListWidth: ACCOUNT_LIST_MIN_WIDTH,
           hiddenAccounts: {},
           transportRefusals: {},
           graphImapNoticeDismissed: {},

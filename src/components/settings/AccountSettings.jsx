@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useMailStore } from '../../stores/mailStore';
 import { useAccountStore } from '../../stores/accountStore';
-import { useSettingsStore, AVATAR_COLORS, getAccountInitial, getAccountColor, hasPremiumAccess } from '../../stores/settingsStore';
+import { useSettingsStore, ACCOUNT_LIST_MIN_WIDTH, AVATAR_COLORS, getAccountInitial, getAccountColor, hasPremiumAccess } from '../../stores/settingsStore';
 import { getOAuth2AuthUrl, exchangeOAuth2Code, ensureSentMailbox, fetchMailboxes } from '../../services/api';
 import { withOAuth2Exchange } from '../../services/authUtils';
 import { microsoftImapFields } from '../../services/graphConfig';
@@ -47,6 +47,8 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onSetupPhon
     getDisplayName,
     getOrderedAccounts,
     setAccountOrder,
+    accountListWidth,
+    setAccountListWidth,
     accountColors,
     accountGroups,
     setAccountColor,
@@ -62,6 +64,7 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onSetupPhon
   const [selectedAccountId, setSelectedAccountId] = useState(initialAccountId || accounts[0]?.id || null);
   const [section, setSection] = useState(ACCOUNT_SECTIONS.includes(initialSection) ? initialSection : 'profile');
   const panelRef = useRef(null);
+  const listRef = useRef(null);
   const [signatureHtml, setSignatureHtml] = useState('');
   const [accountDisplayName, setAccountDisplayName] = useState('');
   const [saved, setSaved] = useState(false);
@@ -696,7 +699,9 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onSetupPhon
           oauth: account.authType === 'oauth2', group: accountGroups[account.id] || null,
         }))}
         selectedId={selectedAccountId} onSelect={setSelectedAccountId} onReorder={setAccountOrder} onAdd={onAddAccount}
+        listRef={listRef} style={{ '--account-list-width': `${accountListWidth}px` }}
         footer={<AccountTransfer accounts={accounts} onSetupPhone={onSetupPhone} onExportAccounts={onExportAccounts} onImportAccounts={onImportAccounts} />} />
+      <AccountListResizer listRef={listRef} width={accountListWidth} onWidth={setAccountListWidth} />
 
       {/* Account Settings - Right Column */}
       <AccountDetailView panelRef={panelRef}
@@ -734,5 +739,41 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onSetupPhon
       )}
     </div>
     </DesktopViewEnv>
+  );
+}
+
+// The bar between the account list and its settings: drag or arrow keys set the list width.
+// The list never goes under 260px and leaves the settings column at least as much
+// (`.account-settings-list` max-width enforces the second as the window shrinks).
+function AccountListResizer({ listRef, width, onWidth }) {
+  const t = useT();
+  const clamp = value => {
+    const layout = listRef.current?.parentElement?.getBoundingClientRect().width || 0;
+    return Math.max(ACCOUNT_LIST_MIN_WIDTH, layout ? Math.min(value, layout - ACCOUNT_LIST_MIN_WIDTH - 1) : value);
+  };
+  const startDrag = event => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const left = listRef.current.getBoundingClientRect().left;
+    const move = moveEvent => onWidth(clamp(moveEvent.clientX - left));
+    const stop = stopEvent => {
+      move(stopEvent);
+      document.removeEventListener('mousemove', move);
+      document.removeEventListener('mouseup', stop);
+      document.body.classList.remove('is-resizing-columns');
+    };
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseup', stop);
+    document.body.classList.add('is-resizing-columns');
+  };
+  return (
+    <div role="separator" tabIndex={0} aria-orientation="vertical" className="account-settings-resizer"
+      aria-label={t('settings.accounts.resizeAccountList')} aria-valuenow={width} aria-valuemin={ACCOUNT_LIST_MIN_WIDTH}
+      onMouseDown={startDrag}
+      onKeyDown={event => {
+        if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+        event.preventDefault();
+        onWidth(clamp(width + (event.key === 'ArrowRight' ? 20 : -20)));
+      }} />
   );
 }

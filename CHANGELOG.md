@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Changed: Settings > Accounts lists accounts in their sidebar groups. Move a group up or down from its header and the sidebar follows. Drag the line between the account list and the account's settings to make the list wider.
+
 ## [2.25.1] - 2026-11-26
 
 - Added: the Premium sign-in code fills itself in. After Sign In to Premium, MailVault looks for the code mail in that account's Inbox and Spam folder and signs in as soon as it arrives.

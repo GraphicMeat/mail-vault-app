@@ -49,6 +49,8 @@ const ALLOWLIST = new Set([
   'settings.billing.earlyBirdFamilyPricing', 'settings.billing.plansCouldNotLoaded', 'settings.billing.whatSIncluded',
   // the plan picker's accessible name, not a setting
   'onboarding.ctaPlans',
+  // the account list's column resize handle, not a setting
+  'settings.accounts.resizeAccountList',
   // the emailed sign-in code's field, a step of Sign in to Premium, not a setting
   'settings.billing.code',
   'settings.migration.reviewMigration', 'settings.migration.selectAll', 'common.premiumFeature',

@@ -8,7 +8,9 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   User, Mail, FileText, Shield, Check, Trash2, Loader, RefreshCw, Key, AlertCircle, Plus, Eye, EyeOff, Server, HardDrive, Send,
+  ChevronUp, ChevronDown,
 } from 'lucide-react';
+import { groupAccounts, moveGroup, reorderWithinGroup } from '../../../utils/groupAccounts';
 import { Button } from '../../ui/Button';
 import { SettingsTabs } from '../../ui/SettingsTabs';
 import { ReorderListView } from './ReorderListView';
@@ -41,12 +43,22 @@ function SavedBadge({ visible }) {
 
 /**
  * The left column: every account (`{ id, email, name, initial, color, hidden, oauth, group }`),
- * the selected one pressed. `onReorder(ids)` makes the list orderable (desktop); `onAdd` shows
- * "Add account"; `footer` sits under it (desktop's phone setup and move to another computer).
+ * the selected one pressed, in the sidebar's groups (ungrouped first, each group under its name).
+ * `onReorder(ids)` makes the list orderable (desktop): accounts move within their group and a
+ * group moves up or down past its neighbour. `onAdd` shows "Add account"; `footer` sits under it
+ * (desktop's phone setup and move to another computer); `style` and `listRef` reach the column.
  */
-export function AccountListView({ accounts, selectedId, onSelect, onReorder, onAdd, footer = null }) {
+export function AccountListView({ accounts, selectedId, onSelect, onReorder, onAdd, footer = null, style, listRef }) {
   const t = useT();
-  const { Private } = useViewEnv();
+  const { Private, privateAttr: pa } = useViewEnv();
+  const groupOf = Object.fromEntries(accounts.filter(account => account.group).map(account => [account.id, account.group]));
+  const sections = groupAccounts(accounts, groupOf);
+  const grouped = sections.some(section => section.name !== null);
+  const reorderable = section => onReorder && (ids => onReorder(reorderWithinGroup(accounts, groupOf, section.name, ids)));
+  const shiftGroup = (name, delta) => {
+    const ids = moveGroup(accounts, groupOf, name, delta);
+    if (ids) onReorder(ids);
+  };
   const row = account => (
     <button type="button" className="account-settings-account-button"
       aria-pressed={account.id === selectedId} onClick={() => onSelect(account.id)}>
@@ -69,12 +81,11 @@ export function AccountListView({ accounts, selectedId, onSelect, onReorder, onA
         <div className="text-xs text-mail-text-muted truncate">
           <Private kind="email">{account.email}</Private>
         </div>
-        {account.group && <div className="text-xs text-mail-text-muted truncate"><Private kind="name">{account.group}</Private></div>}
       </div>
     </button>
   );
   return (
-    <div className="account-settings-list">
+    <div ref={listRef} className="account-settings-list" style={style}>
       <div className="p-4">
         <div className="text-sm font-medium text-mail-text-muted mb-3">
           {t('settings.accounts.accounts')}
@@ -84,20 +95,41 @@ export function AccountListView({ accounts, selectedId, onSelect, onReorder, onA
             <Mail size={32} className="mx-auto mb-3 opacity-30" />
             <p className="text-sm">{t('common.noAccountsConfigured')}</p>
           </div>
-        ) : onReorder ? (
-          <ReorderListView accounts={accounts} selectedAccountId={selectedId} onReorder={onReorder} privateKind="email">
-            {row}
-          </ReorderListView>
-        ) : (
-          <ol aria-label={t('settings.accounts.accounts')} className="account-settings-reorder-list">
-            {accounts.map(account => (
-              <li key={account.id} data-account-id={account.id}
-                className={`account-settings-account ${account.id === selectedId ? 'account-settings-account-selected' : ''}`}>
-                {row(account)}
-              </li>
-            ))}
-          </ol>
-        )}
+        ) : sections.map((section, index) => {
+          const label = section.name === null ? t('settings.accounts.accounts') : pa(section.name, 'name');
+          return <section key={section.name ?? ''} className="account-settings-group">
+            {section.name !== null && <div className="account-settings-group-header">
+              <span><Private kind="name">{section.name}</Private></span>
+              {onReorder && <>
+                <button type="button" className="account-settings-group-move" disabled={sections[index - 1]?.name == null}
+                  aria-label={t('settings.accounts.moveGroupUp', { name: label })} title={t('settings.accounts.moveGroupUp', { name: label })}
+                  onClick={() => shiftGroup(section.name, -1)}>
+                  <ChevronUp size={14} aria-hidden="true" />
+                </button>
+                <button type="button" className="account-settings-group-move" disabled={index === sections.length - 1}
+                  aria-label={t('settings.accounts.moveGroupDown', { name: label })} title={t('settings.accounts.moveGroupDown', { name: label })}
+                  onClick={() => shiftGroup(section.name, 1)}>
+                  <ChevronDown size={14} aria-hidden="true" />
+                </button>
+              </>}
+            </div>}
+            {onReorder ? (
+              <ReorderListView accounts={section.accounts} selectedAccountId={selectedId} onReorder={reorderable(section)}
+                privateKind="email" labels={grouped ? { list: label } : undefined}>
+                {row}
+              </ReorderListView>
+            ) : (
+              <ol aria-label={label} className="account-settings-reorder-list">
+                {section.accounts.map(account => (
+                  <li key={account.id} data-account-id={account.id}
+                    className={`account-settings-account ${account.id === selectedId ? 'account-settings-account-selected' : ''}`}>
+                    {row(account)}
+                  </li>
+                ))}
+              </ol>
+            )}
+          </section>;
+        })}
         {onAdd && (
           <button
             onClick={onAdd}
