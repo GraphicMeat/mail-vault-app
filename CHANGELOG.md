@@ -19,6 +19,7 @@
 - Changed: on the phone, the folder list starts with the account you are in, and tapping it opens your accounts. Every folder, Drafts, Follow up and Settings show the same icons as on the computer.
 - Changed: on the phone, every icon is the one the computer uses for the same action, starred mail shows the computer's star, and every full screen starts with the same back arrow in place of the word Back.
 - Changed: on the phone, search's This folder and All accounts choices are small chips as on the computer, still easy to tap.
+- Fixed: on the phone, a tapped button no longer stays highlighted after your finger lifts.
 
 ## [2.25.1] - 2026-11-26
 

@@ -25,3 +25,15 @@ describe('phone Tailwind content', () => {
     expect(covered('src/mobile/Settings.jsx')).toBe(true);
   });
 });
+
+describe("the phone's Tailwind config", () => {
+  // iOS keeps :hover on whatever was tapped last, so a desktop Button's hover: fill stuck after a
+  // tap. The phone's Tailwind wraps hover: in @media (hover: hover); desktop's stays as it was.
+  it('applies hover only where the pointer can hover, for the phone bundle alone', async () => {
+    const { readFileSync } = await import('node:fs');
+    const read = (p) => readFileSync(fileURLToPath(new URL(p, import.meta.url)), 'utf8');
+    const phone = read('../../../vite.mobile.config.js');
+    expect(phone).toMatch(/tailwindcss\(\{\s*\.\.\.tailwindConfig,[^)]*future:\s*\{\s*\.\.\.tailwindConfig\.future,\s*hoverOnlyWhenSupported:\s*true\s*\}/);
+    expect(read('../../../tailwind.config.js')).not.toMatch(/hoverOnlyWhenSupported/);
+  });
+});

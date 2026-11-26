@@ -43,7 +43,9 @@ export default defineConfig({
     postcss: {
       plugins: [
         // Only what the phone renders (src/mobile/tailwindContent.js), not desktop's whole src/.
-        tailwindcss({ ...tailwindConfig, content: [...MOBILE_TAILWIND_CONTENT] }),
+        // hover: only where the pointer can hover: iOS keeps :hover on the last thing tapped, so
+        // a Button's hover fill would stick after a tap. Desktop's config is left as it is.
+        tailwindcss({ ...tailwindConfig, content: [...MOBILE_TAILWIND_CONTENT], future: { ...tailwindConfig.future, hoverOnlyWhenSupported: true } }),
         scopePreflight(),
         autoprefixer(),
       ],
