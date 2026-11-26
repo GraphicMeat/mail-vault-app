@@ -36,6 +36,9 @@ vi.mock('../transport.js', () => ({
     }
   }),
   listen: vi.fn(() => () => {}),
+  storeProducts: vi.fn(async () => []),
+  storePurchase: vi.fn(async () => ({ status: 'cancelled' })),
+  storeRestore: vi.fn(async () => []),
   requestNotificationPermission: vi.fn(async () => {
     engine.permissionAsked++;
     return { granted: engine.granted };
@@ -291,15 +294,14 @@ describe('Settings pages, as desktop lays them out', () => {
   it('the first screen is desktop\'s sidebar: its groups and pages less what a phone lacks, with no settings of its own', () => {
     render(<Settings onClose={() => {}} />);
     // Desktop's order (settingsManifest.js); Portable is not on the phone;
-    // Migration, Cleanup, Backup and Time Capsule are, as their desktop notices. Billing joins the
-    // footer while Premium is on.
+    // Migration, Cleanup, Backup and Time Capsule are, as their desktop notices. Billing is in the
+    // footer where desktop has it, Premium or not.
     expect(pageRows()).toEqual(['appearance', 'mail-preferences', 'accounts', 'templates', 'migration', 'views', 'auto-tags', 'ai-providers', 'unsubscribe', 'cleanup',
-      'storage', 'backup', 'time-capsule', 'privacy', 'diagnostics', 'help']);
-    // The pages and the Premium row.
+      'storage', 'backup', 'time-capsule', 'privacy', 'billing', 'diagnostics', 'help']);
+    // The pages, with no Premium row.
     expect([...document.querySelectorAll('.settings-nav-item')]).toHaveLength(17);
     const headings = [...document.querySelectorAll('.settings-nav-heading')].map((h) => h.textContent);
     expect(headings).toEqual([
-      t('common.premium'),
       t('settings.navigation.general'),
       t('settings.navigation.accountsImport'),
       t('settings.navigation.organize'),
@@ -308,10 +310,13 @@ describe('Settings pages, as desktop lays them out', () => {
     expect(screen.getByRole('searchbox', { name: t('settings.navigation.searchSetting') })).toBeTruthy();
     expect(screen.queryAllByRole('switch')).toHaveLength(0);
     expect(document.querySelector('[data-mv-pref]')).toBeNull();
-    expect(document.querySelector('[data-mv-premium-row]')).toBeTruthy();
+    expect(document.querySelector('[data-mv-premium-row]')).toBeNull();
   });
 
-  it('Billing is in the footer while Premium is on', () => {
+  it('Billing is in the footer without Premium and with it', () => {
+    render(<Settings onClose={() => {}} />);
+    expect(pageRows().slice(-3)).toEqual(['billing', 'diagnostics', 'help']);
+    cleanup();
     useMobileStore.setState({ premium: { ...useMobileStore.getState().premium, premium: true } });
     try {
       render(<Settings onClose={() => {}} />);
@@ -319,6 +324,14 @@ describe('Settings pages, as desktop lays them out', () => {
     } finally {
       useMobileStore.setState({ premium: { ...useMobileStore.getState().premium, premium: false } });
     }
+  });
+
+  it('every navigation row wears a colour tile behind its glyph', () => {
+    render(<Settings onClose={() => {}} />);
+    const rows = [...document.querySelectorAll('.settings-nav-item')];
+    expect(rows).toHaveLength(17);
+    for (const row of rows) expect(row.querySelector('[data-settings-tile]'), row.textContent).toBeTruthy();
+    expect(document.querySelector('[data-mv-settings-page="billing"] [data-settings-tile="billing"]')).toBeTruthy();
   });
 
   it('a page opens under its own title; Back returns to the list, and Back there closes Settings', async () => {
@@ -329,7 +342,7 @@ describe('Settings pages, as desktop lays them out', () => {
     fireEvent.click(screen.getByRole('tab', { name: t('settings.notifications.notifications') }));
     await waitFor(() => expect(toggle()).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: t('common.back') }));
-    expect(pageRows()).toHaveLength(16);
+    expect(pageRows()).toHaveLength(17);
     expect(heading()).toBe(t('mobile.settings.title'));
     expect(onClose).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: t('common.back') }));

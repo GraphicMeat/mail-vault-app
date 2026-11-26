@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// Settings > Billing (desktop's Billing views): reached from the Premium section while Premium is on;
+// Settings > Billing (desktop's Billing views), always in the footer where desktop has it;
 // the store's own manage page for a store subscription (none for a website one); the website account's devices,
 // this phone marked, the others removable by their opaque key; and the translation report under
 // Appearance's language row.
@@ -27,13 +27,16 @@ vi.mock('../transport.js', () => ({
     }
   }),
   listen: vi.fn(() => () => {}),
+  storeProducts: vi.fn(async () => []),
+  storePurchase: vi.fn(async () => ({ status: 'cancelled' })),
+  storeRestore: vi.fn(async () => []),
   notificationPermission: vi.fn(async () => ({ granted: true })),
   requestNotificationPermission: vi.fn(async () => ({ granted: true })),
 }));
 
 const { default: Settings } = await import('../Settings.jsx');
 const { useMobileStore } = await import('../store.js');
-const { seenAgo } = await import('../settings/Billing.jsx');
+const { seenAgo } = await import('../billing/Billing.jsx');
 
 const NOW = Date.now();
 const PHONE = { key: 'k-phone', name: 'MailVault for iPhone', platform: 'ios', appVersion: '2.23.0', lastSeenMs: NOW, current: true };
@@ -66,9 +69,9 @@ const deviceRows = () => (devices() ? within(devices()).queryAllByText(/ · v\d/
 const removeButton = (name) => screen.queryByRole('button', { name: `${t('settings.billing.removeDevice')}: ${name}` });
 
 describe('Billing', () => {
-  it('is offered under Premium only while Premium is on', async () => {
+  it('is offered in the footer with or without Premium, and opens under its own title', async () => {
     render(<Settings onClose={() => {}} />);
-    expect(billingRow()).toBeNull();
+    expect(billingRow()).toBeTruthy();
     act(() => premiumOn('apple'));
     expect(billingRow()).toBeTruthy();
     await act(async () => { fireEvent.click(billingRow()); });

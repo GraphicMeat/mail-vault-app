@@ -1316,6 +1316,9 @@ body {
 .mv-shared-ui .settings-nav-group + .settings-nav-group { margin-top: 12px; }
 .mv-shared-ui .settings-nav-group .settings-nav-heading { padding: 10px 12px 4px; }
 .mv-shared-ui .settings-nav-group .settings-nav-item:last-child { margin-bottom: 0; }
+/* The colour tile, at the phone's size: an iOS-style filled rounded square behind the white glyph. */
+.mv-shared-ui .settings-nav-tile { width: 30px; height: 30px; border-radius: 8px; }
+.mv-shared-ui .settings-nav-tile svg { width: 18px; height: 18px; }
 .mv-settings .mv-settings__nav .settings-nav-footer { padding: 0 16px 20px; border-top: 0; }
 .mv-shared-ui .settings-preference-group { background: var(--mail-surface); border: 1px solid var(--mail-border); border-radius: 12px; padding: 16px; }
 .mv-shared-ui .settings-preference-group + .settings-preference-group { margin-top: 16px; padding-top: 16px; }

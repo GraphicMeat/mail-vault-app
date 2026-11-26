@@ -2,6 +2,7 @@ import React, { useState, useEffect, useId, useRef } from 'react';
 import { useAccountStore } from '../stores/accountStore';
 import { Dialog } from './ui/Dialog';
 import { Button } from './ui/Button';
+import { SettingsNavIcon } from './ui/SettingsNavIcon';
 import { X, Minus, Settings, ChevronLeft, Search, Maximize2 } from 'lucide-react';
 import {
   allTabs, settingsHosts, settingSearchGroups, settingsSections, footerTabs, tabsById, hostOf,
@@ -164,7 +165,7 @@ export function SettingsPage({ onClose, onAddAccount, onSetupPhone, onExportAcco
       {results.map(page => (
         <button key={`${page.id}-${page.section || ''}-${page.labelKey}`} type="button" className="settings-nav-item settings-search-result"
           onClick={() => openResult(page)}>
-          <page.icon size={17} aria-hidden="true" />
+          <SettingsNavIcon id={page.id} icon={page.icon} />
           <span className="settings-search-result-copy"><span>{t(page.labelKey)}</span>
             {page.section && <small>{t(tabsById[page.id].labelKey)}{page.sectionKey && ` · ${t(page.sectionKey)}`}</small>}
           </span>
@@ -181,7 +182,7 @@ export function SettingsPage({ onClose, onAddAccount, onSetupPhone, onExportAcco
       aria-current={(host?.id || activeTab) === tab.id ? 'page' : undefined}
       className="settings-nav-item"
     >
-      <tab.icon size={17} aria-hidden="true" />
+      <SettingsNavIcon id={tab.id} icon={tab.icon} />
       <span className="text-sm font-medium">{t(tab.labelKey)}</span>
     </button>
   );

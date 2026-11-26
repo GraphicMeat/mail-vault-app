@@ -4,10 +4,10 @@
 // use for or whose feature the phone engine lacks (MOBILE_PAGES says which and why).
 //
 // - The first screen is desktop's sidebar: the setting search, the section headings and their
-//   pages, Billing (while Premium is on), Diagnostics and Help pinned under them, each group one
-//   desktop settings card (SettingsCard) with its heading and rows, as every page's settings are.
-//   Premium sits above them: "Premium: active until <date> (App Store)" or "Free", opening the
-//   Premium screen; a phone whose place another device took says so, with Sign in again.
+//   pages, Billing, Diagnostics and Help pinned under them (Billing always, where desktop has it),
+//   each group one desktop settings card (SettingsCard) with its heading and rows, as every page's
+//   settings are, each row's glyph on its colour tile (SettingsNavIcon, as desktop's sidebar).
+//   There is no Premium row: Premium lives in Billing, the same component the paywall shows.
 // - A page opens under desktop's page header (title, description) with Back. A host (Storage,
 //   Privacy & security, Diagnostics) shows its pages as desktop's tabs; Appearance and Mail
 //   preferences show their sections the same way.
@@ -24,12 +24,13 @@
 // - Cleanup, Backup, Time Capsule and Migration sit in desktop's place with desktop's icon and
 //   name, and open one notice: the feature is in MailVault on desktop (DesktopNoticeView).
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { CreditCard, Search, X } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 import {
   settingsSections, footerTabs, settingsHosts, hostOf, tabsById, navEntryOnPhone, mobileSearchPages, searchSettings,
   settingText, landOnSetting, MOBILE_PAGES, MOBILE_PAGE_LABELS, onPhoneNotice,
 } from '../components/settings/settingsManifest';
 import { SettingsTabs } from '../components/ui/SettingsTabs';
+import { SettingsNavIcon } from '../components/ui/SettingsNavIcon';
 import { Button } from '../components/ui/Button';
 import { SettingsCard } from '../components/ui/SettingsForm';
 import { SettingsViewProvider } from '../components/settings/views/viewContext';
@@ -40,11 +41,10 @@ import { useBackLayer } from './backStack.js';
 import { useT, getMobileLocale } from './i18n.js';
 import { BackButton } from './icons.jsx';
 import { errorKey } from './errors.js';
-import { premiumSummary } from './premium.js';
 import Storage from './settings/Storage.jsx';
 import DataUsage from './settings/DataUsage.jsx';
 import { PendingActions, Logs } from './settings/Diagnostics.jsx';
-import Billing from './settings/Billing.jsx';
+import Billing from './billing/Billing.jsx';
 import Help from './settings/Help.jsx';
 import Transfer from './settings/Transfer.jsx';
 import NetworkActivity from './settings/NetworkActivity.jsx';
@@ -129,8 +129,6 @@ export default function Settings({ onClose, onReplayTour, onAddAccount, version 
   const [pendingNewView, setPendingNewView] = useState(newView);
 
   const reauthState = useMobileStore((s) => s.reauthState);
-  const premium = useMobileStore((s) => s.premium);
-  const premiumLost = useMobileStore((s) => s.premiumLost);
   // A search result lands on its setting once its page is open, as desktop's does.
   useEffect(() => {
     if (!searchNavigation) return undefined;
@@ -146,7 +144,7 @@ export default function Settings({ onClose, onReplayTour, onAddAccount, version 
   const nav = place.nav;
   const host = settingsHosts[nav] ? { id: nav, ...settingsHosts[nav] } : null;
   const entry = host || tabsById[nav];
-  const visible = (e) => navEntryOnPhone(e) && (e.id !== 'billing' || premium.premium);
+  const visible = navEntryOnPhone;
 
   const openResult = (page) => {
     const to = placeOf(page.id);
@@ -160,7 +158,7 @@ export default function Settings({ onClose, onReplayTour, onAddAccount, version 
 
   const navItem = (tab) => (
     <button key={tab.id} type="button" className="settings-nav-item" data-mv-settings-page={tab.id} onClick={() => go(placeOf(tab.id))}>
-      <tab.icon size={17} aria-hidden="true" />
+      <SettingsNavIcon id={tab.id} icon={tab.icon} size={17} />
       <span className="text-sm font-medium">{t(tab.labelKey)}</span>
     </button>
   );
@@ -259,7 +257,7 @@ export default function Settings({ onClose, onReplayTour, onAddAccount, version 
                       {results.map((page) => (
                         <button key={`${page.id}-${page.section || ''}-${page.labelKey}`} type="button" className="settings-nav-item settings-search-result"
                           onClick={() => openResult(page)}>
-                          <page.icon size={17} aria-hidden="true" />
+                          <SettingsNavIcon id={page.id} icon={page.icon} size={17} />
                           <span className="settings-search-result-copy"><span>{t(page.labelKey)}</span>
                             {page.section && <small>{t(tabsById[page.id].labelKey)}{page.sectionKey && ` · ${t(page.sectionKey)}`}</small>}
                           </span>
@@ -269,22 +267,6 @@ export default function Settings({ onClose, onReplayTour, onAddAccount, version 
                     </SettingsCard>
                   ) : (
                     <>
-                      <SettingsCard className="settings-nav-group">
-                      <p className="settings-nav-heading">{t('common.premium')}</p>
-                      <button type="button" className="settings-nav-item" data-mv-premium-row
-                        onClick={() => useMobileStore.getState().openPaywall(null)}>
-                        <CreditCard size={17} aria-hidden="true" />
-                        <span className="text-sm font-medium">{premiumSummary(premium)}</span>
-                      </button>
-                      {premiumLost === 'DEVICE_REPLACED' && !premium.premium && (
-                        <p className="px-3 py-2 text-xs text-mail-danger" role="alert" data-mv-premium-lost>
-                          {t('mobile.premium.deviceReplaced')}{' '}
-                          <Button variant="link" size="xs" onClick={() => useMobileStore.getState().openPaywall(null, { signIn: true })}>
-                            {t('mobile.premium.signInAgain')}
-                          </Button>
-                        </p>
-                      )}
-                      </SettingsCard>
                       {settingsSections.map((section) => {
                         const tabs = section.tabs.filter(visible);
                         return tabs.length ? (

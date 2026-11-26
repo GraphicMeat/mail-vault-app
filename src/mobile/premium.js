@@ -72,7 +72,7 @@ export function startPremiumSync() {
   };
 }
 
-/** Each store's own page for managing or cancelling a subscription (Premium.jsx, Billing.jsx). */
+/** Each store's own page for managing or cancelling a subscription (billing/Plans.jsx, billing/Billing.jsx). */
 export const MANAGE_URL = Object.freeze({
   apple: 'https://apps.apple.com/account/subscriptions',
   google: 'https://play.google.com/store/account/subscriptions',

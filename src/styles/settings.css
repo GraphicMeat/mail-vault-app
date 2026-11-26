@@ -30,6 +30,11 @@
   color: var(--mail-text-muted); margin-bottom: 2px; transition: background-color 150ms, color 150ms;
 }
 .settings-nav-item svg { flex-shrink: 0; }
+/* The glyph's colour tile (SettingsNavIcon): the entry's own hue, a white glyph on it. */
+.settings-nav-tile {
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 24px; height: 24px; border-radius: 7px; background: var(--settings-tile); color: #fff;
+}
 .settings-nav-item:hover { background: var(--mail-surface-hover); color: var(--mail-text); }
 .settings-nav-item[aria-current="page"] { color: var(--mail-accent-text); background: var(--mail-accent-tint); }
 .settings-header {

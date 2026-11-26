@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
-// The Premium screen: the store's disclosures and links, prices only from the store, the purchase
-// and Restore states, the website sign-in (code, wrong code, a replaced device), a lapsed
-// Premium, the Settings row, and the upkeep (`premium.js`) and the locked-feature entry point.
+// The paywall layer over the one Billing component (src/mobile/billing): the store's disclosures
+// and links, prices only from the store, the purchase and Restore states, the website sign-in (code,
+// wrong code, a replaced device), a lapsed Premium, Settings > Billing as the same component with no
+// Premium row on the first screen, and the upkeep (`premium.js`) and the locked-feature entry point.
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import React from 'react';
 import { render, screen, cleanup, fireEvent, waitFor, act } from '@testing-library/react';
@@ -34,6 +35,7 @@ vi.mock('../transport.js', () => ({
       case 'mobile.premium.webSignIn.verify': return run(engine.verify);
       case 'mobile.premium.webSignOut': return run(engine.signOut);
       case 'mobile.settings.get': return { notifications: 'off', notificationPreview: true };
+      case 'mobile.premium.devices': return { available: false };
       default: throw fail('UNSUPPORTED');
     }
   }),
@@ -413,7 +415,12 @@ describe('Premium state', () => {
     render(<Premium onClose={() => {}} />);
     expect((await screen.findByRole('status')).textContent).toBe(`Premium: active until ${formatFullDate(EXPIRES)} (Google Play)`);
     expect(screen.queryByRole('button', { name: 'Subscribe' })).toBeNull();
-    expect(screen.getByRole('link', { name: 'Manage subscription' }).getAttribute('href')).toBe('https://play.google.com/store/account/subscriptions');
+    // Desktop's Manage subscription button, handed to Play's own page as every link is.
+    const opened = [];
+    const anchor = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function record() { opened.push(this.href); });
+    fireEvent.click(screen.getByRole('button', { name: t('settings.billing.manageSubscription') }));
+    anchor.mockRestore();
+    expect(opened).toEqual(['https://play.google.com/store/account/subscriptions']);
   });
 
   it('a lapsed Premium says it ended and offers the plans again', async () => {
@@ -435,26 +442,47 @@ describe('Premium state', () => {
 });
 
 describe('Settings', () => {
-  it('shows Free, then the active line with source and date', async () => {
+  it('has no Premium or Free row on the first screen, and Billing sits in the footer free or not', () => {
     render(<Settings onClose={() => {}} />);
-    expect(screen.getByText('Free')).toBeTruthy();
+    expect(document.querySelector('[data-mv-premium-row]')).toBeNull();
+    expect(screen.queryByText('Free')).toBeNull();
+    const rows = () => [...document.querySelectorAll('[data-mv-settings-page]')].map((b) => b.getAttribute('data-mv-settings-page'));
+    expect(rows().slice(-3)).toEqual(['billing', 'diagnostics', 'help']);
     act(() => useMobileStore.getState().setPremium({ premium: true, source: 'web', expiresMs: EXPIRES }));
-    expect(screen.getByText(`Premium: active until ${formatFullDate(EXPIRES)} (Website)`)).toBeTruthy();
+    expect(rows().slice(-3)).toEqual(['billing', 'diagnostics', 'help']);
     expect(premiumSummary({ premium: true, source: 'apple', expiresMs: EXPIRES })).toContain('(App Store)');
   });
 
-  it('opens the paywall from the Premium row', () => {
-    render(<Settings onClose={() => {}} />);
-    fireEvent.click(document.querySelector('[data-mv-premium-row]'));
-    expect(useMobileStore.getState().paywall).toEqual({ feature: null, signIn: false });
+  it('Settings > Billing is the same component as the paywall: plans, store prices, subscribe, restore, website sign-in, disclosures', async () => {
+    render(<Settings page="billing" onClose={() => {}} />);
+    await ready();
+    expect(document.querySelectorAll('[data-mv-billing]')).toHaveLength(1);
+    expect(screen.getByRole('radio', { name: /Yearly.*QQ 77\.7 per year/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Restore purchases' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Already have Premium from the MailVault website? Sign in' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Terms of Use' }).getAttribute('href')).toBe('https://mailvaultapp.com/terms.html');
+    expect(screen.getByRole('link', { name: 'Manage subscription' }).getAttribute('href')).toBe('https://apps.apple.com/account/subscriptions');
+    // Never the web price or a way to buy on the web.
+    expect(document.querySelector('a[href*="stripe"], a[href*="checkout"], a[href*="pricing"]')).toBeNull();
+    click('Subscribe');
+    await waitFor(() => expect(useMobileStore.getState().premium.premium).toBe(true));
+    expect(engine.calls.filter((c) => c[0] === 'purchase')).toEqual([['purchase', YEAR.id]]);
   });
 
-  it('a replaced phone shows the reason with Sign in again, which opens the sign-in', () => {
+  it('the paywall mounts that one component, with the locked feature marked', async () => {
+    render(<Premium feature="scheduledSend" onClose={() => {}} />);
+    await ready();
+    expect(document.querySelectorAll('[data-mv-billing]')).toHaveLength(1);
+    expect(document.querySelector('[data-mv-highlight="true"]').getAttribute('data-mv-feature')).toBe('scheduledSend');
+  });
+
+  it('a replaced phone says why on the Billing page, and Sign in again opens the website sign-in', async () => {
     useMobileStore.getState().setPremiumLost('DEVICE_REPLACED');
-    render(<Settings onClose={() => {}} />);
-    expect(screen.getByText(t('mobile.premium.deviceReplaced'), { exact: false })).toBeTruthy();
-    click('Sign in again');
-    expect(useMobileStore.getState().paywall).toEqual({ feature: null, signIn: true });
+    render(<Settings page="billing" onClose={() => {}} />);
+    await ready();
+    expect(screen.getByText(t('mobile.premium.deviceReplaced'))).toBeTruthy();
+    click('Already have Premium from the MailVault website? Sign in');
+    expect(screen.getByLabelText('Email address')).toBeTruthy();
   });
 });
 

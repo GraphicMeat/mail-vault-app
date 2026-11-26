@@ -98,6 +98,44 @@ export const settingsSections = [
 export const footerIds = ['billing', 'diagnostics', 'help'];
 export const footerTabs = navEntries(footerIds);
 
+// The colour tile behind each navigation icon (SettingsNavIcon draws it in both apps). Fixed hues,
+// not theme tokens: a tile says "which page", never "where your mail lives", so they keep clear of
+// vault emerald, server blue and only-copy gold (settingsTiles.test.jsx measures it) and use none of
+// the status greens, oranges and reds.
+const TILE = Object.freeze({
+  pink: '#db2777', fuchsia: '#c026d3', purple: '#9333ea', violet: '#7c3aed',
+  rose: '#e11d48', cyan: '#0e7490', slate: '#475569',
+});
+export const SETTINGS_TILE_COLORS = Object.freeze({
+  appearance: TILE.pink,
+  'mail-preferences': TILE.violet,
+  language: TILE.cyan,
+  accounts: TILE.purple,
+  templates: TILE.fuchsia,
+  migration: TILE.slate,
+  views: TILE.violet,
+  'auto-tags': TILE.pink,
+  'ai-providers': TILE.purple,
+  unsubscribe: TILE.rose,
+  cleanup: TILE.rose,
+  storage: TILE.slate,
+  'data-usage': TILE.cyan,
+  backup: TILE.cyan,
+  portable: TILE.slate,
+  'time-capsule': TILE.fuchsia,
+  privacy: TILE.fuchsia,
+  security: TILE.fuchsia,
+  tracking: TILE.rose,
+  encryption: TILE.purple,
+  'network-activity': TILE.cyan,
+  billing: TILE.pink,
+  diagnostics: TILE.slate,
+  daemon: TILE.slate,
+  logs: TILE.slate,
+  help: TILE.cyan,
+});
+export const settingsTileColor = id => SETTINGS_TILE_COLORS[id] || TILE.slate;
+
 // Labels are resolved at render time, so search follows the current language.
 // A result points to the same page and section that contain its real control.
 // A guard test asserts every setting label in src/components/settings is
