@@ -553,3 +553,18 @@ describe('Viewer', () => {
     expect(onClose).toHaveBeenCalled();
   });
 });
+
+describe('header alignment', () => {
+  it('the tag chips and the field strip start where the header text does; the label sheet lines them up with its title', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+    const css = readFileSync(resolve(process.cwd(), 'src/mobile/mobile.css'), 'utf8');
+    const margins = (sel) => [...css.matchAll(new RegExp(`(?:^|\\n)${sel.replace(/[.>]/g, '\\$&')} \\{([^}]*)\\}`, 'g'))]
+      .map((m) => m[1].match(/(?:^|[\s;])margin(?:-inline)?:\s*([^;]+)/)?.[1]?.trim()).filter(Boolean);
+    // `.mv-viewer__top` pads 16px already: no second inset.
+    expect(margins('.local-mail-labels.mv-viewer__tags')).toEqual(['4px 0 0']);
+    expect(margins('.field-strip.mv-viewer__fields')).toEqual(['6px 0 0']);
+    // The sheet pads 8px and its title 8px more.
+    expect(margins('.mv-sheet > .local-mail-labels.mv-viewer__tags')).toEqual(['8px']);
+  });
+});
