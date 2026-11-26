@@ -2,6 +2,7 @@ import React from 'react';
 import { PenSquare } from 'lucide-react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { Button } from '../ui/Button';
+import { SegmentedChoice } from '../ui/SegmentedChoice';
 import { useT } from '../../i18n/index.js';
 
 const MODES = ['app', 'window'];
@@ -10,13 +11,23 @@ const MODES = ['app', 'window'];
  * Where a new compose opens: over the main window, or in a window of its own.
  * One row for Settings and the onboarding tour, like DefaultMailApp.
  */
-export function ComposeOpenMode({ standalone = false }) {
+export function ComposeOpenMode({ standalone = false, compact = false }) {
   const t = useT();
   const Heading = standalone ? 'h2' : 'h4';
   const mode = useSettingsStore(s => s.composeOpenMode) || 'app';
   const setMode = useSettingsStore(s => s.setComposeOpenMode);
   const contextSplit = useSettingsStore(s => s.composeContextSplit ?? null);
   const setContextSplit = useSettingsStore(s => s.setComposeContextSplit);
+
+  if (compact) return (
+    <div className="onboarding-habit-row" data-testid="compose-open-mode">
+      <div className="onboarding-habit-copy">
+        <strong><PenSquare size={15} aria-hidden="true" />{t('settings.behavior.composeOpen.title')}</strong>
+      </div>
+      <SegmentedChoice label={t('settings.behavior.composeOpen.title')} value={mode} onChange={setMode}
+        options={MODES.map(value => ({ value, label: t(`settings.behavior.composeOpen.${value}`) }))} />
+    </div>
+  );
 
   return (
     <div className="settings-section" data-testid="compose-open-mode">

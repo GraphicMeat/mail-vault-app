@@ -9,6 +9,7 @@ import { AiContextPreview } from '../ai/AiContextPreview';
 import { useT } from '../../i18n/index.js';
 import { DesktopViewEnv } from './DesktopViewEnv';
 import { AutoTagsView, remoteSampleText, ruleToForm } from './views/AutoTagsView';
+import { TagListView } from '../tags/TagViews';
 
 export { remoteSampleText };
 
@@ -39,6 +40,7 @@ export function AutoTagSettings() {
   const undoBackfill = useAutoTagStore(s => s.undoBackfill);
   const tags = useTagStore(s => s.tags);
   const createTag = useTagStore(s => s.createTag);
+  const deleteTag = useTagStore(s => s.deleteTag);
   const loadedEmails = useMailStore(s => s.emails) || [];
   const senderOptions = useMemo(() => {
     const addresses = [...new Set(loadedEmails.map(email => email.from?.address?.toLowerCase()).filter(Boolean))].sort();
@@ -71,5 +73,8 @@ export function AutoTagSettings() {
       renderRemoteConfirm={({ open, text, onCancel, onConfirm }) => (
         <AiContextPreview open={open} text={text} provider={currentProvider()} onCancel={onCancel} onConfirm={onConfirm} />
       )} />
+    {/* The local labels themselves, with their delete buttons: kept with the
+        rules that apply them rather than among the quick actions. */}
+    {tags.length > 0 && <TagListView tags={tags} onDelete={id => deleteTag(id)} />}
   </DesktopViewEnv>;
 }

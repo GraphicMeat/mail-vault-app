@@ -25,7 +25,7 @@ const UNKNOWN = { isDefault: false, canSet: false, hint: '' };
  * re-queries afterwards. This re-renders from that answer; nothing here flips
  * optimistically on the click.
  */
-export function DefaultMailApp({ standalone = false }) {
+export function DefaultMailApp({ standalone = false, compact = false }) {
   const t = useT();
   const Heading = standalone ? 'h2' : 'h4';
   const [status, setStatus] = useState(null);
@@ -56,6 +56,24 @@ export function DefaultMailApp({ standalone = false }) {
   if (!status) return null;
 
   const hintKey = HINT_KEYS[status.hint];
+
+  // One line for the onboarding tour: the question, where it stands, the button.
+  if (compact) return (
+    <div className="onboarding-habit-row" data-testid="default-mail-row">
+      <div className="onboarding-habit-copy">
+        <strong><Mail size={15} aria-hidden="true" />{t('settings.behavior.defaultMail.title')}</strong>
+        <span data-testid="default-mail-state" data-default={String(!!status.isDefault)}>
+          {status.isDefault ? t('settings.behavior.defaultMail.isDefault') : (hintKey ? t(hintKey) : t('settings.behavior.defaultMail.notDefault'))}
+        </span>
+      </div>
+      {!status.isDefault && (
+        <Button size="sm" data-testid="default-mail-action" data-action={status.canSet ? 'set' : 'howto'}
+          onClick={() => ask('mailto_make_default')}>
+          {status.canSet ? t('settings.behavior.defaultMail.makeDefault') : t('settings.behavior.defaultMail.checkAgain')}
+        </Button>
+      )}
+    </div>
+  );
 
   return (
     <div className="settings-section">

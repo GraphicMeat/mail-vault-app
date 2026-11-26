@@ -77,64 +77,41 @@ describe('appearance step', () => {
     expect(screen.getByTestId('preview-panes').dataset.layout).toBe('two-column');
   });
 
-  it('picks the app font and text size on the colors tab, and the sample shows the font', () => {
+  it('picks the app font from one menu and the text size on the colors tab, and the sample shows the font', () => {
     useSettingsStore.setState({ appFont: 'instrument-sans', textScale: 1 });
     render(<AppearanceStep onContinue={() => {}} />);
-    const font = screen.getByTestId('appearance-control-font');
-    expect(within(font).getByRole('group', { name: t('settings.text.codingFonts') })).toBeTruthy();
-    fireEvent.click(within(font).getByRole('button', { name: /Atkinson Hyperlegible Next/ }));
+    const font = within(screen.getByTestId('appearance-control-font')).getByRole('combobox', { name: t('settings.text.font') });
+    expect([...font.options].map(o => o.value)).toEqual(expect.arrayContaining(['system', 'atkinson', 'jetbrains-mono']));
+    fireEvent.change(font, { target: { value: 'atkinson' } });
     expect(useSettingsStore.getState().appFont).toBe('atkinson');
     expect(screen.getByTestId('appearance-preview').style.fontFamily).toContain('Atkinson Hyperlegible Next');
     fireEvent.click(within(screen.getByTestId('appearance-control-text-size')).getByRole('radio', { name: '110%' }));
     expect(useSettingsStore.getState().textScale).toBe(1.1);
   });
-
   it('applies current recommended defaults, including Follow the pointer', () => {
     useThemeStore.setState({ theme: 'light', palette: 'indigo' });
     useSettingsStore.setState({ layoutMode: 'two-column', sidebarStyle: 'tagcloud', sidebarLayout: 'switcher', viewStyle: 'chat', emailListStyle: 'default', threadMode: 'flat', afterDeleteSelect: 'next', emailRowHighlight: 'selection' });
     render(<AppearanceStep onContinue={() => {}} />);
     fireEvent.click(screen.getByTestId('appearance-recommended'));
     expect(useThemeStore.getState()).toMatchObject({ theme: 'dark', palette: 'graphite' });
-    expect(useSettingsStore.getState()).toMatchObject({ layoutMode: 'three-column', sidebarStyle: 'list', sidebarLayout: 'stacked', viewStyle: 'list', emailListStyle: 'compact', threadMode: 'expandable', afterDeleteSelect: 'none', emailRowHighlight: 'hover' });
+    expect(useSettingsStore.getState()).toMatchObject({ layoutMode: 'three-column', sidebarStyle: 'list', sidebarLayout: 'stacked', viewStyle: 'list', emailListStyle: 'compact', threadMode: 'expandable', afterDeleteSelect: 'next', emailRowHighlight: 'hover' });
     expect(useSettingsStore.getState().quickActions.styleLinks.global).toBe(false);
   });
 
-  // "must be in onboarding as well" — the delete-confirmation choice ships in
-  // initial setup, on the Reading tab, next to the other reading preferences.
-  it('offers the delete confirmation choice on the reading tab', () => {
-    useSettingsStore.setState({ confirmBeforeDelete: true });
-    render(<AppearanceStep onContinue={() => {}} />);
-    expect(screen.queryByTestId('appearance-control-delete-confirm')).toBeNull();
-    fireEvent.click(tab('reading'));
-    const group = screen.getByTestId('appearance-control-delete-confirm');
-    expect(within(group).getByTestId('appearance-delete-confirm-ask').getAttribute('aria-pressed')).toBe('true');
-
-    fireEvent.click(within(group).getByTestId('appearance-delete-confirm-skip'));
-    expect(useSettingsStore.getState().confirmBeforeDelete).toBe(false);
-    expect(within(group).getByTestId('appearance-delete-confirm-skip').getAttribute('aria-pressed')).toBe('true');
-
-    fireEvent.click(screen.getByTestId('appearance-recommended'));
-    expect(useSettingsStore.getState().confirmBeforeDelete).toBe(true);
-  });
-
-  it('picks each surface\'s layout from its cards and keeps it through Continue', () => {
+  it('picks how a hovered row shows its actions from four tiles, and keeps it through Continue', () => {
     const onContinue = vi.fn();
     render(<AppearanceStep onContinue={onContinue} />);
     fireEvent.click(screen.getByRole('tab', { name: 'Quick actions' }));
-    fireEvent.click(screen.getByRole('radio', { name: 'Email reader' }));
     const layout = within(screen.getByTestId('appearance-control-quick-layout')).getByRole('radiogroup', { name: 'Layout' });
-    expect(within(layout).getByRole('radio', { name: 'Inline' }).getAttribute('aria-checked')).toBe('true');
-    // Each card draws the reader's toolbar in its layout.
-    expect(within(layout).getByRole('radio', { name: 'Menu' }).closest('.choice-card').querySelector('.email-action-bar')).not.toBeNull();
+    expect(within(layout).getByRole('radio', { name: 'Radial' }).getAttribute('aria-checked')).toBe('true');
     fireEvent.click(within(layout).getByRole('radio', { name: 'Menu' }));
-    expect(useSettingsStore.getState().quickActions.defaults).toMatchObject({ reader: { mode: 'menu' }, row: { mode: 'radial' }, selection: { mode: 'inline' } });
+    expect(useSettingsStore.getState().quickActions.defaults).toMatchObject({ row: { mode: 'menu' }, reader: { mode: 'inline' }, selection: { mode: 'inline' } });
     fireEvent.click(tab('colors'));
     fireEvent.click(screen.getByRole('tab', { name: 'Quick actions' }));
     fireEvent.click(screen.getByTestId('onboarding-continue'));
     expect(onContinue).toHaveBeenCalledOnce();
-    expect(useSettingsStore.getState().quickActions.defaults.reader.mode).toBe('menu');
+    expect(useSettingsStore.getState().quickActions.defaults.row.mode).toBe('menu');
   });
-
   it('offers the other apps\' action sets, and one click sets all three surfaces', () => {
     render(<AppearanceStep onContinue={() => {}} />);
     fireEvent.click(screen.getByRole('tab', { name: 'Quick actions' }));
@@ -194,12 +171,12 @@ describe('appearance step', () => {
     useSettingsStore.setState(s => ({ notificationSettings: { ...s.notificationSettings, enabled: true, sound: 'Glass' } }));
     render(<AppearanceStep onContinue={() => {}} />);
     fireEvent.click(tab('reading'));
-    const group = screen.getByTestId('appearance-control-sound');
-    expect(within(group).getByTestId('appearance-sound-Glass').getAttribute('aria-pressed')).toBe('true');
-    fireEvent.click(within(group).getByTestId('appearance-sound-Pop'));
+    const sound = within(screen.getByTestId('appearance-control-sound')).getByRole('combobox');
+    expect(sound.value).toBe('Glass');
+    fireEvent.change(sound, { target: { value: 'Pop' } });
     expect(useSettingsStore.getState().notificationSettings.sound).toBe('Pop');
     expect(previewNotificationSound).toHaveBeenCalledWith('Pop');
-    fireEvent.click(within(group).getByTestId('appearance-sound-none'));
+    fireEvent.change(sound, { target: { value: 'none' } });
     expect(useSettingsStore.getState().notificationSettings.sound).toBe('none');
     expect(previewNotificationSound).toHaveBeenCalledTimes(1);
     cleanup();
@@ -211,7 +188,6 @@ describe('appearance step', () => {
     expect(screen.queryByTestId('appearance-control-sound')).toBeNull();
     delete navigator.platform;
   });
-
   it('makes Next the default and walks every tab before Continue', () => {
     const onContinue = vi.fn();
     useSettingsStore.setState({ sidebarStyle: 'tagcloud', afterDeleteSelect: 'next', emailRowHighlight: 'selection' });

@@ -3115,7 +3115,7 @@
   "settings.text.systemFont": "Fuente del sistema",
   "settings.text.downloadedFonts": "Fuentes descargadas",
   "settings.text.moreFonts": "Más fuentes (Google Fonts)…",
-  "settings.text.googleFontsNote": "La fuente que elijas se descarga una sola vez de Google Fonts (solo archivos de fuente, ningún dato personal) y se guarda en este dispositivo.",
+  "settings.text.googleFontsNote": "La fuente que elijas se descarga una vez de Google Fonts y se guarda en este dispositivo.",
   "fonts.picker.title": "Más fuentes",
   "fonts.picker.search": "Buscar fuentes",
   "fonts.picker.categories": "Categorías de fuentes",
@@ -4791,5 +4791,13 @@
   "keep.move": "Mover correos guardados",
   "keep.closeStack": "Cerrar burbuja",
   "keep.stack_one": "{{name}}, {{count}} correo guardado",
-  "keep.stack_other": "{{name}}, {{count}} correos guardados"
+  "keep.stack_other": "{{name}}, {{count}} correos guardados",
+  "onboarding.quickActionsShows": "Al señalar un mensaje, mostrar sus acciones como",
+  "onboarding.habitsTitle": "Cómo gestiona MailVault tu correo",
+  "onboarding.habitsSubtitle": "Unas pocas decisiones rápidas. Puedes cambiarlas cuando quieras en Ajustes.",
+  "quickActions.reorderChipInstructions": "Arrastra para reordenar o usa las flechas sobre el asa.",
+  "quickActions.findAction": "Buscar una acción",
+  "quickActions.noActionMatch": "Ninguna acción coincide con tu búsqueda.",
+  "quickActions.sameLook": "Mismo aspecto en filas, barra de selección y lector",
+  "settings.text.googleFontsTracking": "Descargar una fuente conecta con Google, que ve tu dirección IP y el momento de la descarga. Google puede usarlo para rastrearte. Las fuentes incluidas nunca se conectan a Google."
 }

@@ -195,7 +195,7 @@ describe('QuickActionsSettings', () => {
       overrides: {},
     };
     const view = render(<QuickActionsSettings />);
-    const row = document.querySelector('.quick-actions-entry-name').closest('.quick-actions-entry');
+    const row = document.querySelector('.quick-actions-chip');
     expect(row.dataset.colored).toBe('true');
     const inline = screen.getByRole('radio', { name: 'Inline' });
     fireEvent.keyDown(inline, { key: 'ArrowRight' });
@@ -203,14 +203,13 @@ describe('QuickActionsSettings', () => {
 
     fireEvent.click(screen.getByRole('radio', { name: 'Neutral' }));
     view.rerender(<QuickActionsSettings />);
-    expect(document.querySelector('.quick-actions-entry-name').closest('.quick-actions-entry').dataset.colored).toBe('false');
+    expect(document.querySelector('.quick-actions-chip').dataset.colored).toBe('false');
     fireEvent.click(screen.getByRole('radio', { name: 'Custom colors' }));
     view.rerender(<QuickActionsSettings />);
-    expect(document.querySelector('.quick-actions-entry-name').closest('.quick-actions-entry').dataset.colored).toBe('true');
-    expect(screen.getByText('Default action color')).toBeTruthy();
+    expect(document.querySelector('.quick-actions-chip').dataset.colored).toBe('true');
   });
 
-  it('draws every choice as a card of its own option, the chosen one marked, the label its only name', () => {
+  it('draws every layout and color style as a light tile, the chosen one marked, the label its only name', () => {
     state.quickActions = {
       defaults: { row: { mode: 'radial', entries: [{ id: 'archive', action: 'archive' }, { id: 'reply', action: 'reply' }], favoriteId: 'archive', palette: 'neutral' } },
       overrides: {},
@@ -221,24 +220,17 @@ describe('QuickActionsSettings', () => {
     expect(radios.map(radio => radio.textContent.trim())).toEqual(['Inline', 'Menu', 'Radial', 'Favorite plus menu']);
     const cards = radios.map(radio => radio.closest('.choice-card'));
     expect(cards.map(card => card.hasAttribute('data-selected'))).toEqual([false, false, true, false]);
-    // Each card draws the row in its own layout, beside its radio, never in it.
+    // Each tile is a small drawing beside its radio, never in it, and no copy of the list.
     for (const [index, card] of cards.entries()) {
-      const sample = card.querySelector('.quick-actions-card-sample');
-      expect(radios[index].contains(sample)).toBe(false);
-      expect(sample.getAttribute('aria-hidden')).toBe('true');
-      expect(sample.hasAttribute('inert')).toBe(true);
-      expect(sample.hasAttribute('data-quick-actions-preview')).toBe(true);
+      const picture = card.querySelector('.quick-actions-mode-picture');
+      expect(radios[index].contains(picture)).toBe(false);
+      expect(picture.getAttribute('aria-hidden')).toBe('true');
+      expect(card.querySelector('[data-testid="email-row"]')).toBeNull();
     }
-    expect(cards[0].querySelector('.quick-actions[data-layout="inline"]')).not.toBeNull();
-    expect(cards[1].querySelector('.quick-actions[data-layout="menu"]')).not.toBeNull();
-    expect(cards[2].querySelector('.quick-actions-radial-preview')).not.toBeNull();
-    expect(cards[3].querySelector('.quick-actions[data-layout="favorite-menu"]')).not.toBeNull();
-    for (const name of ['Color style', 'Wheel layout', 'Page actions in the wheel']) {
-      const group = screen.getByRole('radiogroup', { name });
-      for (const radio of within(group).getAllByRole('radio')) {
-        expect(radio.querySelector('button')).toBeNull();
-        expect(radio.closest('.choice-card').querySelector('.quick-actions-card-sample')).not.toBeNull();
-      }
+    const palette = screen.getByRole('radiogroup', { name: 'Color style' });
+    for (const radio of within(palette).getAllByRole('radio')) {
+      expect(radio.querySelector('button')).toBeNull();
+      expect(radio.closest('.choice-card').querySelector('.quick-actions-palette-dot')).not.toBeNull();
     }
   });
 
@@ -329,86 +321,6 @@ describe('QuickActionsSettings', () => {
     expect(wheel.querySelector('[data-quick-action="archive"]')).toBeNull();
   });
 
-  it('adds a new action in its category slot, not at the bottom', () => {
-    state.quickActions = {
-      defaults: { row: { mode: 'inline', entries: ['reply', 'archive', 'export'].map(action => ({ id: action, action })), favoriteId: 'archive', palette: 'neutral' } },
-      overrides: {},
-    };
-    render(<QuickActionsSettings />);
-    fireEvent.change(screen.getByRole('combobox', { name: 'Action' }), { target: { value: 'forward' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Add action' }));
-    expect(state.quickActions.defaults.row.entries.map(entry => entry.id)).toEqual(['reply', 'forward', 'archive', 'export']);
-    fireEvent.change(screen.getByRole('combobox', { name: 'Action' }), { target: { value: 'star' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Add action' }));
-    expect(state.quickActions.defaults.row.entries.map(entry => entry.id)).toEqual(['reply', 'forward', 'star', 'archive', 'export']);
-  });
-
-  it('lists where every action goes by default, grouped by category', () => {
-    state.quickActions = { defaults: {}, overrides: {} };
-    render(<QuickActionsSettings />);
-    // Folded inside a <details>, hence `hidden`.
-    const reference = screen.getByRole('list', { name: 'Where new actions go', hidden: true });
-    const groups = within(reference).getAllByRole('list', { hidden: true });
-    expect(groups.map(group => group.getAttribute('aria-label'))).toEqual(['Send', 'Mark', 'Organize', 'Clean up', 'More']);
-    expect(within(groups[0]).getAllByRole('listitem', { hidden: true }).map(item => item.textContent)).toEqual(
-      ['Reply', 'Reply All', 'Forward', 'Reply with template', 'New message to sender'],
-    );
-    // Rows offer Open in new window but not View source: the reference follows the surface.
-    expect(within(groups[4]).getAllByRole('listitem', { hidden: true }).map(item => item.dataset.action)).toEqual(['open', 'export', 'goToMailbox']);
-  });
-
-  it('removes an action with its red trash button', () => {
-    state.quickActions = {
-      defaults: { row: { mode: 'inline', entries: ['reply', 'archive'].map(action => ({ id: action, action })), favoriteId: 'reply', palette: 'neutral' } },
-      overrides: {},
-    };
-    render(<QuickActionsSettings />);
-    const remove = screen.getByRole('button', { name: 'Remove action Archive' });
-    expect(remove.classList.contains('quick-actions-remove')).toBe(true);
-    expect(remove.querySelector('svg')).toBeTruthy();
-    expect(remove.textContent).toBe('');
-    fireEvent.click(remove);
-    expect(state.quickActions.defaults.row.entries.map(entry => entry.id)).toEqual(['reply']);
-  });
-
-  it('reorders actions by dragging their grip, and with the arrow keys', () => {
-    vi.stubGlobal('PointerEvent', class extends MouseEvent {
-      constructor(type, options = {}) {
-        super(type, options);
-        this.pointerId = options.pointerId ?? 1;
-        this.isPrimary = options.isPrimary ?? true;
-      }
-    });
-    // jsdom has no layout: three stacked 60px rows, as a browser measures.
-    const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
-      const row = this.matches('li.account-settings-account');
-      const index = row ? [...this.parentElement.children].indexOf(this) : 0;
-      return { left: 0, right: 260, top: index * 60, bottom: row ? (index + 1) * 60 : 180, width: 260, height: row ? 60 : 180 };
-    });
-    try {
-      state.quickActions = {
-        defaults: { row: { mode: 'inline', entries: ['archive', 'reply', 'export'].map(action => ({ id: action, action })), favoriteId: 'reply', palette: 'neutral' } },
-        overrides: {},
-      };
-      const view = render(<QuickActionsSettings />);
-      const order = () => state.quickActions.defaults.row.entries.map(entry => entry.id);
-      expect(screen.queryByRole('button', { name: /^Move (up|down)/ })).toBeNull();
-      const grip = screen.getByRole('button', { name: 'Reorder Archive' });
-      fireEvent.pointerDown(grip, { button: 0, clientX: 20, clientY: 30 });
-      fireEvent.pointerMove(grip, { clientX: 20, clientY: 175 });
-      expect(order()).toEqual(['archive', 'reply', 'export']);
-      fireEvent.pointerUp(grip, { clientX: 20, clientY: 175 });
-      expect(order()).toEqual(['reply', 'export', 'archive']);
-
-      view.rerender(<QuickActionsSettings />);
-      fireEvent.keyDown(screen.getByRole('button', { name: 'Reorder Export' }), { key: 'ArrowUp' });
-      expect(order()).toEqual(['export', 'reply', 'archive']);
-    } finally {
-      rect.mockRestore();
-      vi.unstubAllGlobals();
-    }
-  });
-
   it('chooses how selection buttons show from a radio group', () => {
     state.quickActions = {
       defaults: { selection: { mode: 'inline', entries: [{ id: 'markRead', action: 'markRead' }], favoriteId: 'markRead', palette: 'neutral', selectionDisplay: 'icon-label', selectionActionLimit: 3 } },
@@ -447,21 +359,6 @@ describe('QuickActionsSettings', () => {
     const { defaults } = applyQuickActionPreset({}, null, id);
     return surfaces(defaults);
   };
-
-  it('offers the four action sets, each drawn as its own row, MailVault marked on the defaults', () => {
-    state.quickActions = { defaults: {}, overrides: {} };
-    render(<QuickActionsSettings />);
-    const group = screen.getByRole('group', { name: 'Action sets' });
-    const buttons = within(group).getAllByRole('button');
-    expect(buttons.map(button => button.textContent.trim())).toEqual(['MailVault', 'Gmail', 'Outlook', 'Thunderbird']);
-    expect(within(group).queryAllByRole('radio')).toHaveLength(0);
-    expect(presetPressed()).toEqual(['MailVault']);
-    expect(screen.queryByTestId('quick-actions-preset-custom')).toBeNull();
-    for (const [index, preset] of QUICK_ACTION_PRESETS.entries()) {
-      const actions = buttons[index].closest('.choice-card').querySelector('.quick-actions-card-sample [data-surface="row"], .quick-actions-card-sample .quick-actions-radial-preview');
-      expect(actions?.dataset.layout ?? 'radial').toBe(preset.surfaces.row.mode);
-    }
-  });
 
   it('applies an action set to all three surfaces of All views, marks it, and a later edit unmarks it', () => {
     state.quickActions = { defaults: {}, overrides: {} };

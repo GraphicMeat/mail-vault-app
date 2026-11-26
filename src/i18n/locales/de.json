@@ -3115,7 +3115,7 @@
   "settings.text.systemFont": "Systemschrift",
   "settings.text.downloadedFonts": "Heruntergeladene Schriften",
   "settings.text.moreFonts": "Weitere Schriften (Google Fonts)…",
-  "settings.text.googleFontsNote": "Eine gewählte Schrift wird einmalig von Google Fonts geladen (nur Schriftdateien, keine persönlichen Daten) und auf diesem Gerät gespeichert.",
+  "settings.text.googleFontsNote": "Eine gewählte Schrift wird einmal von Google Fonts heruntergeladen und auf diesem Gerät gespeichert.",
   "fonts.picker.title": "Weitere Schriften",
   "fonts.picker.search": "Schriften suchen",
   "fonts.picker.categories": "Schriftkategorien",
@@ -4791,5 +4791,13 @@
   "keep.move": "Gemerkte E-Mails verschieben",
   "keep.closeStack": "Bubble schließen",
   "keep.stack_one": "{{name}}, {{count}} gemerkte E-Mail",
-  "keep.stack_other": "{{name}}, {{count}} gemerkte E-Mails"
+  "keep.stack_other": "{{name}}, {{count}} gemerkte E-Mails",
+  "onboarding.quickActionsShows": "Wenn du auf eine Nachricht zeigst, erscheinen ihre Aktionen als",
+  "onboarding.habitsTitle": "Wie MailVault mit E-Mails umgeht",
+  "onboarding.habitsSubtitle": "Ein paar kurze Entscheidungen. Du kannst sie jederzeit in den Einstellungen ändern.",
+  "quickActions.reorderChipInstructions": "Zum Umordnen ziehen oder die Pfeiltasten am Griff verwenden.",
+  "quickActions.findAction": "Aktion suchen",
+  "quickActions.noActionMatch": "Keine Aktion passt zu deiner Suche.",
+  "quickActions.sameLook": "Gleiches Aussehen für Zeilen, Auswahlleiste und Leseansicht",
+  "settings.text.googleFontsTracking": "Beim Herunterladen einer Schrift wird eine Verbindung zu Google hergestellt. Google sieht deine IP-Adresse und den Zeitpunkt des Downloads und kann dich damit verfolgen. Die mitgelieferten Schriften verbinden sich nie mit Google."
 }

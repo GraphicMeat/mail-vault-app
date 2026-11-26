@@ -3115,7 +3115,7 @@
   "settings.text.systemFont": "Police système",
   "settings.text.downloadedFonts": "Polices téléchargées",
   "settings.text.moreFonts": "Plus de polices (Google Fonts)…",
-  "settings.text.googleFontsNote": "Une police choisie est téléchargée une seule fois depuis Google Fonts (fichiers de police uniquement, aucune donnée personnelle) et conservée sur cet appareil.",
+  "settings.text.googleFontsNote": "La police choisie est téléchargée une fois depuis Google Fonts et conservée sur cet appareil.",
   "fonts.picker.title": "Plus de polices",
   "fonts.picker.search": "Rechercher des polices",
   "fonts.picker.categories": "Catégories de polices",
@@ -4791,5 +4791,13 @@
   "keep.move": "Déplacer les e-mails gardés",
   "keep.closeStack": "Fermer la bulle",
   "keep.stack_one": "{{name}}, {{count}} e-mail gardé",
-  "keep.stack_other": "{{name}}, {{count}} e-mails gardés"
+  "keep.stack_other": "{{name}}, {{count}} e-mails gardés",
+  "onboarding.quickActionsShows": "Quand vous pointez un message, afficher ses actions sous forme de",
+  "onboarding.habitsTitle": "Comment MailVault gère vos e-mails",
+  "onboarding.habitsSubtitle": "Quelques choix rapides. Modifiables à tout moment dans les Réglages.",
+  "quickActions.reorderChipInstructions": "Faites glisser pour réordonner, ou utilisez les flèches sur la poignée.",
+  "quickActions.findAction": "Rechercher une action",
+  "quickActions.noActionMatch": "Aucune action ne correspond à votre recherche.",
+  "quickActions.sameLook": "Même apparence pour les lignes, la barre de sélection et le lecteur",
+  "settings.text.googleFontsTracking": "Télécharger une police établit une connexion avec Google, qui voit votre adresse IP et l'heure du téléchargement. Google peut s'en servir pour vous pister. Les polices intégrées ne se connectent jamais à Google."
 }

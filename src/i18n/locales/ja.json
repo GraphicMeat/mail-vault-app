@@ -3115,7 +3115,7 @@
   "settings.text.systemFont": "システムフォント",
   "settings.text.downloadedFonts": "ダウンロードしたフォント",
   "settings.text.moreFonts": "その他のフォント（Google Fonts）…",
-  "settings.text.googleFontsNote": "選んだフォントは Google Fonts から一度だけダウンロードされ（フォントファイルのみ、個人データは送信されません）、このデバイスに保存されます。",
+  "settings.text.googleFontsNote": "選んだフォントは Google Fonts から一度だけダウンロードされ、このデバイスに保存されます。",
   "fonts.picker.title": "その他のフォント",
   "fonts.picker.search": "フォントを検索",
   "fonts.picker.categories": "フォントの種類",
@@ -4791,5 +4791,13 @@
   "keep.move": "保持したメールを移動",
   "keep.closeStack": "バブルを閉じる",
   "keep.stack_one": "{{name}}、保持したメール {{count}} 件",
-  "keep.stack_other": "{{name}}、保持したメール {{count}} 件"
+  "keep.stack_other": "{{name}}、保持したメール {{count}} 件",
+  "onboarding.quickActionsShows": "メッセージにポインタを合わせたときのアクションの表示方法",
+  "onboarding.habitsTitle": "MailVault でのメールの扱い方",
+  "onboarding.habitsSubtitle": "いくつかの簡単な選択です。設定でいつでも変更できます。",
+  "quickActions.reorderChipInstructions": "ドラッグして並べ替えるか、つまみの上で矢印キーを使います。",
+  "quickActions.findAction": "アクションを検索",
+  "quickActions.noActionMatch": "検索に一致するアクションはありません。",
+  "quickActions.sameLook": "行、選択バー、リーダーで同じ見た目にする",
+  "settings.text.googleFontsTracking": "フォントをダウンロードすると Google に接続します。Google はあなたの IP アドレスとダウンロードした時刻を把握でき、それを使ってあなたを追跡できます。同梱のフォントは Google に接続しません。"
 }

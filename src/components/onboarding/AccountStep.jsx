@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Key, Lock, EyeOff, HardDrive } from 'lucide-react';
 import { AccountModal } from '../AccountModal';
 import { Button } from '../ui/Button';
+import { OnboardingScreen } from './OnboardingScreen';
 import { t as tr, useT } from '../../i18n/index.js';
 
 // Each card names a mechanism rather than restating a reassurance — the
@@ -29,8 +30,14 @@ export function AccountStep({ onAdded, onSkip }) {
   const [showModal, setShowModal] = useState(false);
 
   return (
-    <div className="max-w-lg w-full">
-      <h2 className="text-sm font-semibold text-mail-text mb-3">{t('onboarding.whereDataLives')}</h2>
+    <OnboardingScreen className="onboarding-account" title={t('onboarding.whereDataLives')}
+      secondary={<Button variant="ghost" size="sm" onClick={onSkip} data-testid="onboarding-skip-account">
+        {t('onboarding.skipAccount')}
+      </Button>}
+      primary={<Button variant="primary" size="lg" data-testid="onboarding-add-mailbox" onClick={() => setShowModal(true)}>
+        {t('app.addFirstAccount')}
+      </Button>}>
+    <div className="onboarding-account-grid">
 
       <div data-testid="onboarding-mechanisms" className="space-y-2 mb-3">
         {MECHANISMS().map((m) => {
@@ -60,20 +67,10 @@ export function AccountStep({ onAdded, onSkip }) {
         </div>
       </div>
 
-      <div className="flex flex-col gap-2">
-        <Button variant="primary" size="lg" fullWidth
-                data-testid="onboarding-add-mailbox"
-                onClick={() => setShowModal(true)}>
-          {t('app.addFirstAccount')}
-        </Button>
-        <Button variant="ghost" size="sm" fullWidth onClick={onSkip} data-testid="onboarding-skip-account">
-          {t('onboarding.skipAccount')}
-        </Button>
-      </div>
-
       {showModal && (
         <AccountModal onClose={() => setShowModal(false)} onSuccess={onAdded} />
       )}
     </div>
+    </OnboardingScreen>
   );
 }

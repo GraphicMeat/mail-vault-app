@@ -165,3 +165,19 @@ describe('Text settings with Google Fonts', () => {
     await waitFor(() => expect(useSettingsStore.getState().appFont).toBe('instrument-sans'));
   });
 });
+
+describe('Google Fonts tracking notice', () => {
+  it('warns in the picker that Google can see the download', () => {
+    render(<GoogleFontPicker open onClose={() => {}} onPick={vi.fn()} />);
+    const note = screen.getByRole('note');
+    expect(note.textContent).toContain(t('settings.text.googleFontsTracking'));
+    expect(document.body.textContent).not.toMatch(/no personal data/i);
+  });
+
+  it('warns beside More fonts in Text settings', () => {
+    render(<AppearanceSettings initialSection="text" />);
+    const note = screen.getByRole('note');
+    expect(note.textContent).toContain(t('settings.text.googleFontsTracking'));
+    expect(document.body.textContent).not.toMatch(/no personal data/i);
+  });
+});

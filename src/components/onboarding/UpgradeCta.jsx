@@ -12,6 +12,7 @@ import { PlanPicker, defaultPlanId, planCtaLabel } from '../billing/PlanPicker';
 import { Button } from '../ui/Button';
 import { ExternalLink } from '../ui/ExternalLink';
 import { ReviewCards } from './ReviewCards';
+import { OnboardingScreen } from './OnboardingScreen';
 
 // What Premium does, in the three features whose outcome is the easiest to
 // picture: copies that happen on their own, a server that empties itself, a
@@ -95,116 +96,107 @@ export function UpgradeCta({ onUpgrade, onSkip, onOpenFaq, email }) {
     setBusy(false);
   };
 
+  // Keyed so a button is the same button in every phase: React unwraps an
+  // unkeyed fragment and would reuse the loading phase's Continue with Free as
+  // See Premium the moment the plans fail, under a click.
+  const skip = (primary) => <Button key="skip" variant={primary ? 'primary' : 'ghost'} size={primary ? 'lg' : 'md'} onClick={onSkip} data-testid="onboarding-skip">
+    {primary ? t('common.continue') : t('onboarding.ctaSkip')}
+  </Button>;
+  let main = null;
+  if (phase === 'ready') {
+    main = <Button key="primary" variant="primary" size="lg" onClick={checkout} disabled={busy} data-testid="onboarding-checkout">{planCtaLabel(selected)}</Button>;
+  } else if (onUpgrade && phase !== 'loading') {
+    main = <Button key="primary" variant="primary" size="lg" onClick={onUpgrade} data-testid="onboarding-upgrade">{t('onboarding.ctaPrimary')}</Button>;
+  } else if (onUpgrade) {
+    // The primary button's slot, held empty while the plans load, so
+    // Continue with Free does not move when it arrives.
+    main = <span key="primary" aria-hidden="true" className="onboarding-cta-slot" />;
+  }
+
   return (
-    <div className="max-w-md w-full text-center py-4">
-      <div className="onboarding-thankyou-art mx-auto mb-5" aria-hidden="true">
-        <img src={thankYouImage} alt="" width="1312" height="1199" className="onboarding-thankyou-image" />
-        {HEARTS.map((heart, index) => (
-          <span
-            key={index}
-            className="onboarding-flying-heart"
-            style={{
-              '--heart-x': heart.x,
-              '--heart-y': heart.y,
-              '--heart-delay': heart.delay,
-              '--heart-duration': heart.duration,
-              '--heart-rotation': heart.rotation,
-            }}
-          >
-            <svg width={heart.size} height={heart.size} viewBox="0 0 16 16" fill="currentColor" shapeRendering="crispEdges">
-              <path d="M2 2h4v2h4V2h4v2h2v5h-2v2h-2v2h-2v2H6v-2H4v-2H2V9H0V4h2V2z" />
-            </svg>
-          </span>
-        ))}
-      </div>
-      <h2 className="text-2xl font-display font-bold text-mail-text mb-2">{t('onboarding.ctaTitle')}</h2>
-      <p className="text-sm text-mail-text-muted leading-relaxed mb-6">{t('onboarding.ctaSubtitle')}</p>
-
-      {sells && <ReviewCards />}
-
-      {sells && (
-        <section data-testid="onboarding-impact" className="mb-6 text-left">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-mail-text-muted mb-2 text-center">
-            {t('onboarding.premiumTitle')}
-          </h3>
-          <ul className="flex flex-col gap-2">
-            {IMPACT.map((feature) => {
-              const Icon = feature.icon;
-              return (
-                <li key={feature.id} className="flex items-start gap-3">
-                  <Icon size={16} aria-hidden="true" className="mt-0.5 flex-shrink-0 text-mail-accent-text" />
-                  <span className="text-sm text-mail-text-muted leading-snug">
-                    <span className="block font-semibold text-mail-text">{t(feature.titleKey)}</span>
-                    {t(feature.blurbKey)}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      )}
-
-      {phase === 'loading' && <div data-testid="onboarding-plans-loading" aria-busy="true" className="mb-4 min-h-[8rem]" />}
-
-      {phase === 'ready' && (
-        <div data-testid="onboarding-plans" className="mb-4">
-          <PlanPicker plans={plans} selectedId={selectedId} onSelect={setSelectedId} name="onboarding-plan" label={t('onboarding.ctaPlans')} />
+    <OnboardingScreen className={`onboarding-cta${sells ? ' onboarding-cta-sells' : ''}`}
+      secondary={onUpgrade ? skip(false) : null}
+      primary={onUpgrade ? main : skip(true)}>
+      <div className="onboarding-cta-grid">
+        <div className="onboarding-cta-thanks">
+          <div className="onboarding-thankyou-art" aria-hidden="true">
+            <img src={thankYouImage} alt="" width="1312" height="1199" className="onboarding-thankyou-image" />
+            {HEARTS.map((heart, index) => (
+              <span
+                key={index}
+                className="onboarding-flying-heart"
+                style={{
+                  '--heart-x': heart.x,
+                  '--heart-y': heart.y,
+                  '--heart-delay': heart.delay,
+                  '--heart-duration': heart.duration,
+                  '--heart-rotation': heart.rotation,
+                }}
+              >
+                <svg width={heart.size} height={heart.size} viewBox="0 0 16 16" fill="currentColor" shapeRendering="crispEdges">
+                  <path d="M2 2h4v2h4V2h4v2h2v5h-2v2h-2v2h-2v2H6v-2H4v-2H2V9H0V4h2V2z" />
+                </svg>
+              </span>
+            ))}
+          </div>
+          <h2 className="text-2xl font-display font-bold text-mail-text">{t('onboarding.ctaTitle')}</h2>
+          <p className="text-sm text-mail-text-muted leading-relaxed">{t('onboarding.ctaSubtitle')}</p>
+          {sells && <ReviewCards />}
+          <button type="button" onClick={onOpenFaq} data-testid="onboarding-faq"
+            className="inline-flex items-center gap-1.5 text-xs text-mail-text-muted hover:text-mail-accent-text">
+            <HelpCircle size={13} />
+            {t('onboarding.ctaFaq')}
+          </button>
         </div>
-      )}
 
-      {error && <p role="alert" className="mb-3 text-xs text-mail-danger">{error}</p>}
+        {sells && (
+          <div className="onboarding-cta-offer">
+            <section data-testid="onboarding-impact">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-mail-text-muted mb-2">
+                {t('onboarding.premiumTitle')}
+              </h3>
+              <ul className="flex flex-col gap-2">
+                {IMPACT.map((feature) => {
+                  const Icon = feature.icon;
+                  return (
+                    <li key={feature.id} className="flex items-start gap-3">
+                      <Icon size={16} aria-hidden="true" className="mt-0.5 flex-shrink-0 text-mail-accent-text" />
+                      <span className="text-sm text-mail-text-muted leading-snug">
+                        <span className="block font-semibold text-mail-text">{t(feature.titleKey)}</span>
+                        {t(feature.blurbKey)}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
 
-      {/* Keyed so a button is the same button in every phase: React unwraps an
-          unkeyed fragment and would reuse the loading phase's Continue with
-          Free as See Premium the moment the plans fail, under a click. */}
-      <div className="flex flex-col gap-2">
-        {phase === 'ready' ? <>
-          <Button key="primary" variant="primary" size="lg" fullWidth onClick={checkout} disabled={busy} data-testid="onboarding-checkout">
-            {planCtaLabel(selected)}
-          </Button>
-          <Button key="skip" variant="ghost" size="md" fullWidth onClick={onSkip} data-testid="onboarding-skip">
-            {t('onboarding.ctaSkip')}
-          </Button>
-        </> : onUpgrade && phase !== 'loading' ? <>
-          <Button key="primary" variant="primary" size="lg" fullWidth onClick={onUpgrade} data-testid="onboarding-upgrade">
-            {t('onboarding.ctaPrimary')}
-          </Button>
-          <Button key="skip" variant="ghost" size="md" fullWidth onClick={onSkip} data-testid="onboarding-skip">
-            {t('onboarding.ctaSkip')}
-          </Button>
-        </> : onUpgrade ? <>
-          {/* The primary button's slot, held empty while the plans load, so
-              Continue with Free does not drop when it arrives. */}
-          <div key="primary" aria-hidden="true" className="h-10" />
-          <Button key="skip" variant="ghost" size="md" fullWidth onClick={onSkip} data-testid="onboarding-skip">
-            {t('onboarding.ctaSkip')}
-          </Button>
-        </> : (
-          <Button key="skip" variant="primary" size="lg" fullWidth onClick={onSkip} data-testid="onboarding-skip">
-            {t('common.continue')}
-          </Button>
+            {phase === 'loading' && <div data-testid="onboarding-plans-loading" aria-busy="true" className="min-h-[6rem]" />}
+
+            {phase === 'ready' && (
+              <div data-testid="onboarding-plans">
+                <PlanPicker plans={plans} selectedId={selectedId} onSelect={setSelectedId} name="onboarding-plan" label={t('onboarding.ctaPlans')} />
+              </div>
+            )}
+
+            {error && <p role="alert" className="text-xs text-mail-danger">{error}</p>}
+
+            {phase === 'ready' && (
+              <div className="flex items-center gap-x-4 gap-y-1 flex-wrap text-xs text-mail-text-muted">
+                <button type="button" onClick={onUpgrade} data-testid="onboarding-restore" className="hover:text-mail-accent-text underline-offset-2 hover:underline">
+                  {t('onboarding.ctaRestore')}
+                </button>
+                <ExternalLink href={TERMS_URL} data-testid="onboarding-terms" className="hover:text-mail-accent-text hover:underline">
+                  {t('onboarding.ctaTerms')}
+                </ExternalLink>
+                <ExternalLink href={PRIVACY_URL} data-testid="onboarding-privacy" className="hover:text-mail-accent-text hover:underline">
+                  {t('settings.help.privacyPolicy')}
+                </ExternalLink>
+              </div>
+            )}
+          </div>
         )}
       </div>
-
-      {phase === 'ready' && (
-        <div className="mt-4 flex items-center justify-center gap-x-4 gap-y-1 flex-wrap text-xs text-mail-text-muted">
-          <button type="button" onClick={onUpgrade} data-testid="onboarding-restore" className="hover:text-mail-accent-text underline-offset-2 hover:underline">
-            {t('onboarding.ctaRestore')}
-          </button>
-          <ExternalLink href={TERMS_URL} data-testid="onboarding-terms" className="hover:text-mail-accent-text hover:underline">
-            {t('onboarding.ctaTerms')}
-          </ExternalLink>
-          <ExternalLink href={PRIVACY_URL} data-testid="onboarding-privacy" className="hover:text-mail-accent-text hover:underline">
-            {t('settings.help.privacyPolicy')}
-          </ExternalLink>
-        </div>
-      )}
-
-      <button type="button" onClick={onOpenFaq} data-testid="onboarding-faq"
-        className="mt-4 inline-flex items-center gap-1.5 text-xs text-mail-text-muted hover:text-mail-accent-text">
-        <HelpCircle size={13} />
-        {t('onboarding.ctaFaq')}
-      </button>
-    </div>
+    </OnboardingScreen>
   );
 }

@@ -12,6 +12,7 @@ import { FreeFeatures } from './onboarding/FreeFeatures';
 import { PremiumGallery } from './onboarding/PremiumGallery';
 import { UpgradeCta } from './onboarding/UpgradeCta';
 import { Button } from './ui/Button';
+import { OnboardingScreen } from './onboarding/OnboardingScreen';
 import { useT } from '../i18n/index.js';
 
 export function Onboarding({ onOpenFaq, onComplete }) {
@@ -77,14 +78,20 @@ export function Onboarding({ onOpenFaq, onComplete }) {
         </button>
       )}
 
-      <span className="ml-auto" role="status">{t('onboarding.progress', { current: index + 1, total: steps.length })}</span>
+      {/* A bar rather than "Step 2 of 6" alone: where you are, at a glance.
+          The words stay for screen readers. */}
+      <div className="onboarding-progress" role="progressbar" aria-valuemin={1} aria-valuemax={steps.length}
+        aria-valuenow={index + 1} aria-label={t('onboarding.progress', { current: index + 1, total: steps.length })}>
+        {steps.map((s, i) => <span key={s} data-state={i < index ? 'done' : i === index ? 'current' : 'todo'} />)}
+      </div>
+      <span className="sr-only" role="status">{t('onboarding.progress', { current: index + 1, total: steps.length })}</span>
       {step !== 'cta' && (
         <button
           type="button"
           onClick={() => skipOnboarding(step)}
           disabled={busy}
           data-testid="onboarding-skip"
-          className="ml-2 px-2 py-1.5 rounded-lg text-xs text-mail-text-muted hover:text-mail-text hover:bg-mail-surface-hover transition-colors disabled:opacity-50"
+          className="px-2 py-1.5 rounded-lg text-xs text-mail-text-muted hover:text-mail-text hover:bg-mail-surface-hover transition-colors disabled:opacity-50"
         >
           {t('onboarding.skipTour')}
         </button>
@@ -98,15 +105,12 @@ export function Onboarding({ onOpenFaq, onComplete }) {
       {step === 'defaultMail' && <DefaultMailStep onContinue={next} />}
       {step === 'free' && <FreeFeatures onContinue={next} />}
       {step === 'premium' && (
-        <div className="max-w-3xl w-full">
-          <h2 className="text-lg font-semibold text-mail-text mb-3">{t('onboarding.premiumTitle')}</h2>
+        <OnboardingScreen title={t('onboarding.premiumTitle')} className="onboarding-premium"
+          primary={<Button variant="primary" size="lg" onClick={next} data-testid="onboarding-continue">
+            {t('common.continue')}
+          </Button>}>
           <PremiumGallery />
-          <div className="flex justify-end mt-3">
-            <Button variant="primary" size="lg" onClick={next} data-testid="onboarding-continue">
-              {t('common.continue')}
-            </Button>
-          </div>
-        </div>
+        </OnboardingScreen>
       )}
       {step === 'cta' && (
         <UpgradeCta

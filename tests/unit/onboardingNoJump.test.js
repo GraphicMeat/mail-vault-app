@@ -22,18 +22,22 @@ function decls(selector) {
 }
 
 describe('onboarding layout stability', () => {
-  it('reserves the scrollbar gutter so a scrolling tab does not shift the others', () => {
-    expect(decls('.onboarding-page')['scrollbar-gutter']).toBe('stable');
+  // 2026-11-26: no onboarding screen scrolls at all. The page is the window,
+  // so there is no scrollbar to shift anything and no gutter to reserve.
+  it('never scrolls the page: each step is built to fit the window', () => {
+    expect(decls('.onboarding-page').overflow).toBe('hidden');
+    expect(decls('.onboarding-page').height).toBe('100dvh');
+    expect(decls('.onboarding-screen-body').overflow).toBe('hidden');
   });
 
-  it('starts steps at the top and centres only the splash and thank-you', () => {
-    expect(decls('.onboarding-step')['align-items']).toBe('flex-start');
-    expect(decls('.onboarding-step-splash')['align-items']).toBe('center');
-    expect(decls('.onboarding-step-cta')['align-items']).toBe('center');
+  it('pins the heading and the footer, so a tab or a choice never moves the title or Continue', () => {
+    expect(decls('.onboarding-screen-heading')['flex-shrink']).toBe('0');
+    expect(decls('.onboarding-footer')['flex-shrink']).toBe('0');
+    expect(decls('.onboarding-screen-body').flex).toBe('1');
   });
 
   it('clips the thank-you hearts instead of scrolling sideways', () => {
-    expect(decls('.onboarding-content:has(> .onboarding-step-cta)').overflow).toBe('clip');
+    expect(decls('.onboarding-content').overflow).toBe('clip');
   });
 
   it('clips the arrival envelopes vertically and keeps its gutter', () => {

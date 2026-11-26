@@ -3,6 +3,7 @@ import { ArrowRight, Inbox, MessagesSquare, Search, ShieldAlert } from 'lucide-r
 import { t as tr, useT } from '../../i18n/index.js';
 import { Button } from '../ui/Button';
 import { FREE_SAMPLES } from './FreeSamples.jsx';
+import { OnboardingScreen } from './OnboardingScreen';
 
 // The four that are worth knowing on day one and cost nothing. Everything here
 // is free forever; the premium pitch is the next screen, not this one.
@@ -21,17 +22,18 @@ export function FreeFeatures({ onContinue }) {
   const t = useT();
 
   return (
-    <div className="max-w-3xl w-full">
-      <h2 className="text-lg font-semibold text-mail-text mb-1">{t('onboarding.freeTitle')}</h2>
-      <p className="text-xs text-mail-text-muted mb-4">{t('onboarding.freeSubtitle')}</p>
-
-      <div className="grid sm:grid-cols-2 gap-3 mb-4">
+    <OnboardingScreen className="onboarding-free" title={t('onboarding.freeTitle')} subtitle={t('onboarding.freeSubtitle')}
+      primary={<Button variant="primary" size="lg" onClick={onContinue} data-testid="onboarding-continue">
+        {t('common.continue')}
+        <ArrowRight size={14} />
+      </Button>}>
+      <div className="onboarding-free-grid">
         {FREE().map((f) => {
           const Icon = f.icon;
           const Sample = FREE_SAMPLES[f.id];
           return (
             <div key={f.id} data-testid={`free-feature-${f.id}`}
-                 className="p-3 rounded-lg border border-mail-border bg-mail-surface flex flex-col gap-2">
+                 className="p-3 rounded-lg border border-mail-border bg-mail-surface flex flex-col gap-2 min-h-0 overflow-hidden">
               <div>
                 <div className="flex items-center gap-2 mb-1">
                   <div className="w-7 h-7 rounded bg-mail-accent-tint flex items-center justify-center flex-shrink-0">
@@ -43,18 +45,11 @@ export function FreeFeatures({ onContinue }) {
               </div>
               {/* Pushed to the bottom so the four samples line up across the
                   grid even though the blurbs are different lengths. */}
-              <div className="mt-auto"><Sample /></div>
+              <div className="mt-auto onboarding-free-sample"><Sample /></div>
             </div>
           );
         })}
       </div>
-
-      <div className="flex justify-end">
-        <Button variant="primary" size="lg" onClick={onContinue} data-testid="onboarding-continue">
-          {t('common.continue')}
-          <ArrowRight size={14} />
-        </Button>
-      </div>
-    </div>
+    </OnboardingScreen>
   );
 }

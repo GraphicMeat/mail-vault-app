@@ -17,35 +17,6 @@
   .compose-footer > div:last-child > button { padding-left: 8px; padding-right: 8px; }
 }
 /* First-run configuration stays short; each tab presents only its key decisions. */
-.onboarding-appearance { width: 100%; max-width: 1180px; }
-.onboarding-appearance-heading { margin-bottom: 16px; }
-.onboarding-appearance-heading h2 { font-size: 24px; line-height: 1.3; font-weight: 600; color: var(--mail-text); }
-.onboarding-appearance-heading p { margin-top: 8px; font-size: 14px; line-height: 1.5; color: var(--mail-text-muted); }
-.onboarding-appearance > .settings-tabbed-page > .settings-tabs { position: static; padding: 0; gap: 28px; }
-.onboarding-appearance > .settings-tabbed-page > .settings-form { max-width: none; padding: 20px 0 0; }
-.onboarding-appearance-grid { display: grid; grid-template-columns: 250px minmax(0, 1fr); align-items: start; gap: 24px; }
-.onboarding-quick-actions-grid { grid-template-columns: minmax(430px, 480px) minmax(0, 1fr); }
-.onboarding-appearance-controls { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
-.onboarding-appearance-controls fieldset { min-width: 0; }
-.onboarding-appearance-controls legend { margin-bottom: 8px; font-size: 13px; font-weight: 600; color: var(--mail-text); }
-.onboarding-section-hint { font-size: 13px; line-height: 1.5; color: var(--mail-text-muted); }
-.onboarding-choice-hint { margin-top: 8px; font-size: 12px; line-height: 1.5; color: var(--mail-text-muted); }
-/* A choice never shrinks below its longest word ("Expandab|le", "展開|可能"):
- * one that does not fit moves to the next row instead. max-width caps that
- * minimum, so only a word wider than the whole column still breaks. */
-.onboarding-choices { display: flex; flex-wrap: wrap; gap: 6px; }
-.onboarding-choices button { display: flex; align-items: center; justify-content: center; flex: 1; gap: 6px; max-width: 100%; min-height: 38px; padding: 8px 10px; border: 1px solid var(--mail-border); border-radius: 8px; color: var(--mail-text-muted); font-size: 12px; line-height: 1.5; overflow-wrap: break-word; word-break: keep-all; }
-.onboarding-choices button[aria-pressed="true"] { border-color: var(--mail-accent); background: var(--mail-accent-tint); color: var(--mail-accent-text); }
-.onboarding-choices button:hover:not(:disabled) { border-color: var(--mail-accent); }
-.onboarding-choices button:disabled { opacity: 0.5; cursor: default; }
-.onboarding-choices button svg { flex-shrink: 0; }
-.onboarding-sound-choices button { flex: 1 0 28%; }
-.onboarding-appearance-example { min-width: 0; }
-.onboarding-appearance-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--mail-border); }
-.onboarding-appearance-footer > button:last-child { flex-shrink: 0; }
-.onboarding-appearance-footer svg { flex-shrink: 0; }
-.onboarding-appearance-note { margin-top: 12px; font-size: 12px; color: var(--mail-text-muted); }
-.onboarding-appearance .onboarding-sample-app { height: 360px; }
 .onboarding-mail-sample { min-width: 0; overflow: hidden; border: 1px solid var(--mail-border); border-radius: 12px; background: var(--mail-bg); color: var(--mail-text); font-size: 12px; line-height: 1.5; }
 .onboarding-sample-app { display: flex; height: 500px; }
 .onboarding-sample-sidebar { width: 136px; flex-shrink: 0; overflow-y: auto; padding: 12px 8px; border-right: 1px solid var(--mail-border); background: var(--mail-surface); }
@@ -91,39 +62,6 @@
 .onboarding-mail-sample > figcaption { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 10px 12px; border-top: 1px solid var(--mail-border); color: var(--mail-text-muted); font-size: 11px; }
 .onboarding-mail-sample > figcaption > span { display: inline-flex; align-items: center; gap: 4px; }
 .onboarding-mail-sample > figcaption > span:first-child { margin-right: auto; }
-@media (max-width: 1000px) {
-  .onboarding-appearance-grid { grid-template-columns: 220px minmax(0, 1fr); gap: 16px; }
-  .onboarding-quick-actions-grid { grid-template-columns: minmax(360px, 420px) minmax(0, 1fr); }
-  .onboarding-sample-sidebar { width: 112px; }
-}
-@media (max-width: 920px) and (min-width: 768px) {
-  .onboarding-quick-actions-grid { grid-template-columns: minmax(0, 1fr); }
-}
-@media (max-width: 767px) {
-  .onboarding-appearance-grid { grid-template-columns: minmax(0, 1fr); }
-  .onboarding-quick-actions-grid { grid-template-columns: minmax(0, 1fr); }
-  .onboarding-appearance-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
-  .onboarding-appearance-controls > p { grid-column: 1 / -1; }
-  .onboarding-appearance-controls > .onboarding-section-hint { grid-column: 1 / -1; }
-  .onboarding-appearance-footer { position: sticky; bottom: 0; background: var(--mail-bg); padding-bottom: 12px; z-index: 1; }
-}
-@media (max-width: 440px) {
-  .onboarding-appearance-controls { grid-template-columns: minmax(0, 1fr); }
-  .onboarding-sample-sidebar { width: 84px; padding-inline: 4px; }
-  .onboarding-sample-reader { padding: 8px; }
-  .onboarding-sample-time { display: none; }
-}
-
-/* The gutter is reserved so a tab tall enough to scroll does not shift every
- * other tab sideways, and steps start at the top so a tab or a choice that
- * changes the height grows downward instead of moving the title. */
-.onboarding-page { height: 100dvh; overflow-y: auto; scrollbar-gutter: stable; background: var(--mail-bg); }
-.onboarding-content { min-height: 100%; display: flex; flex-direction: column; align-items: center; padding: 24px 24px 40px; }
-/* The thank-you hearts fly past the window edges: clipped here, not scrolled. */
-.onboarding-content:has(> .onboarding-step-cta) { overflow: clip; }
-.onboarding-header { width: 100%; display: flex; align-items: center; justify-content: space-between; min-height: 36px; margin-bottom: 24px; color: var(--mail-text-muted); font-size: 12px; }
-.onboarding-step { width: 100%; flex: 1; display: flex; justify-content: center; align-items: flex-start; }
-.onboarding-step-splash, .onboarding-step-cta { align-items: center; }
 .onboarding-thankyou-art { position: relative; width: min(35vh, 300px); min-width: 150px; }
 .onboarding-thankyou-image {
   display: block;
@@ -315,7 +253,6 @@
   .compose-footer > div:last-child { gap: 4px; }
   .compose-footer > div:last-child > button:first-child { padding: 8px; }
   .account-setup-window .grid-cols-2 { grid-template-columns: minmax(0, 1fr); }
-  .onboarding-content { padding: 16px 20px 28px; }
 }
 
 .settings-feature-gate { min-height: 360px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 32px 24px; text-align: center; border: 1px solid var(--mail-border); border-radius: 12px; background: var(--mail-surface); }
@@ -329,3 +266,158 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--mail-accent-fi
   .snapshot-folders nav { display: flex; gap: 4px; }
   .snapshot-folders nav button { width: auto; flex-shrink: 0; }
 }
+
+/* ── Onboarding: one screen per step, nothing scrolls ─────────────────────
+ * The page is the window. Header (Back, progress, Skip) and each step's footer
+ * (secondary left, the way on right) hold still; the step's body takes what is
+ * left and is built to fit it. Smaller windows drop pictures, never controls. */
+.onboarding-page { height: 100dvh; overflow: hidden; background: var(--mail-bg); }
+.onboarding-content { height: 100%; display: flex; flex-direction: column; padding: 14px 28px 0; overflow: clip; }
+.onboarding-header { flex-shrink: 0; display: flex; align-items: center; gap: 12px; min-height: 32px; margin: 0 auto 8px; width: 100%; max-width: 1180px; color: var(--mail-text-muted); font-size: 12px; }
+.onboarding-header > :first-child:not(.onboarding-progress) { margin-right: auto; }
+.onboarding-progress { display: flex; gap: 6px; margin: 0 auto; }
+.onboarding-header > .onboarding-progress:first-child { margin-left: auto; }
+.onboarding-progress > span { width: 24px; height: 4px; border-radius: 2px; background: var(--mail-border); transition: width 200ms, background-color 200ms; }
+.onboarding-progress > span[data-state="done"] { background: var(--mail-accent); }
+.onboarding-progress > span[data-state="current"] { width: 36px; background: var(--mail-accent-text); }
+.onboarding-header > [data-testid="onboarding-skip"] { margin-left: auto; }
+.onboarding-progress + .sr-only + [data-testid="onboarding-skip"] { margin-left: 0; }
+.onboarding-step { flex: 1; min-height: 0; width: 100%; max-width: 1180px; margin: 0 auto; display: flex; }
+.onboarding-screen { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.onboarding-screen-heading { flex-shrink: 0; display: flex; align-items: flex-end; gap: 16px; margin-bottom: 14px; }
+.onboarding-screen-title { min-width: 0; }
+.onboarding-screen-title h2 { font-size: 22px; line-height: 1.25; font-weight: 600; color: var(--mail-text); }
+.onboarding-screen-title p { margin-top: 4px; font-size: 13px; line-height: 1.45; color: var(--mail-text-muted); }
+.onboarding-screen-body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
+.onboarding-footer { flex-shrink: 0; display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 12px 0; border-top: 1px solid var(--mail-border); }
+.onboarding-footer-gap { flex: 1; }
+.onboarding-footer svg { flex-shrink: 0; }
+.onboarding-select { width: 100%; min-height: 36px; padding: 6px 10px; border: 1px solid var(--mail-border); border-radius: 8px; background: var(--mail-surface); color: var(--mail-text); font-size: 13px; }
+
+/* Splash and account: centred in the space, their buttons in the footer. */
+.onboarding-splash .onboarding-screen-body { align-items: center; justify-content: center; }
+.onboarding-splash .onboarding-footer { justify-content: center; }
+.onboarding-splash .onboarding-footer-gap { display: none; }
+.onboarding-account .onboarding-screen-body { max-width: 760px; width: 100%; margin: 0 auto; }
+.onboarding-account [data-testid="onboarding-mechanisms"] { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 20px; }
+.onboarding-account [data-testid="onboarding-mechanisms"] > * { margin: 0 !important; }
+.onboarding-storage-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: auto minmax(0, 1fr); gap: 12px; align-items: start; }
+.onboarding-storage-grid > [data-testid="storage-row-mode"] { grid-column: 2; grid-row: 1 / span 2; }
+.onboarding-storage-grid > :only-child, .onboarding-storage-grid > [data-testid="storage-row-backup"]:first-child { grid-column: 1; }
+.onboarding-storage-grid .settings-section { margin: 0; padding: 12px 14px; }
+
+/* Appearance: tabs as one segmented control, controls left, preview right. */
+.onboarding-appearance .settings-tabbed-page { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.onboarding-appearance .settings-tabbed-page > .settings-tabs { position: static; align-self: flex-start; display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--mail-border); border-radius: 10px; background: var(--mail-surface); }
+.onboarding-appearance .settings-tabbed-page > .settings-tabs > [role="tab"] { padding: 5px 14px; border-radius: 7px; border: 0; color: var(--mail-text-muted); font-size: 13px; }
+.onboarding-appearance .settings-tabbed-page > .settings-tabs > [role="tab"][aria-selected="true"] { background: var(--mail-surface-hover); color: var(--mail-text); box-shadow: none; }
+.onboarding-appearance .settings-tabbed-page > .settings-tabs > [role="tab"]::after { display: none; }
+.onboarding-appearance .settings-tabbed-page > .settings-form { flex: 1; min-height: 0; max-width: none; padding: 14px 0 0; display: flex; }
+.onboarding-appearance-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 24px; }
+.onboarding-appearance-controls { display: flex; flex-direction: column; gap: 16px; min-width: 0; min-height: 0; overflow: hidden; }
+.onboarding-appearance-controls fieldset { min-width: 0; }
+.onboarding-appearance-controls legend { margin-bottom: 6px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--mail-text-muted); }
+.onboarding-choice-hint { margin-top: 6px; font-size: 12px; line-height: 1.45; color: var(--mail-text-muted); }
+.onboarding-choices { display: flex; flex-wrap: wrap; gap: 6px; }
+.onboarding-choices-wrap { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.onboarding-choices button { display: flex; align-items: center; justify-content: center; flex: 1; gap: 6px; max-width: 100%; min-height: 34px; padding: 6px 10px; border: 1px solid var(--mail-border); border-radius: 8px; color: var(--mail-text-muted); font-size: 12px; line-height: 1.35; overflow-wrap: break-word; word-break: keep-all; }
+.onboarding-choices button[aria-pressed="true"], .onboarding-swatch[aria-pressed="true"] { border-color: var(--mail-accent); background: var(--mail-accent-tint); color: var(--mail-accent-text); }
+.onboarding-choices button:hover:not(:disabled), .onboarding-swatch:hover { border-color: var(--mail-accent); }
+.onboarding-choices button:disabled { opacity: 0.5; cursor: default; }
+.onboarding-pictures button { flex-direction: column; padding: 8px; }
+.onboarding-pic { display: grid; gap: 3px; width: 100%; height: 40px; padding: 4px; border-radius: 5px; background: var(--mail-surface); }
+.onboarding-pic > i { border-radius: 2px; background: var(--mail-border); }
+.onboarding-pic[data-pic="three-column"] { grid-template-columns: 1fr 2fr 3fr; }
+.onboarding-pic[data-pic="three-column"] > i:nth-child(n+4) { display: none; }
+.onboarding-pic[data-pic="three-column"] > i:nth-child(2) { background: var(--mail-accent); }
+.onboarding-pic[data-pic="two-column"] { grid-template-columns: 1fr 4fr; grid-template-rows: 1fr 1fr; }
+.onboarding-pic[data-pic="two-column"] > i:first-child { grid-row: span 2; }
+.onboarding-pic[data-pic="two-column"] > i:nth-child(2) { background: var(--mail-accent); }
+.onboarding-pic[data-pic="two-column"] > i:nth-child(4) { display: none; }
+.onboarding-pic[data-pic="compact"] { grid-template-rows: repeat(4, 1fr); }
+.onboarding-pic[data-pic="compact"] > i:nth-child(odd) { background: var(--mail-accent); }
+.onboarding-pic[data-pic="default"] { grid-template-rows: repeat(4, 1fr); }
+.onboarding-pic[data-pic="default"] > i { background: var(--mail-accent); height: 4px; align-self: center; }
+.onboarding-swatches { display: flex; gap: 8px; }
+.onboarding-swatch { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--mail-border); border-radius: 8px; color: var(--mail-text-muted); font-size: 12px; }
+.onboarding-swatch-dot { flex-shrink: 0; width: 18px; height: 18px; border-radius: 50%; background: #4f46e5; }
+.onboarding-swatch-dot[data-palette="graphite"] { background: #6351a8; }
+.onboarding-swatch-dot[data-palette="teal"] { background: #0b6f80; }
+.onboarding-swatch-name { min-width: 0; overflow-wrap: anywhere; text-align: left; }
+.onboarding-appearance-example { min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.onboarding-appearance-example > .onboarding-mail-sample { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.onboarding-appearance-example .onboarding-sample-app { flex: 1; min-height: 0; height: auto; }
+.onboarding-page .onboarding-sample-sidebar, .onboarding-page .onboarding-sample-list,
+.onboarding-page .onboarding-sample-reader, .onboarding-page .onboarding-sample-chat { overflow: hidden; }
+.onboarding-appearance-example .quick-actions-sample { margin: 0; }
+.onboarding-appearance-example .quick-actions-sample > h5, .onboarding-appearance-example .quick-actions-sample > p.text-xs:first-of-type { display: none; }
+
+/* Mail habits: one line per question, the delete answer as pictures. */
+.onboarding-habits .onboarding-screen-body { max-width: 820px; width: 100%; gap: 10px; }
+.onboarding-habit-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 14px; border: 1px solid var(--mail-border); border-radius: 12px; background: var(--mail-surface); }
+.onboarding-habit-copy { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.onboarding-habit-copy > strong { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--mail-text); }
+.onboarding-habit-copy > strong svg { color: var(--mail-accent-text); flex-shrink: 0; }
+.onboarding-habit-copy > span { font-size: 12px; color: var(--mail-text-muted); }
+.onboarding-habit-row > :last-child:not(.onboarding-habit-copy) { flex-shrink: 0; }
+.onboarding-habits-delete { display: flex; flex-direction: column; gap: 10px; }
+.onboarding-habit-question { font-size: 13px; color: var(--mail-text-muted); }
+.onboarding-after-delete { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.onboarding-after-delete-picture { display: flex; flex-direction: column; gap: 4px; height: 58px; padding: 6px; border-radius: 7px; background: var(--mail-bg); }
+.onboarding-after-delete-picture > i { flex: 1; border-radius: 2px; background: var(--mail-border); }
+.onboarding-after-delete-picture > i[data-row="gone"] { background: transparent; border: 1px dashed var(--mail-danger); }
+.onboarding-after-delete-picture > i[data-row="open"] { background: var(--mail-accent); }
+.onboarding-habit-switch { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--mail-text); }
+
+/* Free and Premium: the grid and the gallery fill the space they are given. */
+.onboarding-free-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(0, 1fr); gap: 12px; }
+.onboarding-free-sample { min-height: 0; overflow: hidden; }
+.onboarding-premium .premium-gallery { flex: 1; min-height: 0; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); }
+.onboarding-premium .premium-gallery-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 6px; align-content: start; }
+.onboarding-premium .premium-gallery-tiles > * + * { margin-top: 0 !important; }
+.onboarding-premium [data-testid="premium-detail"] { min-height: 0; height: 100%; display: flex; flex-direction: column; }
+.onboarding-premium .premium-gallery-media { flex: 1; min-height: 0; aspect-ratio: auto; }
+.onboarding-premium .premium-gallery-media img { object-fit: contain; background: var(--mail-bg); }
+
+/* Thanks: the thank-you on the left, the offer on the right. */
+.onboarding-cta-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 36px; align-items: center; max-width: 520px; margin: 0 auto; width: 100%; }
+.onboarding-cta-sells .onboarding-cta-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); max-width: 1040px; }
+.onboarding-cta-thanks, .onboarding-cta-offer { min-height: 0; display: flex; flex-direction: column; gap: 12px; }
+.onboarding-cta:not(.onboarding-cta-sells) .onboarding-cta-thanks { align-items: center; text-align: center; }
+.onboarding-cta .onboarding-thankyou-art { width: min(26vh, 220px); min-width: 0; }
+.onboarding-cta [data-testid="onboarding-reviews"] { margin: 0; }
+.onboarding-cta [data-testid="onboarding-reviews"] h3 { text-align: left; }
+.onboarding-cta-slot { display: inline-block; width: 180px; height: 40px; }
+.onboarding-cta .onboarding-footer > [data-testid="onboarding-checkout"], .onboarding-cta .onboarding-footer > [data-testid="onboarding-upgrade"] { min-width: 220px; }
+
+/* Short windows: pictures step aside so every control stays in view. */
+@media (max-height: 720px) {
+  .onboarding-screen-title h2 { font-size: 19px; }
+  .onboarding-screen-title p { display: none; }
+  .onboarding-screen-heading { margin-bottom: 8px; }
+  .onboarding-footer { min-height: 52px; padding: 8px 0; }
+  .onboarding-choice-hint, .onboarding-habit-copy > span { display: none; }
+  .onboarding-appearance-controls { gap: 10px; }
+  .onboarding-pic, .onboarding-after-delete-picture { display: none; }
+  .onboarding-cta .onboarding-thankyou-art, .onboarding-cta [data-testid="onboarding-reviews"] { display: none; }
+  .onboarding-habit-row { padding: 8px 12px; }
+  .onboarding-free-sample { display: none; }
+  .onboarding-account [data-testid="onboarding-mechanisms"] p { display: none; }
+}
+@media (max-width: 860px) {
+  .onboarding-content { padding: 12px 18px 0; }
+  .onboarding-appearance-grid { grid-template-columns: minmax(0, 1fr); }
+  .onboarding-appearance-example { display: none; }
+  .onboarding-cta-sells .onboarding-cta-grid { grid-template-columns: minmax(0, 1fr); }
+  .onboarding-cta-sells .onboarding-cta-thanks { display: none; }
+  .onboarding-premium .premium-gallery { grid-template-columns: minmax(0, 1fr); }
+  .onboarding-premium [data-testid="premium-detail"] { display: none; }
+  .onboarding-free-grid { grid-template-columns: minmax(0, 1fr); }
+  .onboarding-free-sample { display: none; }
+  .onboarding-storage-grid { grid-template-columns: minmax(0, 1fr); }
+  .onboarding-storage-grid > [data-testid="storage-row-mode"] { grid-column: 1; grid-row: auto; }
+}
+
+.google-fonts-tracking-note { display: flex; align-items: flex-start; gap: 8px; margin: 4px 0; padding: 8px 10px; border: 1px solid color-mix(in srgb, var(--mail-warning) 35%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--mail-warning) 10%, transparent); color: var(--mail-text); font-size: 12px; line-height: 1.45; }
+.google-fonts-tracking-note svg { flex-shrink: 0; margin-top: 1px; color: var(--mail-warning); }
+.onboarding-cta-sells .onboarding-cta-thanks { align-items: flex-start; }

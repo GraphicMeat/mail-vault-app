@@ -1,6 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import { ArrowRight, Download, ShieldCheck } from 'lucide-react';
 import { Button } from '../ui/Button';
+import { OnboardingScreen } from './OnboardingScreen';
 import MailStorageLocation from '../settings/MailStorageLocation';
 import BackupLocationPicker from '../settings/BackupLocationPicker';
 import { DownloadModeControl } from '../settings/DownloadModeControl';
@@ -38,11 +39,12 @@ export function StorageStep({ onContinue, onBusyChange }) {
   const heading = 'font-semibold text-mail-text flex items-center gap-2';
 
   return (
-    <div className="max-w-xl w-full space-y-4">
-      <div>
-        <h2 className="text-lg font-semibold text-mail-text mb-1">{t('onboarding.storageTitle')}</h2>
-        <p className="text-xs text-mail-text-muted">{t('onboarding.storageSubtitle')}</p>
-      </div>
+    <OnboardingScreen className="onboarding-storage" title={t('onboarding.storageTitle')} subtitle={t('onboarding.storageSubtitle')}
+      primary={<Button variant="primary" size="lg" onClick={onContinue} disabled={moving} data-testid="onboarding-continue">
+        {t('common.continue')}
+        <ArrowRight size={14} />
+      </Button>}>
+    <div className="onboarding-storage-grid">
 
       {!IS_APPSTORE_BUILD && (
         <div data-testid="storage-row-mail">
@@ -74,12 +76,7 @@ export function StorageStep({ onContinue, onBusyChange }) {
         <DownloadModeControl />
       </section>
 
-      <div className="flex justify-end">
-        <Button variant="primary" size="lg" onClick={onContinue} disabled={moving} data-testid="onboarding-continue">
-          {t('common.continue')}
-          <ArrowRight size={14} />
-        </Button>
-      </div>
     </div>
+    </OnboardingScreen>
   );
 }

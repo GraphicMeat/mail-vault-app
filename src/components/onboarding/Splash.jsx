@@ -5,6 +5,7 @@ import logoUrl from '../../assets/graphicmeat-logo.webp';
 import { LOCALES, setLocale, useT } from '../../i18n/index.js';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { Button } from '../ui/Button';
+import { OnboardingScreen } from './OnboardingScreen';
 
 /**
  * First run, first screen.
@@ -22,7 +23,12 @@ export function Splash({ onContinue }) {
   const active = useSettingsStore(s => s.language) || 'en';
 
   return (
-    <div className="max-w-lg w-full text-center">
+    <OnboardingScreen className="onboarding-splash"
+      primary={<Button variant="primary" size="lg" onClick={onContinue} data-testid="onboarding-continue">
+        {t('common.continue')}
+        <ArrowRight size={14} />
+      </Button>}>
+    <div className="max-w-lg w-full text-center onboarding-splash-content">
       <motion.img
         src={logoUrl}
         alt={t('onboarding.graphicMeat')}
@@ -70,11 +76,8 @@ export function Splash({ onContinue }) {
           })}
         </div>
 
-        <Button variant="primary" size="lg" onClick={onContinue} data-testid="onboarding-continue">
-          {t('common.continue')}
-          <ArrowRight size={14} />
-        </Button>
       </motion.div>
     </div>
+    </OnboardingScreen>
   );
 }

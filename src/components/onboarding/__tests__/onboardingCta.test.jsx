@@ -240,8 +240,23 @@ describe('UpgradeCta without an upgrade', () => {
     render(<UpgradeCta onSkip={onSkip} onOpenFaq={() => {}} />);
     expect(screen.queryByTestId('onboarding-upgrade')).toBeNull();
     expect(screen.getAllByRole('button').filter(b => b.dataset.testid?.startsWith('onboarding-'))
-      .map(b => b.dataset.testid)).toEqual(['onboarding-skip', 'onboarding-faq']);
+      .map(b => b.dataset.testid).sort()).toEqual(['onboarding-faq', 'onboarding-skip']);
     fireEvent.click(screen.getByTestId('onboarding-skip'));
     expect(onSkip).toHaveBeenCalledOnce();
+  });
+});
+
+describe('onboarding thank-you layout', () => {
+  it('puts the thanks on one side and the offer on the other, with the buttons in the shared footer', async () => {
+    renderCta();
+    await screen.findByTestId('onboarding-plans');
+    const thanks = document.querySelector('.onboarding-cta-thanks');
+    const offer = document.querySelector('.onboarding-cta-offer');
+    expect(thanks.contains(screen.getByTestId('onboarding-reviews'))).toBe(true);
+    expect(offer.contains(screen.getByTestId('onboarding-impact'))).toBe(true);
+    expect(offer.contains(screen.getByTestId('onboarding-plans'))).toBe(true);
+    const footer = document.querySelector('.onboarding-footer');
+    expect(footer.contains(screen.getByTestId('onboarding-checkout'))).toBe(true);
+    expect(footer.contains(screen.getByTestId('onboarding-skip'))).toBe(true);
   });
 });

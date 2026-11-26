@@ -5,7 +5,7 @@ import { Button } from '../ui/Button';
 import { APP_FONTS, DEFAULT_APP_FONT, TEXT_SCALES, fontStack } from '../../utils/appFont';
 import { googleFamilyOf, googleFontId } from '../../utils/googleFonts';
 import { refreshFonts, useFontStore } from '../../services/fontService';
-import { GoogleFontPicker, fontErrorText, useGoogleFontChoice } from './GoogleFontPicker';
+import { GoogleFontPicker, GoogleFontsTrackingNote, fontErrorText, useGoogleFontChoice } from './GoogleFontPicker';
 import { useT } from '../../i18n';
 import { DesktopViewEnv } from './DesktopViewEnv';
 import { FontOptionsView, TextSettingsView, TextSizeChoiceView } from './views/TextSettingsView';
@@ -63,6 +63,7 @@ export function TextSettings() {
               <Type size={14} aria-hidden="true" />{t('settings.text.moreFonts')}
             </Button>
             <p className="text-xs text-mail-text-muted">{t('settings.text.googleFontsNote')}</p>
+            <GoogleFontsTrackingNote />
             {chosen && (progress || errorCode) && (
               <p data-testid="font-download-status" role="status" className={`flex items-center gap-1.5 text-xs ${progress ? 'text-mail-text-muted' : 'text-mail-danger'}`}>
                 {progress && <Loader2 size={12} className="animate-spin" aria-hidden="true" />}

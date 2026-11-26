@@ -26,7 +26,7 @@ const BLURB_H = 'min-h-[3.5rem]';
 // the image and the no-screenshot fallback occupy exactly the same box: pinning
 // only the blurb still left the layout jumping 12px on `devices`, the one
 // feature with no shot, because its placeholder was 16/10.
-const MEDIA = 'w-full aspect-[1440/932] rounded-lg overflow-hidden border border-mail-border mb-3';
+const MEDIA = 'premium-gallery-media w-full aspect-[1440/932] rounded-lg overflow-hidden border border-mail-border mb-3';
 
 export function PremiumGallery() {
   const t = useT();
@@ -45,13 +45,13 @@ export function PremiumGallery() {
   const step = useCallback((d) => setIndex(i => (i + d + count) % count), [count]);
 
   return (
-    <div className="grid md:grid-cols-[200px_minmax(0,1fr)] gap-4 items-start">
+    <div className="premium-gallery grid md:grid-cols-[200px_minmax(0,1fr)] gap-4 items-start">
       {/* No cap and no scroller: a capped list hid the last two features
           behind a scrollbar nobody looked for — "Five devices" went unnoticed
           entirely. In German the full list now runs ~30px past the detail
           column: a little height, fixed while browsing, so Continue still
           never moves. */}
-      <div className="space-y-1">
+      <div className="premium-gallery-tiles space-y-1">
         {PREMIUM_FEATURES.map((f, i) => {
           const TileIcon = f.icon;
           const active = i === index;

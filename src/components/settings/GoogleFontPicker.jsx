@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Check, Loader2, Trash2 } from 'lucide-react';
+import { Check, Loader2, ShieldAlert, Trash2 } from 'lucide-react';
 import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
 import { Z } from '../ui/layers';
@@ -19,6 +19,18 @@ const CATEGORY_KEYS = {
 };
 const ERROR_KEYS = { E_FONT_OFFLINE: 'fonts.error.offline' };
 /** The message for a failed download's code. */
+/**
+ * Said wherever a font can be downloaded: the download goes to Google, which
+ * sees the address it comes from. No font file is fetched before a pick.
+ */
+export function GoogleFontsTrackingNote() {
+  const t = useT();
+  return <p role="note" className="google-fonts-tracking-note">
+    <ShieldAlert size={14} aria-hidden="true" />
+    <span>{t('settings.text.googleFontsTracking')}</span>
+  </p>;
+}
+
 export const fontErrorText = (t, code) => t(ERROR_KEYS[code] || 'fonts.error.failed');
 
 /**
@@ -98,6 +110,7 @@ export function GoogleFontPicker({ open, onClose, onPick, onChoose, onRemoved })
   return (
     <Dialog open={open} onClose={onClose} title={t('fonts.picker.title')} size="lg" portal z={Z.alert}
       description={t('settings.text.googleFontsNote')}>
+      <GoogleFontsTrackingNote />
       <input type="search" value={query} onChange={e => setQuery(e.target.value)} aria-label={t('fonts.picker.search')}
         placeholder={t('fonts.picker.search')} autoFocus
         className="w-full h-9 px-3 text-sm rounded-lg border border-mail-border bg-mail-bg text-mail-text outline-none focus:border-mail-accent" />

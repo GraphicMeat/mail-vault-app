@@ -72,6 +72,31 @@ async function clippedInside(selector) {
   }, selector);
 }
 
+
+/**
+ * Everything that scrolls on the current onboarding screen: the page itself,
+ * any box inside it whose content runs past it, and a footer pushed below the
+ * window. "No onboarding page scrolls" is the rule; an empty list proves it.
+ */
+async function scrollersOnScreen(where) {
+  return browser.execute((label) => {
+    const out = [];
+    const page = document.querySelector('.onboarding-page');
+    if (!page) return [`${label}: no onboarding page`];
+    for (const el of [page, ...page.querySelectorAll('*')]) {
+      const style = getComputedStyle(el);
+      const scrolls = /(auto|scroll)/.test(style.overflowY) || el === page;
+      if (scrolls && el.scrollHeight - el.clientHeight > 1) {
+        out.push(`${label}: ${el.className || el.tagName} scrolls ${el.scrollHeight} in ${el.clientHeight}`);
+      }
+    }
+    const footer = page.querySelector('.onboarding-footer');
+    if (!footer) out.push(`${label}: no footer`);
+    else if (footer.getBoundingClientRect().bottom - window.innerHeight > 1) out.push(`${label}: footer below the window`);
+    return out;
+  }, where);
+}
+
 describe('onboarding', function () {
   this.timeout(120_000);
 
@@ -168,6 +193,56 @@ describe('onboarding', function () {
 
     await $('[data-testid="onboarding-skip"]').click();
     await $('[data-testid="sidebar"]').waitForExist({ timeout: 15000 });
+  });
+
+
+  /**
+   * The rule: no onboarding screen scrolls. Walked in German (the longest
+   * strings), at the default window and at the minimum height.
+   */
+  it('fits every screen without scrolling, at 1200x800 and 900x600', async function () {
+    const original = await browser.getWindowSize();
+    const found = [];
+    try {
+      for (const [w, h] of [[1200, 800], [900, 600]]) {
+        await browser.setWindowSize(w, h);
+        await browser.execute(() => window.__SETTINGS_STORE__.getState().setOnboardingComplete(true));
+        await $('[data-testid="sidebar"]').waitForExist({ timeout: 15000 });
+        await browser.execute(() => window.__SETTINGS_STORE__.getState().setOnboardingComplete(false));
+        await $('[data-testid="onboarding-splash"]').waitForExist({ timeout: 10000 });
+        await $('[data-testid="onboarding-language-de"]').click();
+        await browser.pause(300);
+        found.push(...await scrollersOnScreen(`${w}x${h} splash`));
+        await $('[data-testid="onboarding-continue"]').click();
+        await $('[data-testid="appearance-preview"]').waitForExist({ timeout: 5000 });
+        for (const tab of ['colors', 'layout', 'reading']) {
+          await browser.pause(200);
+          found.push(...await scrollersOnScreen(`${w}x${h} appearance ${tab}`));
+          await $('[data-testid="appearance-next"]').click();
+        }
+        await browser.pause(300);
+        found.push(...await scrollersOnScreen(`${w}x${h} appearance quick actions`));
+        await $('[data-testid="onboarding-continue"]').click();
+        await $('[data-testid="onboarding-defaultMail"]').waitForExist({ timeout: 5000 });
+        await browser.pause(300);
+        found.push(...await scrollersOnScreen(`${w}x${h} mail habits`));
+        await $('[data-testid="onboarding-continue"]').click();
+        await $('[data-testid="free-feature-vault"]').waitForExist({ timeout: 5000 });
+        found.push(...await scrollersOnScreen(`${w}x${h} free`));
+        await $('[data-testid="onboarding-continue"]').click();
+        await $('[data-testid="premium-tile-backup-schedule"]').waitForExist({ timeout: 5000 });
+        await browser.pause(300);
+        found.push(...await scrollersOnScreen(`${w}x${h} premium`));
+        await $('[data-testid="onboarding-continue"]').click();
+        await $('[data-testid="onboarding-cta"]').waitForExist({ timeout: 5000 });
+        await browser.pause(1500);
+        found.push(...await scrollersOnScreen(`${w}x${h} thanks`));
+      }
+    } finally {
+      await browser.execute(() => window.__SETTINGS_STORE__.getState().setOnboardingComplete(true));
+      await browser.setWindowSize(original.width, original.height);
+    }
+    expect(found).toEqual([]);
   });
 
   describe('the premium gallery', function () {

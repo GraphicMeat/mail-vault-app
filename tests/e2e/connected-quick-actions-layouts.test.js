@@ -174,11 +174,24 @@ describe('Quick action layouts', function () {
     return !!root && [...root.querySelectorAll('button')].some((b) => b.textContent.trim() === wanted && b.offsetHeight > 0);
   }, label);
 
+  /** "Same look on rows, selection bar and reader": the switch that links the style across surfaces. */
+  async function setSameLook(on) {
+    const flipped = await browser.execute((wanted) => {
+      const root = document.querySelector('[data-testid="settings-page"][role="dialog"]');
+      const toggle = root && [...root.querySelectorAll('[role="switch"]')]
+        .find((el) => el.getAttribute('aria-label') === 'Same look on rows, selection bar and reader');
+      if (!toggle) return false;
+      if ((toggle.getAttribute('aria-checked') === 'true') !== wanted) toggle.click();
+      return true;
+    }, on);
+    expect(flipped).toBe(true);
+  }
+
   /** The user's setup: rows tab, Current view, style "Use everywhere". */
   async function linkCurrentViewFromRows() {
     await openQuickActions('row');
     await pick('Scope', 'Current view');
-    await pick('Style across sections', 'Use everywhere');
+    await setSameLook(true);
     await browser.waitUntil(async () => {
       const keys = Object.keys((await quickActions()).overrides);
       return keys.length === 1 && keys[0] === scopeKey;
@@ -267,7 +280,7 @@ describe('Quick action layouts', function () {
 
     await openQuickActions('row');
     expect(await checkedIn('Scope')).toBe('Current view');
-    await pick('Style across sections', 'Set separately');
+    await setSameLook(false);
     await pick('Layout', 'Favorite plus menu');
     scoped = (await quickActions()).overrides[scopeKey];
     expect(SURFACES.map((s) => scoped[s].mode)).toEqual(['favorite-menu', 'menu', 'menu']);

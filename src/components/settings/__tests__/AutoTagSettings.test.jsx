@@ -205,3 +205,15 @@ describe('AutoTagSettings', () => {
     expect(within(results).queryByText(/E_NO_ON_DEVICE/)).toBeNull();
   });
 });
+
+describe('AutoTagSettings, local labels', () => {
+  it('lists the local labels with their delete buttons, moved here from Quick actions', () => {
+    const deleteTag = vi.fn(async () => {});
+    useTagStore.setState({ tags: [RECEIPTS_TAG], byRow: {}, deleteTag });
+    render(<AutoTagSettings />);
+    const list = document.querySelector('.quick-actions-label-list');
+    expect(list).not.toBeNull();
+    fireEvent.click(within(list).getByRole('button', { name: /Receipts/ }));
+    expect(deleteTag).toHaveBeenCalledWith('t1');
+  });
+});

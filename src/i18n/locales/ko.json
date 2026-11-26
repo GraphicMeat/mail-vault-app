@@ -3115,7 +3115,7 @@
   "settings.text.systemFont": "시스템 글꼴",
   "settings.text.downloadedFonts": "다운로드한 글꼴",
   "settings.text.moreFonts": "더 많은 글꼴(Google Fonts)…",
-  "settings.text.googleFontsNote": "선택한 글꼴은 Google Fonts에서 한 번만 다운로드되며(글꼴 파일만, 개인 데이터 없음) 이 기기에 보관됩니다.",
+  "settings.text.googleFontsNote": "선택한 글꼴은 Google Fonts에서 한 번 다운로드되어 이 기기에 보관됩니다.",
   "fonts.picker.title": "더 많은 글꼴",
   "fonts.picker.search": "글꼴 검색",
   "fonts.picker.categories": "글꼴 분류",
@@ -4791,5 +4791,13 @@
   "keep.move": "보관한 이메일 이동",
   "keep.closeStack": "버블 닫기",
   "keep.stack_one": "{{name}}, 보관한 이메일 {{count}}개",
-  "keep.stack_other": "{{name}}, 보관한 이메일 {{count}}개"
+  "keep.stack_other": "{{name}}, 보관한 이메일 {{count}}개",
+  "onboarding.quickActionsShows": "메시지를 가리킬 때 작업을 표시하는 방식",
+  "onboarding.habitsTitle": "MailVault의 메일 처리 방식",
+  "onboarding.habitsSubtitle": "몇 가지 간단한 선택입니다. 설정에서 언제든지 바꿀 수 있습니다.",
+  "quickActions.reorderChipInstructions": "끌어서 순서를 바꾸거나 손잡이에서 화살표 키를 사용하세요.",
+  "quickActions.findAction": "작업 찾기",
+  "quickActions.noActionMatch": "검색과 일치하는 작업이 없습니다.",
+  "quickActions.sameLook": "행, 선택 막대, 읽기 화면에 같은 모양 사용",
+  "settings.text.googleFontsTracking": "글꼴을 다운로드하면 Google에 연결됩니다. Google은 IP 주소와 다운로드 시각을 볼 수 있으며 이를 사용해 사용자를 추적할 수 있습니다. 기본 제공 글꼴은 Google에 연결하지 않습니다."
 }

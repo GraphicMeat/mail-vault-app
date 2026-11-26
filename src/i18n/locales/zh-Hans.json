@@ -3115,7 +3115,7 @@
   "settings.text.systemFont": "系统字体",
   "settings.text.downloadedFonts": "已下载的字体",
   "settings.text.moreFonts": "更多字体（Google Fonts）…",
-  "settings.text.googleFontsNote": "所选字体只会从 Google Fonts 下载一次（仅字体文件，不含个人数据），并保存在此设备上。",
+  "settings.text.googleFontsNote": "所选字体会从 Google Fonts 下载一次，并保存在此设备上。",
   "fonts.picker.title": "更多字体",
   "fonts.picker.search": "搜索字体",
   "fonts.picker.categories": "字体类别",
@@ -4791,5 +4791,13 @@
   "keep.move": "移动已保留的邮件",
   "keep.closeStack": "关闭气泡",
   "keep.stack_one": "{{name}}，已保留 {{count}} 封邮件",
-  "keep.stack_other": "{{name}}，已保留 {{count}} 封邮件"
+  "keep.stack_other": "{{name}}，已保留 {{count}} 封邮件",
+  "onboarding.quickActionsShows": "指向邮件时，操作的显示方式",
+  "onboarding.habitsTitle": "MailVault 如何处理邮件",
+  "onboarding.habitsSubtitle": "几个简单的选择，随时可在设置中更改。",
+  "quickActions.reorderChipInstructions": "拖动以重新排序，或在手柄上使用方向键。",
+  "quickActions.findAction": "查找操作",
+  "quickActions.noActionMatch": "没有与搜索匹配的操作。",
+  "quickActions.sameLook": "行、选择栏和阅读器使用相同外观",
+  "settings.text.googleFontsTracking": "下载字体会连接到 Google，Google 能看到你的 IP 地址和下载时间，并可借此追踪你。内置字体从不连接 Google。"
 }

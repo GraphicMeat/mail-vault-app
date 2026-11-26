@@ -1,11 +1,12 @@
 import React, { useId, useState } from 'react';
+import { MoreHorizontal } from 'lucide-react';
 import { EmailRow, CompactEmailRow, listRowHeight } from '../EmailRow';
 import { SelectionActionBarView } from '../SelectionActionBar';
 import { QuickActionWheelInPlace } from '../QuickActions';
 import { EmailActionBar } from '../email/EmailActionBar';
 import { ChoiceCards } from '../ui/ChoiceCards';
 import { normalizeListPreviewLines, useSettingsStore } from '../../stores/settingsStore';
-import { QUICK_ACTION_MODES } from '../../utils/quickActions';
+import { QUICK_ACTION_MODES, QUICK_ACTION_PALETTES } from '../../utils/quickActions';
 import { QUICK_ACTION_PRESETS, activeQuickActionPreset } from '../../utils/quickActionPresets';
 import { getSenderName } from '../../utils/emailParser';
 import { displayText } from '../../utils/bidiText';
@@ -117,28 +118,55 @@ export function CardSample({ surface, config, rows }) {
 }
 
 /**
- * The action sets of other mail apps, each drawn as the row it gives. One
- * click sets all three surfaces of `scope` (null: All views); the set the
- * scope shows exactly is marked, none when it has been changed since.
+ * The action sets of other mail apps as plain chips. One click sets all three
+ * surfaces of `scope` (null: All views); the set the scope shows exactly is
+ * marked, none when it has been changed since. The live preview beside them
+ * shows the result, so the chips draw no rows of their own.
  */
-export function QuickActionPresets({ scope, rows }) {
+export function QuickActionPresets({ scope }) {
   const quickActions = useSettingsStore(state => state.quickActions);
   const apply = useSettingsStore(state => state.applyQuickActionPreset);
   const active = activeQuickActionPreset(quickActions, scope);
-  const byId = Object.fromEntries(QUICK_ACTION_PRESETS.map(preset => [preset.id, preset]));
   return <DesktopViewEnv>
-    <QuickActionPresetsView presets={QUICK_ACTION_PRESETS} active={active} onApply={presetId => apply(presetId, scope)}
-      preview={presetId => <CardSample surface="row" config={byId[presetId].surfaces.row} rows={rows} />} />
+    <QuickActionPresetsView presets={QUICK_ACTION_PRESETS} active={active} onApply={presetId => apply(presetId, scope)} />
   </DesktopViewEnv>;
 }
 
-/** Layout as cards, each the surface in that layout. */
-export function QuickActionLayoutCards({ surface, config, rows, onChange }) {
+// A small drawing of each layout: a row's right end with what appears there.
+// `dots`: buttons on the row; `more`: the menu's ⋯; `ring`: the wheel.
+const MODE_PICTURES = {
+  inline: { dots: 4 },
+  menu: { dots: 0, more: true },
+  radial: { dots: 0, ring: true },
+  'favorite-menu': { dots: 1, more: true },
+};
+function ModePicture({ mode }) {
+  const { dots, more, ring } = MODE_PICTURES[mode];
+  return <span className="quick-actions-mode-picture" data-mode={mode} aria-hidden="true">
+    {Array.from({ length: dots }, (_, i) => <i key={i} />)}
+    {ring && <span className="quick-actions-mode-ring" />}
+    {more && <MoreHorizontal size={14} />}
+  </span>;
+}
+
+/** The four layouts as light tiles, a radio group named Layout. */
+export function QuickActionModeTiles({ value, onChange }) {
   const t = useT();
-  return <ChoiceCards label={t('quickActions.layout')} value={config.mode} onChange={onChange}
+  return <ChoiceCards label={t('quickActions.layout')} value={value} onChange={onChange} className="quick-actions-mode-tiles"
     options={QUICK_ACTION_MODES.map(mode => ({
       value: mode,
       label: t(layoutLabelKey(mode)),
-      preview: <CardSample surface={surface} config={{ ...config, mode }} rows={rows} />,
+      preview: <ModePicture mode={mode} />,
+    }))} />;
+}
+
+/** The color styles as three dots, a radio group named Color style. */
+export function QuickActionPaletteDots({ value, onChange }) {
+  const t = useT();
+  return <ChoiceCards label={t('quickActions.palette')} value={value} onChange={onChange} className="quick-actions-palette-dots"
+    options={QUICK_ACTION_PALETTES.map(palette => ({
+      value: palette,
+      label: t(`quickActions.palette.${palette}`),
+      preview: <span className="quick-actions-palette-dot" data-palette={palette} aria-hidden="true" />,
     }))} />;
 }

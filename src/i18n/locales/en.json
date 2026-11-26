@@ -3119,7 +3119,7 @@
   "settings.text.systemFont": "System font",
   "settings.text.downloadedFonts": "Downloaded fonts",
   "settings.text.moreFonts": "More fonts (Google Fonts)…",
-  "settings.text.googleFontsNote": "A font you choose is downloaded once from Google Fonts (font files only, no personal data) and kept on this device.",
+  "settings.text.googleFontsNote": "A font you choose is downloaded once from Google Fonts and kept on this device.",
   "fonts.picker.title": "More fonts",
   "fonts.picker.search": "Search fonts",
   "fonts.picker.categories": "Font categories",
@@ -4791,5 +4791,13 @@
   "keep.move": "Move kept emails",
   "keep.closeStack": "Close bubble",
   "keep.stack_one": "{{name}}, {{count}} kept email",
-  "keep.stack_other": "{{name}}, {{count}} kept emails"
+  "keep.stack_other": "{{name}}, {{count}} kept emails",
+  "onboarding.quickActionsShows": "When you point at a message, show its actions as",
+  "onboarding.habitsTitle": "How MailVault handles mail",
+  "onboarding.habitsSubtitle": "A few quick choices. Change them anytime in Settings.",
+  "quickActions.reorderChipInstructions": "Drag to reorder, or use the arrow keys on the grip.",
+  "quickActions.findAction": "Find an action",
+  "quickActions.noActionMatch": "No action matches your search.",
+  "quickActions.sameLook": "Same look on rows, selection bar and reader",
+  "settings.text.googleFontsTracking": "Downloading a font connects to Google, which sees your IP address and when you download. Google can use that to track you. The bundled fonts never connect to Google."
 }
