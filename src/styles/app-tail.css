@@ -30,6 +30,14 @@
 .onboarding-sample-nav-item > svg { flex-shrink: 0; }
 .onboarding-sample-nav-active { background: var(--mail-accent-tint); color: var(--mail-accent-text); }
 .onboarding-sample-nav-heading { display: block; margin: 20px 6px 8px; color: var(--mail-text-muted); }
+/* Sidebar layouts (Settings → Workspace): two sections, an account menu, folders under the account. */
+.onboarding-sample-sidebar[data-layout="split"] { display: flex; flex-direction: column; }
+.onboarding-sample-sidebar-section { flex: 1 1 0; min-height: 0; overflow: hidden; }
+.onboarding-sample-sidebar-section + .onboarding-sample-sidebar-section { margin-top: 10px; border-top: 1px solid var(--mail-border); }
+.onboarding-sample-sidebar-section .onboarding-sample-nav-heading { margin-top: 10px; }
+.onboarding-sample-switcher { margin-bottom: 12px; border: 1px solid var(--mail-border); }
+.onboarding-sample-switcher > span { flex: 1; }
+.onboarding-sample-nested-folders { padding-left: 12px; }
 .onboarding-sample-bubbles .onboarding-sample-folder-nav { flex-direction: row; flex-wrap: wrap; }
 .onboarding-sample-bubbles .onboarding-sample-folder-nav .onboarding-sample-nav-item { max-width: 100%; padding: 4px 6px; border: 1px solid var(--mail-border); border-radius: 9999px; }
 .onboarding-sample-panes { flex: 1; min-width: 0; min-height: 0; }
@@ -314,7 +322,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--mail-accent-fi
 .onboarding-appearance .settings-tabbed-page > .settings-tabs > [role="tab"]::after { display: none; }
 .onboarding-appearance .settings-tabbed-page > .settings-form { flex: 1; min-height: 0; max-width: none; padding: 14px 0 0; display: flex; }
 .onboarding-appearance-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 24px; }
-.onboarding-appearance-controls { display: flex; flex-direction: column; gap: 16px; min-width: 0; min-height: 0; overflow: hidden; }
+.onboarding-appearance-controls { display: flex; flex-direction: column; gap: 16px; min-width: 0; min-height: 0; overflow: hidden; padding: 4px; margin: -4px; }
 .onboarding-appearance-controls fieldset { min-width: 0; }
 .onboarding-appearance-controls legend { margin-bottom: 6px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--mail-text-muted); }
 .onboarding-choice-hint { margin-top: 6px; font-size: 12px; line-height: 1.45; color: var(--mail-text-muted); }

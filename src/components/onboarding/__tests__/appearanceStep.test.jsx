@@ -219,4 +219,16 @@ describe('appearance step', () => {
     fireEvent.click(screen.getByTestId('appearance-recommended'));
     expect(useSettingsStore.getState().sidebarLayout).toBe('stacked');
   });
+
+  it('redraws the preview sidebar when a sidebar layout is picked', () => {
+    render(<AppearanceStep onContinue={() => {}} />);
+    fireEvent.click(tab('layout'));
+    const sidebar = () => screen.getByTestId('preview-pane-sidebar');
+    expect(sidebar().dataset.layout).toBe('stacked');
+    for (const value of ['split', 'switcher', 'nested', 'stacked']) {
+      fireEvent.click(screen.getByTestId(`appearance-sidebar-layout-${value}`));
+      expect(useSettingsStore.getState().sidebarLayout).toBe(value);
+      expect(sidebar().dataset.layout).toBe(value);
+    }
+  });
 });

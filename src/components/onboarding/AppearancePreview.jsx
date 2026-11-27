@@ -39,7 +39,36 @@ function SampleToolbar({ display, dark }) {
   </div>;
 }
 
-export function AppearancePreview({ layoutMode, sidebarStyle, viewStyle, emailListStyle, threadMode = 'grouped', theme = 'dark', palette = 'indigo', emailViewerTheme = 'system', highlight = 'hover', actionButtonDisplay = 'icon-label', appFont }) {
+// The sidebar in each layout of Settings → Workspace (Sidebar.jsx): one
+// scrolling list, two sections, an account menu, or folders under the account.
+function SampleSidebarNav({ layout }) {
+  const t = useT();
+  const item = (key, active, children) => <span key={key} className={`onboarding-sample-nav-item ${active ? 'onboarding-sample-nav-active' : ''}`}>{children}</span>;
+  const account = (account, index) => item(account.id, index === 0, <><i aria-hidden="true">{account.name[0]}</i><span>{account.name}</span></>);
+  const folders = [[Inbox, 'sidebar.inbox'], [Archive, 'common.archive'], [Send, 'list.sent']]
+    .map(([Icon, key], index) => item(key, index === 0, <><Icon size={13} aria-hidden="true" /><span>{t(key)}</span></>));
+  const folderNav = <div className="onboarding-sample-nav onboarding-sample-folder-nav">{folders}</div>;
+  if (layout === 'nested') return <div className="onboarding-sample-nav">
+    {account(PREVIEW_ACCOUNTS[0], 0)}
+    <div className="onboarding-sample-nav onboarding-sample-folder-nav onboarding-sample-nested-folders">{folders}</div>
+    {PREVIEW_ACCOUNTS.slice(1).map((a, i) => account(a, i + 1))}
+  </div>;
+  if (layout === 'switcher') return <>
+    <span data-testid="preview-account-switcher" className="onboarding-sample-nav-item onboarding-sample-switcher">
+      <i aria-hidden="true">{PREVIEW_ACCOUNTS[0].name[0]}</i><span>{PREVIEW_ACCOUNTS[0].name}</span><ChevronDown size={12} aria-hidden="true" />
+    </span>
+    {folderNav}
+  </>;
+  const accounts = <div className="onboarding-sample-nav">{PREVIEW_ACCOUNTS.map(account)}</div>;
+  const heading = <span className="onboarding-sample-nav-heading">{t('sidebar.folders')}</span>;
+  if (layout === 'split') return <>
+    <div className="onboarding-sample-sidebar-section">{accounts}</div>
+    <div className="onboarding-sample-sidebar-section">{heading}{folderNav}</div>
+  </>;
+  return <>{accounts}{heading}{folderNav}</>;
+}
+
+export function AppearancePreview({ layoutMode, sidebarStyle, viewStyle, emailListStyle, threadMode = 'grouped', sidebarLayout = 'stacked', theme = 'dark', palette = 'indigo', emailViewerTheme = 'system', highlight = 'hover', actionButtonDisplay = 'icon-label', appFont }) {
   const t = useT();
   const rows = previewRows();
   const replies = previewConversation();
@@ -53,18 +82,10 @@ export function AppearancePreview({ layoutMode, sidebarStyle, viewStyle, emailLi
 
   return <figure className="onboarding-mail-sample" data-testid="appearance-preview" data-theme={theme} data-palette={palette} style={appFont ? { fontFamily: fontStack(appFont) } : undefined} aria-label={t('onboarding.previewCaption')}>
     <div className="onboarding-sample-app">
-      <div data-testid="preview-pane-sidebar" data-style={sidebarStyle} className={`onboarding-sample-sidebar ${sidebarStyle === 'tagcloud' ? 'onboarding-sample-bubbles' : ''}`}>
+      <div data-testid="preview-pane-sidebar" data-style={sidebarStyle} data-layout={sidebarLayout} className={`onboarding-sample-sidebar ${sidebarStyle === 'tagcloud' ? 'onboarding-sample-bubbles' : ''}`}>
         <strong className="onboarding-sample-brand">MailVault</strong>
         <span className="onboarding-sample-compose"><PenSquare size={13} aria-hidden="true" />{t('sidebar.compose')}</span>
-        <div className="onboarding-sample-nav">
-          {PREVIEW_ACCOUNTS.map((account, index) => <span key={account.id} className={`onboarding-sample-nav-item ${index === 0 ? 'onboarding-sample-nav-active' : ''}`}>
-            <i aria-hidden="true">{account.name[0]}</i><span>{account.name}</span>
-          </span>)}
-        </div>
-        <span className="onboarding-sample-nav-heading">{t('sidebar.folders')}</span>
-        <div className="onboarding-sample-nav onboarding-sample-folder-nav">
-          {[[Inbox, 'sidebar.inbox'], [Archive, 'common.archive'], [Send, 'list.sent']].map(([Icon, key], index) => <span key={key} className={`onboarding-sample-nav-item ${index === 0 ? 'onboarding-sample-nav-active' : ''}`}><Icon size={13} aria-hidden="true" /><span>{t(key)}</span></span>)}
-        </div>
+        <SampleSidebarNav layout={sidebarLayout} />
       </div>
       <div data-testid="preview-panes" data-layout={chat ? 'chat' : layoutMode} className={`onboarding-sample-panes flex ${!chat && threeColumn ? 'flex-row' : 'flex-col'}`}>
         {chat ? <div data-testid="preview-chat" className="onboarding-sample-chat"><SampleConversation /></div> : <>

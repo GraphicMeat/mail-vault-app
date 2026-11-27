@@ -184,7 +184,7 @@ export function AppearanceStep({ onContinue }) {
           {chat && ['layout', 'reading'].includes(section) && <p className="onboarding-choice-hint">{t('workspace.emailViewOnly')}</p>}
         </div>
         <div className="onboarding-appearance-example">
-          <AppearancePreview layoutMode={settings.layoutMode} sidebarStyle={settings.sidebarStyle}
+          <AppearancePreview layoutMode={settings.layoutMode} sidebarStyle={settings.sidebarStyle} sidebarLayout={settings.sidebarLayout}
             viewStyle={settings.viewStyle} emailListStyle={settings.emailListStyle} threadMode={settings.threadMode}
             theme={theme} palette={palette} emailViewerTheme={settings.emailViewerTheme}
             highlight={settings.emailRowHighlight} actionButtonDisplay={settings.actionButtonDisplay} appFont={settings.appFont} />

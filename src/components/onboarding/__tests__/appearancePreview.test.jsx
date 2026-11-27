@@ -107,4 +107,50 @@ describe('sample row gutter', () => {
     rerender(<AppearancePreview {...base} threadMode="grouped" />);
     expect(new Set(slots())).toEqual(new Set([0]));
   });
+
+  // Each sidebar layout draws its own shape, so picking one in onboarding
+  // changes the picture (it used to draw stacked whatever was chosen).
+  describe('sidebar layout', () => {
+    const sidebar = () => screen.getByTestId('preview-pane-sidebar');
+    const shown = name => within(sidebar()).queryByText(name);
+
+    it('stacked: every account, then a Folders heading, in one list', () => {
+      render(<AppearancePreview {...base} sidebarLayout="stacked" />);
+      expect(sidebar().dataset.layout).toBe('stacked');
+      for (const a of PREVIEW_ACCOUNTS) expect(shown(a.name)).toBeTruthy();
+      expect(shown(t('sidebar.folders'))).toBeTruthy();
+      expect(sidebar().querySelectorAll('.onboarding-sample-sidebar-section')).toHaveLength(0);
+    });
+
+    it('split: accounts and folders in two separate sections', () => {
+      render(<AppearancePreview {...base} sidebarLayout="split" />);
+      expect(sidebar().dataset.layout).toBe('split');
+      const sections = sidebar().querySelectorAll('.onboarding-sample-sidebar-section');
+      expect(sections).toHaveLength(2);
+      for (const a of PREVIEW_ACCOUNTS) expect(within(sections[0]).getByText(a.name)).toBeTruthy();
+      expect(within(sections[1]).getByText(t('sidebar.inbox'))).toBeTruthy();
+    });
+
+    it('switcher: only the chosen account, as a menu, above the folders', () => {
+      render(<AppearancePreview {...base} sidebarLayout="switcher" />);
+      expect(sidebar().dataset.layout).toBe('switcher');
+      expect(within(sidebar()).getByTestId('preview-account-switcher').textContent).toContain(PREVIEW_ACCOUNTS[0].name);
+      for (const a of PREVIEW_ACCOUNTS.slice(1)) expect(shown(a.name)).toBeNull();
+      expect(shown(t('sidebar.inbox'))).toBeTruthy();
+    });
+
+    it('nested: folders right under the selected account, no Folders heading', () => {
+      render(<AppearancePreview {...base} sidebarLayout="nested" />);
+      expect(sidebar().dataset.layout).toBe('nested');
+      expect(shown(t('sidebar.folders'))).toBeNull();
+      const nav = sidebar().querySelector('.onboarding-sample-nav');
+      const names = [...nav.children].map(el => el.textContent);
+      const first = names.findIndex(text => text.endsWith(PREVIEW_ACCOUNTS[0].name));
+      const second = names.findIndex(text => text.endsWith(PREVIEW_ACCOUNTS[1].name));
+      const folders = names.findIndex(text => text.includes(t('sidebar.inbox')));
+      expect(first).toBeGreaterThanOrEqual(0);
+      expect(folders).toBe(first + 1);
+      expect(second).toBeGreaterThan(folders);
+    });
+  });
 });

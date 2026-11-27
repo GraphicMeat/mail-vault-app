@@ -4,6 +4,7 @@
 
 - Added: a fourth sidebar layout, Folders under account. The selected account (or All Inboxes, or a group) opens in place with All mail, Server and Vault, folder search and its folders right below it, and New folder moves onto the account's row. Pick it in Settings > Appearance > Layout or during setup.
 
+- Fixed: in the setup tour's Make it yours, the sample window now redraws its sidebar for the sidebar layout you pick (Stacked, Split sections, Account switcher, Folders under account), and the highlight around a focused menu or choice is no longer cut off at its sides.
 - Fixed: "Some server actions have not gone through" could pop up right after you deleted an email, counting the delete that was still on its way to the server. It now shows only for changes the server has actually refused on a retry, still at most once a day.
 - Changed: the setup tour fits every step on one screen, with no scrolling. Back, a progress bar and Skip stay at the top, and Continue stays in the same place at the bottom of every step. Make it yours is simpler: colors are small swatches, the font is one menu, layouts are small pictures, and Quick actions asks only how a pointed-at message shows its actions and whose action set to start from. The thank-you step puts the thanks beside the Premium plans.
 - Added: the setup tour asks how deleting works, next to mail links and Compose: whether to ask before deleting, and what opens after you delete the open email (the next, the previous, or nothing), each shown as a small picture.
