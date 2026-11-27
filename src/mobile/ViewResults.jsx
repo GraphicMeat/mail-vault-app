@@ -4,10 +4,11 @@
 // `views.rs`), newest first across accounts, page by page while they scroll. A row opens the
 // message as a search result does (App.jsx); a swipe runs through the app's swipe handling and
 // changes the row here once it really ran, as in Search.jsx.
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { daemonCall } from './transport.js';
 import { useMobileStore } from './store.js';
 import MessageRow from './MessageRow.jsx';
+import { useRowHold } from './quickActions/useRowHold.jsx';
 import { rowHeight } from './prefs.js';
 import { useT } from './i18n.js';
 import { BackButton } from './icons.jsx';
@@ -19,7 +20,7 @@ const NEAR_END = 600;
 
 const keyOf = (r) => `${r.accountId}|${r.folder}|${r.uid}`;
 
-export default function ViewResults({ view, onOpen, onSwipe: swipeAction, onClose }) {
+export default function ViewResults({ view, onOpen, onSwipe: swipeAction, onClose, wheel = null }) {
   const t = useT();
   const height = useMobileStore((s) => rowHeight(s.prefs));
   // `state`: loading | more | done | failed | unavailable.
@@ -80,21 +81,31 @@ export default function ViewResults({ view, onOpen, onSwipe: swipeAction, onClos
     if (el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_END) loadMore();
   }, [loadMore]);
 
-  const onSwipe = useCallback((kind, row) => {
+  const appliedTo = useCallback((row) => {
     const same = (r) => keyOf(r) === keyOf(row);
-    const applied = (done) => setList((l) => {
+    return (done) => setList((l) => {
       if (done === 'delete' || done === 'move') return { ...l, rows: l.rows.filter((r) => !same(r)) };
       const patch = done === 'seen' || done === 'unseen' ? { seen: done === 'seen' }
         : done === 'flag' || done === 'unflag' ? { flagged: done === 'flag' } : null;
       return patch ? { ...l, rows: l.rows.map((r) => (same(r) ? { ...r, ...patch } : r)) } : l;
     });
+  }, []);
+  const onSwipe = useCallback((kind, row) => {
+    const applied = appliedTo(row);
     if (swipeAction) {
       swipeAction(kind, row, applied);
     } else if (kind !== 'move') {
       useMobileStore.getState().act(kind, { accountId: row.accountId, folder: row.folder, uids: [row.uid] });
       applied(kind);
     }
-  }, [swipeAction]);
+  }, [swipeAction, appliedTo]);
+  // The row wheel acts through the same paths, and the row changes here once the action runs.
+  const wheelHere = useMemo(() => (wheel ? {
+    ...wheel,
+    onAction: onSwipe,
+    onMove: (row, target) => { wheel.onMove?.(row, target); appliedTo(row)('move'); },
+  } : null), [wheel, onSwipe, appliedTo]);
+  const { hold, wheelNode } = useRowHold(wheelHere);
 
   const name = viewLabel(view, t);
   return (
@@ -120,13 +131,14 @@ export default function ViewResults({ view, onOpen, onSwipe: swipeAction, onClos
           <div className="mv-search__list">
             {list.rows.map((row, i) => (
               <div key={keyOf(row)} className="mv-search__item" style={{ height: `${height}px` }}>
-                <MessageRow row={row} index={i} onOpen={onOpen} onSwipe={onSwipe} />
+                <MessageRow row={row} index={i} onOpen={onOpen} onSwipe={onSwipe} onHold={hold} />
               </div>
             ))}
             {list.state === 'more' && <p className="mv-search__note" role="status">{t('views.preview.running')}</p>}
           </div>
         )}
       </div>
+      {wheelNode}
     </section>
   );
 }

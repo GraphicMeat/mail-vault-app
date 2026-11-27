@@ -9,6 +9,7 @@
 import React, { useEffect, useReducer, useRef, useState } from 'react';
 import { displayText } from '../utils/bidiText.js';
 import MessageRow from './MessageRow.jsx';
+import { useRowHold } from './quickActions/useRowHold.jsx';
 import { rowHeight } from './prefs.js';
 import { daemonCall } from './transport.js';
 import { useT } from './i18n.js';
@@ -24,8 +25,9 @@ async function readThread(accountId, folder, uids, order) {
   return [];
 }
 
-export default function ThreadView({ accountId, folder, row, list = null, accountOf = null, onOpen, onSwipe, onClose }) {
+export default function ThreadView({ accountId, folder, row, list = null, accountOf = null, onOpen, onSwipe, onClose, wheel = null }) {
   const t = useT();
+  const { hold, wheelNode } = useRowHold(wheel);
   const order = useMobileStore((s) => s.prefs.threadSortOrder);
   const [rows, setRows] = useState(null);
   const known = useRef([row.uid, ...(Array.isArray(row.threadUids) ? row.threadUids : [])]);
@@ -85,11 +87,13 @@ export default function ThreadView({ accountId, folder, row, list = null, accoun
                 account={accountOf ? accountOf(r) : undefined}
                 onOpen={onOpen}
                 onSwipe={onSwipe}
+                onHold={hold}
               />
             ))}
           </div>
         )}
       </div>
+      {wheelNode}
     </section>
   );
 }

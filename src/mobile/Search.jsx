@@ -14,11 +14,12 @@
 // Recent searches (last 8) are page storage on this device (store.js), shown while the field is
 // empty. Desktop's `tag:Name` terms (local labels) narrow the device's results, and alone list
 // every message with those labels (engine `tags.rs`); the server is not offered for them.
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { daemonCall } from './transport.js';
 import { useMobileStore } from './store.js';
 import { ALL_INBOXES } from './folders.js';
 import MessageRow from './MessageRow.jsx';
+import { useRowHold } from './quickActions/useRowHold.jsx';
 import { rowHeight } from './prefs.js';
 import { errorKey } from './errors.js';
 import { useT } from './i18n.js';
@@ -39,7 +40,7 @@ export const AUTO_ROWS = 300;
 
 const keyOf = (r) => `${r.accountId}/${r.folder}/${r.uid}`;
 
-export default function Search({ onOpen, onSwipe: swipeAction, onClose, initialQuery = '' }) {
+export default function Search({ onOpen, onSwipe: swipeAction, onClose, initialQuery = '', wheel = null }) {
   const t = useT();
   const accountId = useMobileStore((s) => s.activeAccountId);
   // All Inboxes is no one folder: search opens on All accounts there, without "This folder".
@@ -167,9 +168,9 @@ export default function Search({ onOpen, onSwipe: swipeAction, onClose, initialQ
 
   // A swipe runs through the app's own swipe handling (the delete question, the folder picker
   // for a move); the row changes here only once the action really runs.
-  const onSwipe = useCallback((kind, row) => {
+  const appliedTo = useCallback((row) => {
     const same = (r) => keyOf(r) === keyOf(row);
-    const applied = (done) => {
+    return (done) => {
       const change = (rows) => {
         if (done === 'delete' || done === 'move') return rows.filter((r) => !same(r));
         const patch = done === 'seen' || done === 'unseen' ? { seen: done === 'seen' }
@@ -179,13 +180,24 @@ export default function Search({ onOpen, onSwipe: swipeAction, onClose, initialQ
       setLocal((l) => ({ ...l, rows: change(l.rows) }));
       setServer((s) => ({ ...s, rows: change(s.rows) }));
     };
+  }, []);
+  const onSwipe = useCallback((kind, row) => {
+    const applied = appliedTo(row);
     if (swipeAction) {
       swipeAction(kind, row, applied);
     } else if (kind !== 'move') {
       useMobileStore.getState().act(kind, { accountId: row.accountId, folder: row.folder, uids: [row.uid] });
       applied(kind);
     }
-  }, [swipeAction]);
+  }, [swipeAction, appliedTo]);
+  // The row wheel acts through the same paths, and the result changes here once the action runs.
+  const wheelHere = useMemo(() => (wheel ? {
+    ...wheel,
+    onAction: onSwipe,
+    onMove: (row, target) => { wheel.onMove?.(row, target); appliedTo(row)('move'); },
+  } : null), [wheel, onSwipe, appliedTo]);
+
+  const { hold, wheelNode } = useRowHold(wheelHere);
 
   const onSubmit = (e) => {
     e.preventDefault();
@@ -203,7 +215,7 @@ export default function Search({ onOpen, onSwipe: swipeAction, onClose, initialQ
 
   const rowsView = shown.map((row, i) => (
     <div key={keyOf(row)} className="mv-search__item" style={{ height: `${height}px` }}>
-      <MessageRow row={row} index={i} onOpen={open} onSwipe={onSwipe} />
+      <MessageRow row={row} index={i} onOpen={open} onSwipe={onSwipe} onHold={hold} />
     </div>
   ));
   const firstServer = local.rows.length;
@@ -305,6 +317,7 @@ export default function Search({ onOpen, onSwipe: swipeAction, onClose, initialQ
           </div>
         )}
       </div>
+      {wheelNode}
     </section>
   );
 }

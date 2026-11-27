@@ -9,6 +9,7 @@ import React, { useEffect, useLayoutEffect, useReducer, useRef, useState } from 
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { displayText } from '../utils/bidiText.js';
 import MessageRow from './MessageRow.jsx';
+import { useRowHold } from './quickActions/useRowHold.jsx';
 import { rowHeight } from './prefs.js';
 import { daemonCall } from './transport.js';
 import { formatEmailDate } from './format.js';
@@ -81,8 +82,9 @@ function People({ people, onPick }) {
   );
 }
 
-export default function ChatView({ accountId, folder, list, onOpen, onSwipe, emptyNote = true }) {
+export default function ChatView({ accountId, folder, list, onOpen, onSwipe, emptyNote = true, wheel = null }) {
   const t = useT();
+  const { hold, wheelNode } = useRowHold(wheel);
   const version = useListVersion(list);
   const [people, setPeople] = useState(null);
   const [person, setPerson] = useState(null);
@@ -132,11 +134,12 @@ export default function ChatView({ accountId, folder, list, onOpen, onSwipe, emp
           {shown && (
             <div className="mv-list__inner" style={{ height: `${shown.length * height}px` }}>
               {shown.map((r, i) => (
-                <MessageRow key={r.uid} index={i} start={i * height} row={r} onOpen={onOpen} onSwipe={onSwipe} />
+                <MessageRow key={r.uid} index={i} start={i * height} row={r} onOpen={onOpen} onSwipe={onSwipe} onHold={hold} />
               ))}
             </div>
           )}
         </div>
+        {wheelNode}
       </div>
     );
   }
