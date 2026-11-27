@@ -183,6 +183,7 @@ export const RPC_METHODS = Object.freeze([
   "imap_search_all_uids",
   "imap_search_emails",
   "imap_set_flags",
+  "imap_set_flags_batch",
   "imap_test_connection",
   "import_backup",
   "import_mbox",

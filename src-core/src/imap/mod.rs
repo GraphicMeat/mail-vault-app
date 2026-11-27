@@ -1667,6 +1667,46 @@ pub async fn set_flags(
     Ok(written)
 }
 
+/// Most uids one batched `UID STORE` names: a compressed set of scattered
+/// uids stays well under any server's command-line limit.
+pub const STORE_BATCH: usize = 500;
+
+/// `set_flags` for many uids of one mailbox: one SELECT, then one
+/// `UID STORE <set> ±FLAGS.SILENT` per `STORE_BATCH` uids, the same
+/// PERMANENTFLAGS gate. `.SILENT` because the caller already knows the flags
+/// it asked for; a FETCH echo per message is only traffic. Every STORE is
+/// checked (`run_checked`), so `Ok` means the server took all of them.
+pub async fn set_flags_batch(
+    session: &mut ImapSession,
+    mailbox: &str,
+    uids: &[u32],
+    flags: &[String],
+    action: &str,
+) -> Result<Vec<String>, String> {
+    if uids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mbox = select_mailbox(session, mailbox).await?;
+    let written = permitted_flags(flags, &mbox.permanent_flags);
+    if written.is_empty() {
+        info!(
+            "[set_flags_batch] {} uid(s) mailbox={} none of {:?} permitted by PERMANENTFLAGS {:?}",
+            uids.len(), mailbox, flags, mbox.permanent_flags
+        );
+        return Ok(written);
+    }
+    let op = if action == "add" { "+FLAGS.SILENT" } else { "-FLAGS.SILENT" };
+    for chunk in uids.chunks(STORE_BATCH) {
+        run_checked(
+            session,
+            format!("UID STORE {} {} ({})", compress_uid_ranges(chunk), op, written.join(" ")),
+            "STORE flags",
+        )
+        .await?;
+    }
+    Ok(written)
+}
+
 /// Run a mutation and require the server's tagged `OK`.
 ///
 /// Every STORE and EXPUNGE in this file used to be written as

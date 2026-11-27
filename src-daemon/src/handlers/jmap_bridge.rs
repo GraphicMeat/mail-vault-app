@@ -46,6 +46,7 @@ pub const HANDLED: &[&str] = &[
     "imap_find_message_id",
     "imap_disconnect",
     "imap_set_flags",
+    "imap_set_flags_batch",
     "imap_move_emails",
     "imap_delete_email",
     "imap_create_mailbox",
@@ -766,6 +767,7 @@ async fn answer(
         }
 
         "imap_set_flags" => set_flags(state, params, acct).await,
+        "imap_set_flags_batch" => set_flags_batch(state, params, acct).await,
         "imap_move_emails" => move_emails(state, params, acct, original.ok_or_else(|| Fail::Rpc("errors.keychainBusy".into()))?).await,
         "imap_delete_email" => delete_email(state, params, account, original).await,
         "imap_create_mailbox" => create_mailbox(params, acct).await,
@@ -1119,6 +1121,42 @@ async fn set_flags(state: &Arc<DaemonState>, params: &Value, acct: &AccountJmap)
         }
         None => Err(JmapError::Protocol("Email/set did not answer for the email".into()).into()),
     }
+}
+
+/// `imap_set_flags_batch`: `set_flags` for many uids of one mailbox in one
+/// `Email/set`. An import-range uid is `skipped`, as the IMAP arm's; a uid
+/// the mailbox no longer holds, or an email the server would not patch, is
+/// in neither `done` nor `skipped`, so the caller sees it was not written,
+/// and the rest of the batch still lands.
+async fn set_flags_batch(state: &Arc<DaemonState>, params: &Value, acct: &AccountJmap) -> Result<Value, Fail> {
+    let account_id = ledger_account(params)?;
+    let uids: Vec<u32> = param(params, "uids")?;
+    let mailbox = mailbox_param(params);
+    let flags: Vec<String> = param(params, "flags")?;
+    let action = opt_param::<String>(params, "action").unwrap_or_else(|| "add".into());
+    let add = action == "add";
+    let (skipped, sent): (Vec<u32>, Vec<u32>) =
+        uids.into_iter().partition(|uid| mailvault_core::message_store::is_import_uid(*uid));
+    let written: Vec<String> = flags.iter().filter(|f| is_keyword(&flag_to_keyword(f))).cloned().collect();
+    if sent.is_empty() || written.is_empty() {
+        // No keyword to write is a success with nothing written, as the
+        // single arm answers; every uid is then as done as it can be.
+        let done = if written.is_empty() { sent } else { Vec::new() };
+        return Ok(json!({"success": true, "written": [], "done": done, "skipped": skipped}));
+    }
+    let pairs = acct.uid_to_id(state, &account_id, &mailbox, &sent, true).await?;
+    let toggles: Vec<(String, bool)> = written.iter().map(|f| (flag_to_keyword(f), add)).collect();
+    let patches: Vec<(String, Vec<(String, bool)>)> =
+        pairs.iter().filter_map(|(_, id)| id.clone().map(|id| (id, toggles.clone()))).collect();
+    let ok: std::collections::HashSet<String> =
+        if patches.is_empty() { Default::default() } else { acct.client.set_keywords(&patches).await?.ok.into_iter().collect() };
+    let done: Vec<u32> = pairs.iter().filter(|(_, id)| id.as_ref().is_some_and(|i| ok.contains(i))).map(|(uid, _)| *uid).collect();
+    let missed = sent.len() - done.len();
+    if missed > 0 {
+        warn!("[jmap] set_flags_batch mailbox={}: {} of {} uid(s) not written ({:?} {})", mailbox, missed, sent.len(), written, action);
+    }
+    info!("[jmap] set_flags_batch mailbox={}: {} done, {} skipped (import), {:?} {}", mailbox, done.len(), skipped.len(), written, action);
+    Ok(json!({"success": true, "written": written, "done": done, "skipped": skipped}))
 }
 
 /// `imap_move_emails`: one `mailboxIds` patch per email, the source label
@@ -1702,7 +1740,7 @@ second body";
             .filter(|l| l.starts_with("\"imap_") && l.contains("\" =>"))
             .map(|l| &l[1..1 + l[1..].find('"').unwrap()])
             .collect();
-        assert_eq!(arms.len(), 20, "{arms:?}");
+        assert_eq!(arms.len(), 21, "{arms:?}");
         for arm in &arms {
             let handled = HANDLED.contains(arm);
             let refused = UNSUPPORTED.iter().any(|(name, _)| name == arm);
@@ -2200,6 +2238,22 @@ second body";
         let none = ok(call(&state, "imap_set_flags", json!({"account": a, "uid": e2, "mailbox": "INBOX", "flags": ["\\Recent"]})).await);
         assert_eq!(none, json!({"success": true, "written": []}), "nothing writable is a success, not an error");
         assert_eq!(m.count_calls("Email/set"), 2, "no request for nothing writable");
+    }
+
+    /// A JMAP account's batch is one `Email/set`, never IMAP: the import uid
+    /// is skipped, a gone uid is left out of `done`, the rest land.
+    #[tokio::test]
+    async fn set_flags_batch_patches_every_email_in_one_set() {
+        let (state, m) = test_state_with_mock(common_scenario()).await;
+        let a = jmap_account(&m);
+        let listing = list(&state, &a, "INBOX").await;
+        let (e1, e2) = (uid_in(&listing, "<e1@x>"), uid_in(&listing, "<e2@x>"));
+        let import = 0xC000_0001u32;
+        let out = ok(call(&state, "imap_set_flags_batch", json!({"account": a, "uids": [e1, e2, import, 99], "mailbox": "INBOX", "flags": ["\\Seen"], "action": "add"})).await);
+        assert_eq!(out, json!({"success": true, "written": ["\\Seen"], "done": [e1, e2], "skipped": [import]}));
+        assert!(m.read(|s| s.email("acc1", "e1").unwrap().keywords.contains("$seen")));
+        assert!(m.read(|s| s.email("acc1", "e2").unwrap().keywords.contains("$seen")));
+        assert_eq!(m.count_calls("Email/set"), 1, "one Email/set for the whole batch");
     }
 
     #[tokio::test]

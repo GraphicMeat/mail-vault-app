@@ -855,6 +855,54 @@ async fn route_imap(state: &Arc<DaemonState>, method: &str, params: &Value, id: 
             }
         }
 
+        // A bulk mark read / star: one SELECT and one STORE per 500 uids on
+        // one pooled session, instead of one `imap_set_flags` round trip per
+        // message. An import-range uid (a local-only mbox import) is never
+        // sent: no server holds it, and Outlook refuses the whole set over
+        // it. It comes back in `skipped`; `done` is every other uid, the
+        // server having taken the STORE (or PERMANENTFLAGS letting none of
+        // the flags through, `written: []`, as the single arm answers).
+        "imap_set_flags_batch" => {
+            let account = req!(account_arg(&id, params));
+            let uids = req!(vec_arg::<u32>(&id, params, "uids"));
+            let mailbox = opt_str_arg(params, "mailbox").unwrap_or_else(|| "INBOX".to_string());
+            let flags = req!(vec_arg::<String>(&id, params, "flags"));
+            let action = opt_str_arg(params, "action").unwrap_or_else(|| "add".to_string());
+            let (skipped, sent): (Vec<u32>, Vec<u32>) =
+                uids.into_iter().partition(|uid| mailvault_core::message_store::is_import_uid(*uid));
+            if sent.is_empty() {
+                tracing::info!(
+                    "[set_flags_batch] {} {}: 0 done, {} skipped (import), {:?} {}",
+                    account.email, mailbox, skipped.len(), flags, action
+                );
+                return Some(RpcResponse::success(id, json!({"success": true, "written": [], "done": [], "skipped": skipped})));
+            }
+            let (mailbox_ref, flags_ref, action_ref, sent_ref) = (&mailbox, &flags, &action, &sent);
+            let result = state.imap_pool.run_uid_store(&account, true, |mut session| async move {
+                let written = imap::set_flags_batch(&mut session, mailbox_ref, sent_ref, flags_ref, action_ref)
+                    .await
+                    .map_err(|e| format!("Failed to update flags: {}", e))?;
+                Ok((written, session, Some(mailbox_ref.clone())))
+            })
+            .await;
+            match result {
+                Ok(written) => {
+                    tracing::info!(
+                        "[set_flags_batch] {} {}: {} done, {} skipped (import), {:?} {} (written {:?})",
+                        account.email, mailbox, sent.len(), skipped.len(), flags, action, written
+                    );
+                    RpcResponse::success(id, json!({"success": true, "written": written, "done": sent, "skipped": skipped}))
+                }
+                Err(e) => {
+                    warn!(
+                        "[set_flags_batch] {} {}: {} uid(s) {:?} {} failed: {}",
+                        account.email, mailbox, sent.len(), flags, action, e
+                    );
+                    RpcResponse::error(id, ipc::INTERNAL_ERROR, e)
+                }
+            }
+        }
+
         "imap_delete_email" => {
             use crate::message_delete::{delete_one, Mode, Provider, Refusal};
             let account = req!(account_arg(&id, params));
@@ -1640,6 +1688,91 @@ mod tests {
         let result = resp.result.expect("success after one retry");
         assert_eq!(result["success"], json!(true));
         assert_eq!(server.connection_count(), 2, "expected exactly one retry (two connections)");
+    }
+
+    /// The verb of a logged command line (`A3 UID STORE ...` -> `UID STORE`).
+    fn verbs(server: &MockImap, verb: &str) -> Vec<String> {
+        server.commands().into_iter().filter(|c| c.to_uppercase().contains(&format!(" {verb} "))).collect()
+    }
+
+    fn seen_on(server: &MockImap, uid: u32) -> bool {
+        server.state().find("INBOX").unwrap().by_uid(uid).unwrap().has_flag("\\Seen")
+    }
+
+    #[tokio::test]
+    async fn set_flags_batch_selects_once_and_stores_every_uid_in_one_command() {
+        plaintext();
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 3)));
+        let s = st(true);
+
+        let resp = call(
+            &s,
+            "imap_set_flags_batch",
+            json!({"account": account_json(&server), "mailbox": "INBOX", "uids": [1, 2, 3], "flags": ["\\Seen"], "action": "add"}),
+        )
+        .await;
+        let result = resp.result.unwrap_or_else(|| panic!("success: {:?}", resp.error.map(|e| e.message)));
+        assert_eq!(result["success"], json!(true));
+        assert_eq!(result["written"], json!(["\\Seen"]));
+        assert_eq!(result["done"], json!([1, 2, 3]));
+        assert_eq!(result["skipped"], json!([]));
+        assert_eq!(verbs(&server, "SELECT").len(), 1, "one SELECT: {:?}", server.commands());
+        let stores = verbs(&server, "STORE");
+        assert_eq!(stores.len(), 1, "one UID STORE: {stores:?}");
+        assert!(stores[0].contains("UID STORE 1:3 +FLAGS.SILENT"), "{stores:?}");
+        assert!((1..=3).all(|uid| seen_on(&server, uid)), "every uid carries \\Seen on the server");
+
+        let resp = call(
+            &s,
+            "imap_set_flags_batch",
+            json!({"account": account_json(&server), "mailbox": "INBOX", "uids": [1, 3], "flags": ["\\Seen"], "action": "remove"}),
+        )
+        .await;
+        assert_eq!(resp.result.expect("success")["done"], json!([1, 3]));
+        assert!(!seen_on(&server, 1) && seen_on(&server, 2) && !seen_on(&server, 3));
+    }
+
+    #[tokio::test]
+    async fn set_flags_batch_never_sends_an_import_range_uid() {
+        plaintext();
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 3)));
+        let s = st(true);
+        let import = 0xC000_0001u32;
+
+        let resp = call(
+            &s,
+            "imap_set_flags_batch",
+            json!({"account": account_json(&server), "mailbox": "INBOX", "uids": [1, import, 3], "flags": ["\\Flagged"], "action": "add"}),
+        )
+        .await;
+        let result = resp.result.unwrap_or_else(|| panic!("success: {:?}", resp.error.map(|e| e.message)));
+        assert_eq!(result["done"], json!([1, 3]));
+        assert_eq!(result["skipped"], json!([import]));
+        let stores = verbs(&server, "STORE");
+        assert_eq!(stores.len(), 1, "{stores:?}");
+        assert!(stores[0].contains("UID STORE 1,3 "), "{stores:?}");
+        assert!(!stores[0].contains(&import.to_string()), "the import uid reached the server: {stores:?}");
+    }
+
+    #[tokio::test]
+    async fn set_flags_batch_of_only_import_uids_never_connects() {
+        plaintext();
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 3)));
+        let s = st(true);
+        let uids = [0xC000_0001u32, 0xC000_0002];
+
+        let resp = call(
+            &s,
+            "imap_set_flags_batch",
+            json!({"account": account_json(&server), "mailbox": "INBOX", "uids": uids, "flags": ["\\Seen"], "action": "add"}),
+        )
+        .await;
+        let result = resp.result.unwrap_or_else(|| panic!("success: {:?}", resp.error.map(|e| e.message)));
+        assert_eq!(result["success"], json!(true));
+        assert_eq!(result["done"], json!([]));
+        assert_eq!(result["skipped"], json!(uids));
+        assert_eq!(server.connection_count(), 0, "no connection for a batch with nothing to send");
+        assert!(server.commands().is_empty(), "{:?}", server.commands());
     }
 
     #[tokio::test]

@@ -905,6 +905,36 @@ pub fn known_message_ids(
     Ok(out)
 }
 
+/// The account's other vault copies of `message_ids`: `(vault_dir, uid,
+/// message_id)` for every indexed row of `account_id` whose Message-ID is one
+/// of them, outside `except_dir` (the folder the caller already holds). A
+/// Gmail message has one copy per label folder (INBOX, All Mail, Bin), all
+/// under one Message-ID. Looked up through `messages_msgid`; never another
+/// account's rows. `Err` while the index is closed.
+pub fn message_id_twins(
+    st: &SearchIndexState,
+    account_id: &str,
+    except_dir: &str,
+    message_ids: &[String],
+) -> Result<Vec<(String, u32, String)>, String> {
+    let guard = lock(&st.db);
+    let Some(conn) = guard.as_ref() else { return Err("search index is not open".into()) };
+    let mut stmt = conn
+        .prepare_cached("SELECT vault_dir, uid FROM messages WHERE account_id = ?1 AND message_id = ?2 AND vault_dir <> ?3")
+        .map_err(|e| e.to_string())?;
+    let mut out = Vec::new();
+    for id in message_ids.iter().filter(|id| !id.trim().is_empty()) {
+        let rows = stmt
+            .query_map((account_id, id.as_str(), except_dir), |r| Ok((r.get::<_, String>(0)?, r.get::<_, u32>(1)?)))
+            .map_err(|e| e.to_string())?;
+        for row in rows {
+            let (dir, uid) = row.map_err(|e| e.to_string())?;
+            out.push((dir, uid, id.clone()));
+        }
+    }
+    Ok(out)
+}
+
 /// `Ok` while the index is on and indexing message bodies: the condition
 /// Index Only eviction needs before it asks `body_indexed_uids`.
 pub fn indexes_bodies(st: &SearchIndexState) -> Result<(), String> {

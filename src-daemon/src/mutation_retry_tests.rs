@@ -74,6 +74,23 @@ async fn a_flag_change_that_keeps_losing_the_socket_fails_after_one_retry() {
     assert_eq!(srv.connection_count(), 2, "one attempt, one retry, no loop");
 }
 
+/// The batched flag change rides the same retry: a dead pooled socket at the
+/// SELECT is asked again once, on a new connection.
+#[tokio::test]
+async fn a_batched_flag_change_whose_select_loses_the_socket_retries_on_a_new_connection() {
+    let (srv, account, s) = start(Scenario::new().fault(Trigger::nth("SELECT", 1), Action::DropConnection));
+    let resp = handle_request_for_test(
+        &s,
+        "imap_set_flags_batch",
+        json!({"account": account, "uids": [1], "mailbox": "INBOX", "flags": ["\\Flagged"], "action": "add"}),
+    )
+    .await;
+    assert!(resp.error.is_none(), "the retry must land the flag: {}", error_text(&resp));
+    assert_eq!(resp.result.unwrap()["done"], json!([1]));
+    assert!(flagged(&srv), "the flag never reached the server");
+    assert_eq!(srv.connection_count(), 2, "the retry must open a NEW connection");
+}
+
 #[tokio::test]
 async fn a_move_whose_select_loses_the_socket_retries_on_a_new_connection() {
     let (srv, account, s) = start(Scenario::new().fault(Trigger::nth("SELECT", 1), Action::DropConnection));

@@ -182,6 +182,7 @@
   {"name": "imap_search_all_uids", "replySecs": null},
   {"name": "imap_search_emails", "replySecs": null},
   {"name": "imap_set_flags", "replySecs": null},
+  {"name": "imap_set_flags_batch", "replySecs": null},
   {"name": "imap_test_connection", "replySecs": null},
   {"name": "import_backup", "replySecs": null},
   {"name": "import_mbox", "replySecs": null},

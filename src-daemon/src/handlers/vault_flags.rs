@@ -78,6 +78,124 @@ pub(crate) fn apply_flags(
     })
 }
 
+/// The flags a message carries whatever folder it is seen in. Gmail shows one
+/// message under every label it has, and the vault keeps one copy per label
+/// folder (INBOX, All Mail, Bin) under one Message-ID: read and starred are
+/// the message's, so a copy left unread beside a read one is a lie.
+const TWIN_FLAGS: &[&str] = &["\\Seen", "\\Flagged"];
+
+/// `changes` as switches of `TWIN_FLAGS` only: `(uid, flags, on)`. A delta
+/// keeps its direction; a full list (`on: None`) says, for each of the two,
+/// whether the message now has it. Nothing else is carried to another copy.
+fn twin_switches(changes: &[FlagChange]) -> Vec<(u32, Vec<String>, bool)> {
+    let shared = |f: &String| TWIN_FLAGS.iter().any(|t| t.eq_ignore_ascii_case(f));
+    let mut out = Vec::new();
+    for change in changes {
+        match change.on {
+            Some(on) => {
+                let flags: Vec<String> = change.flags.iter().filter(|f| shared(f)).cloned().collect();
+                if !flags.is_empty() {
+                    out.push((change.uid, flags, on));
+                }
+            }
+            None => {
+                for flag in TWIN_FLAGS {
+                    let has = change.flags.iter().any(|f| f.eq_ignore_ascii_case(flag));
+                    out.push((change.uid, vec![(*flag).to_string()], has));
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Every mailbox path the account's custody store names, to read an index
+/// row's vault directory back as the folder custody and the header cache key
+/// by ("_Google_Mail__Bin" is "[Google Mail]/Bin").
+fn known_mailboxes(state: &Arc<DaemonState>, account_id: &str) -> Vec<String> {
+    daemon_custody::with_conn(state, |c| {
+        let mut stmt = c
+            .prepare(
+                "SELECT mailbox_path FROM header_cache_meta WHERE account_id=?1
+                 UNION SELECT DISTINCT mailbox_path FROM header_cache WHERE account_id=?1
+                 UNION SELECT DISTINCT mailbox_path FROM vault_entries WHERE account_id=?1",
+            )
+            .map_err(|e| e.to_string())?;
+        let rows = stmt.query_map([account_id], |r| r.get::<_, String>(0)).map_err(|e| e.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+    })
+    .unwrap_or_default()
+}
+
+/// Carry a flag change on `mailbox`'s messages to their other copies in the
+/// same account (other folders, same Message-ID), through `apply_flags`, so
+/// each twin's file, mirror copy, custody entry and header sidecar move as
+/// the named copy's did. Runs after the named folder's own change returned:
+/// no lock of it is held here, and each twin folder takes its own in turn.
+/// Found through the search index; with the index closed nothing is carried
+/// (logged), never an error for the change the caller asked for. Returns how
+/// many twin copies were changed.
+pub(crate) fn apply_to_twins(
+    state: &Arc<DaemonState>,
+    account_id: &str,
+    mailbox: &str,
+    account_email: Option<&str>,
+    mirror_root: Option<&str>,
+    changes: &[FlagChange],
+    sidecars: bool,
+) -> usize {
+    use mailvault_core::search_index::text::{mailboxes_from_vault_dirs, vault_dir_name};
+    use std::collections::{BTreeMap, BTreeSet, HashMap};
+    let switches = twin_switches(changes);
+    if switches.is_empty() {
+        return 0;
+    }
+    let uids: Vec<u32> = switches.iter().map(|(uid, _, _)| *uid).collect::<BTreeSet<_>>().into_iter().collect();
+    let ids = match crate::search_index::known_message_ids(&state.search_index, account_id, mailbox, &uids) {
+        Ok(ids) => ids,
+        Err(e) => {
+            info!("vault_flags: {}/{} twins not looked up: {}", account_id, mailbox, e);
+            return 0;
+        }
+    };
+    let id_of: HashMap<u32, String> = ids.into_iter().filter_map(|(uid, id)| id.filter(|i| !i.trim().is_empty()).map(|i| (uid, i))).collect();
+    let wanted: Vec<String> = id_of.values().cloned().collect::<BTreeSet<_>>().into_iter().collect();
+    if wanted.is_empty() {
+        return 0;
+    }
+    let twins = match crate::search_index::message_id_twins(&state.search_index, account_id, &vault_dir_name(mailbox), &wanted) {
+        Ok(twins) if !twins.is_empty() => twins,
+        Ok(_) => return 0,
+        Err(e) => {
+            info!("vault_flags: {}/{} twins not looked up: {}", account_id, mailbox, e);
+            return 0;
+        }
+    };
+    let dirs: Vec<String> = twins.iter().map(|(dir, _, _)| dir.clone()).collect::<BTreeSet<_>>().into_iter().collect();
+    let folder_of: HashMap<String, String> =
+        dirs.iter().cloned().zip(mailboxes_from_vault_dirs(&dirs, &known_mailboxes(state, account_id))).collect();
+    // One `apply_flags` per (twin folder, direction): a full list can switch
+    // \Seen on and \Flagged off on one copy, and a change holds one `on`.
+    let mut work: BTreeMap<(String, bool), Vec<FlagChange>> = BTreeMap::new();
+    let mut copies: BTreeSet<(String, u32)> = BTreeSet::new();
+    for (dir, twin_uid, id) in &twins {
+        let folder = &folder_of[dir];
+        for (uid, flags, on) in &switches {
+            if id_of.get(uid) == Some(id) {
+                work.entry((folder.clone(), *on)).or_default().push(FlagChange { uid: *twin_uid, flags: flags.clone(), on: Some(*on) });
+                copies.insert((folder.clone(), *twin_uid));
+            }
+        }
+    }
+    for ((folder, _), twin_changes) in &work {
+        if let Err(e) = apply_flags(state, account_id, folder, account_email, mirror_root, twin_changes, sidecars) {
+            warn!("vault_flags: {}/{} twin copies in {} not updated: {}", account_id, mailbox, folder, e);
+        }
+    }
+    info!("vault_flags: {}/{} carried to {} twin cop(ies) in {} folder(s)", account_id, mailbox, copies.len(), folder_of.len());
+    copies.len()
+}
+
 /// Shallowest-pair-first, matching the app's own ordering (the mirror nests,
 /// so a parent's move has to land before its descendants' pairs). Every pair
 /// is attempted before the first failure is reported — the server has
@@ -195,7 +313,13 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                             account_id, mailbox, applied.renamed, applied.mirrored, applied.index_patched, applied.sidecars_patched
                         );
                     }
-                    serde_json::to_value(applied).map_err(|e| e.to_string())
+                    // Only here, never in `apply_flags`: the backup's reconcile
+                    // hands that every message of one folder as that folder's
+                    // server holds it, and must not overwrite another folder.
+                    let twins = apply_to_twins(&state, &account_id, &mailbox, account_email.as_deref(), mirror_root.as_deref(), &changes, sidecars);
+                    let mut out = serde_json::to_value(applied).map_err(|e| e.to_string())?;
+                    out["twins"] = serde_json::json!(twins);
+                    Ok(out)
                 })
                 .await
                 .and_then(|r| r),
@@ -449,6 +573,70 @@ mod tests {
         assert_eq!(file_names(&cur), vec![format!("7{INFO_PREFIX}AS.eml")]);
         assert_eq!(entry_flags(), serde_json::json!(["\\Seen"]));
         assert_eq!(header_flags(), serde_json::json!(["\\Seen", "$Forwarded"]));
+    }
+
+    /// Gmail keeps one vault copy per label folder, all with one Message-ID.
+    /// Marking the INBOX copy read must mark its Bin twin read too (file,
+    /// custody, header sidecar), and leave a different message alone.
+    #[tokio::test]
+    async fn a_flag_change_reaches_the_same_message_in_the_accounts_other_folders() {
+        use mailvault_core::search_index::{db as index_db, lock};
+        let (vault, s) = st();
+        let bin = "[Google Mail]/Bin";
+        seed_file(vault.path(), "acc", "INBOX", 1, &["archived"]);
+        seed_file(vault.path(), "acc", bin, 7, &["archived"]);
+        seed_file(vault.path(), "acc", bin, 8, &["archived"]);
+        seed_file(vault.path(), "other", bin, 7, &["archived"]);
+        daemon_custody::with_conn(&s, |c| {
+            cache::save_headers(c, "acc", "INBOX", &serde_json::json!({"emails": [{"uid": 1, "flags": [], "messageId": "<x@y>"}]}).to_string())?;
+            cache::save_headers(c, "acc", bin, &serde_json::json!({"emails": [
+                {"uid": 7, "flags": [], "messageId": "<x@y>"},
+                {"uid": 8, "flags": [], "messageId": "<z@y>"}
+            ]}).to_string())?;
+            entries::upsert(c, "acc", bin, &[serde_json::json!({"uid": 7, "flags": []})])?;
+            Ok(())
+        })
+        .unwrap();
+        let conn = index_db::open(&s.data_dir).unwrap();
+        for (account, mailbox, uid, id) in [("acc", "INBOX", 1, "<x@y>"), ("acc", bin, 7, "<x@y>"), ("acc", bin, 8, "<z@y>"), ("other", bin, 7, "<x@y>")] {
+            conn.execute(
+                "INSERT INTO messages (account_id, vault_dir, uid, filename, size, mtime_ns, message_id, date_utc) VALUES (?1,?2,?3,?4,0,0,?5,0)",
+                rusqlite::params![account, mailvault_core::search_index::text::vault_dir_name(mailbox), uid, format!("{uid}{INFO_PREFIX}A.eml"), id],
+            )
+            .unwrap();
+        }
+        *lock(&s.search_index.db) = Some(conn);
+
+        let seen = |on: bool| serde_json::json!({"accountId": "acc", "mailbox": "INBOX", "accountEmail": null, "changes": [{"uid": 1, "flags": ["\\Seen"], "on": on}]});
+        let header_flags = |mailbox: &str, uid: u32| {
+            daemon_custody::with_conn(&s, |c| {
+                c.query_row(
+                    "SELECT header_json FROM header_cache WHERE account_id='acc' AND mailbox_path=?1 AND uid=?2",
+                    rusqlite::params![mailbox, uid],
+                    |r| r.get::<_, String>(0),
+                )
+                .map_err(|e| e.to_string())
+            })
+            .map(|text| serde_json::from_str::<Value>(&text).unwrap()["flags"].clone())
+            .unwrap()
+        };
+        let inbox = vault_files::cur_path(vault.path(), "acc", "INBOX");
+        let bin_cur = vault_files::cur_path(vault.path(), "acc", bin);
+        let other_cur = vault_files::cur_path(vault.path(), "other", bin);
+
+        let resp = route(&s, "vault_apply_flags", &seen(true), serde_json::json!(1)).await.unwrap();
+        let result = resp.result.unwrap_or_else(|| panic!("{:?}", resp.error.map(|e| e.message)));
+        assert_eq!(result["twins"], serde_json::json!(1), "{result}");
+        assert_eq!(file_names(&inbox), vec![format!("1{INFO_PREFIX}AS.eml")]);
+        assert_eq!(file_names(&bin_cur), vec![format!("7{INFO_PREFIX}AS.eml"), format!("8{INFO_PREFIX}A.eml")], "the twin is read, the other message is not");
+        assert_eq!(file_names(&other_cur), vec![format!("7{INFO_PREFIX}A.eml")], "another account's copy is never touched");
+        assert_eq!(header_flags(bin, 7), serde_json::json!(["\\Seen"]));
+        assert_eq!(header_flags(bin, 8), serde_json::json!([]));
+
+        route(&s, "vault_apply_flags", &seen(false), serde_json::json!(2)).await.unwrap();
+        assert_eq!(file_names(&inbox), vec![format!("1{INFO_PREFIX}A.eml")]);
+        assert_eq!(file_names(&bin_cur), vec![format!("7{INFO_PREFIX}A.eml"), format!("8{INFO_PREFIX}A.eml")]);
+        assert_eq!(header_flags(bin, 7), serde_json::json!([]));
     }
 
     #[test]
