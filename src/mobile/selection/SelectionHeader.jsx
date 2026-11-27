@@ -1,7 +1,7 @@
 // The header while the list is selecting: Cancel, how many are ticked, Select all. Replaces the
 // list's own header (App.jsx). Cancel and Escape leave selecting; Select all ticks every row the
 // list has loaded (a long folder loads in pages: what has not loaded cannot be ticked).
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Button } from '../../components/ui/Button.jsx';
 import { useMobileStore } from '../store.js';
 import { useT } from '../i18n.js';
@@ -18,6 +18,26 @@ export function loadedEntries(list) {
   return out;
 }
 
+const loadedCount = (list) => {
+  let n = 0;
+  for (let i = 0; i < (list?.total ?? 0); i++) if (list.rowAt(i)) n++;
+  return n;
+};
+
+/**
+ * How many rows the list has loaded, read when the cache changes (a page lands, rows hide or come
+ * back, it reloads), not on every render: the header re-renders with every tick of a sweep.
+ */
+function useLoadedCount(list) {
+  const [count, setCount] = useState(() => loadedCount(list));
+  useEffect(() => {
+    const read = () => setCount(loadedCount(list));
+    read();
+    return list?.subscribe ? list.subscribe(read) : undefined;
+  }, [list]);
+  return count;
+}
+
 export default function SelectionHeader() {
   const t = useT();
   const list = useMobileStore((s) => s.list);
@@ -27,7 +47,7 @@ export default function SelectionHeader() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
-  const loaded = loadedEntries(list).length;
+  const loaded = useLoadedCount(list);
   return (
     <header className="mv-header mv-header--selecting" data-mv-selecting>
       <Button variant="ghost" size="touch" onClick={() => useSelection.getState().end()}>{t('common.cancel')}</Button>
