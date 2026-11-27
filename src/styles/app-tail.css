@@ -383,7 +383,6 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--mail-accent-fi
 .onboarding-appearance-example .quick-actions-sample > h5, .onboarding-appearance-example .quick-actions-sample > p.text-xs:first-of-type { display: none; }
 
 /* Mail habits: one line per question, the delete answer as pictures. */
-.onboarding-habits .onboarding-screen-body { max-width: 820px; width: 100%; gap: 10px; }
 .onboarding-habit-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 14px; border: 1px solid var(--mail-border); border-radius: 12px; background: var(--mail-surface); }
 .onboarding-habit-copy { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .onboarding-habit-copy > strong { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--mail-text); }
@@ -398,6 +397,32 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--mail-accent-fi
 .onboarding-after-delete-picture > i[data-row="gone"] { background: transparent; border: 1px dashed var(--mail-danger); }
 .onboarding-after-delete-picture > i[data-row="open"] { background: var(--mail-accent); }
 .onboarding-habit-switch { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--mail-text); }
+/* Habits: the controls column of Make it yours, the same sample window beside it. */
+.onboarding-habits-controls { gap: 10px; }
+.onboarding-habits-controls .onboarding-habit-row { flex-direction: column; align-items: stretch; gap: 8px; padding: 10px 12px; }
+.onboarding-habits-controls .onboarding-habit-row > :last-child:not(.onboarding-habit-copy) { align-self: flex-start; }
+/* The window draws what opens after a delete, so the cards drop their pictures. */
+.onboarding-habits-controls .onboarding-after-delete { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+.onboarding-habits-controls .onboarding-after-delete-picture { display: none; }
+/* The habits scenes inside the sample window. */
+.onboarding-sample-app { position: relative; }
+.onboarding-sample-gone { min-height: 30px; margin: 2px 6px; border: 1px dashed var(--mail-danger); border-radius: 6px; background: transparent; }
+.onboarding-sample-empty { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--mail-text-muted); font-size: 12px; }
+.onboarding-sample-compose-sheet { display: flex; flex-direction: column; gap: 8px; font-size: 12px; color: var(--mail-text); }
+.onboarding-sample-compose-sheet > strong { font-size: 13px; font-weight: 600; }
+.onboarding-sample-compose-sheet > span { padding-bottom: 6px; border-bottom: 1px solid var(--mail-border); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.onboarding-sample-compose-sheet em { font-style: normal; color: var(--mail-text-muted); }
+.onboarding-sample-compose-sheet > i { height: 6px; border-radius: 3px; background: var(--mail-border); }
+.onboarding-sample-compose-sheet > i:last-child { width: 60%; }
+.onboarding-sample-compose-inline { height: 100%; }
+.onboarding-sample-float { position: absolute; z-index: 2; right: 18px; bottom: 18px; width: min(320px, 55%); padding: 0 14px 14px; border: 1px solid var(--mail-border); border-radius: 10px; background: var(--mail-surface); box-shadow: 0 12px 32px rgb(0 0 0 / 0.35); }
+.onboarding-sample-float-bar { display: flex; gap: 5px; padding: 9px 0 10px; }
+.onboarding-sample-float-bar > i { width: 9px; height: 9px; border-radius: 50%; background: var(--mail-border); }
+.onboarding-sample-scrim { position: absolute; z-index: 2; inset: 0; display: flex; align-items: center; justify-content: center; background: rgb(0 0 0 / 0.35); }
+.onboarding-sample-dialog { width: min(260px, 70%); display: flex; flex-direction: column; gap: 14px; padding: 16px; border: 1px solid var(--mail-border); border-radius: 10px; background: var(--mail-surface); box-shadow: 0 12px 32px rgb(0 0 0 / 0.35); font-size: 13px; color: var(--mail-text); }
+.onboarding-sample-dialog > span { display: flex; justify-content: flex-end; gap: 8px; }
+.onboarding-sample-dialog b { padding: 4px 10px; border: 1px solid var(--mail-border); border-radius: 6px; font-weight: 500; font-size: 12px; }
+.onboarding-sample-dialog b[data-danger] { border-color: transparent; background: var(--mail-danger); color: #fff; }
 
 /* Free and Premium: the grid and the gallery fill the space they are given. */
 /* Each card is two rows of the grid (copy, sample) through subgrid, so the

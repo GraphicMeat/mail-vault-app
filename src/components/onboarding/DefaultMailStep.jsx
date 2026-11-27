@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ArrowRight, Trash2 } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { SegmentedChoice } from '../ui/SegmentedChoice';
@@ -7,6 +7,7 @@ import { ToggleSwitch } from '../ui/ToggleSwitch';
 import { DefaultMailApp } from '../settings/DefaultMailApp';
 import { ComposeOpenMode } from '../settings/ComposeOpenMode';
 import { OnboardingScreen } from './OnboardingScreen';
+import { AppearancePreview, useAppearancePreviewProps } from './AppearancePreview';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { afterDeleteRule } from '../../stores/slices/unifiedHelpers';
 import { useT } from '../../i18n/index.js';
@@ -34,12 +35,31 @@ export function DefaultMailStep({ onContinue }) {
   const setAfterDelete = useSettingsStore(s => s.setAfterDeleteSelect);
   const sameAccount = useSettingsStore(s => !!s.afterDeleteSameAccount);
   const setSameAccount = useSettingsStore(s => s.setAfterDeleteSameAccount);
+  const composeMode = useSettingsStore(s => s.composeOpenMode) || 'app';
+  const previewProps = useAppearancePreviewProps();
+
+  // The sample window shows the choice made last: Compose first, as the rows
+  // are ordered; asking before a delete shows the question, deleting right
+  // away (or an after-delete choice) shows what opens next.
+  const [focus, setFocus] = useState('compose');
+  const seen = useRef({ composeMode, confirm, afterDelete });
+  useEffect(() => {
+    const was = seen.current;
+    if (was.composeMode !== composeMode) setFocus('compose');
+    else if (was.confirm !== confirm) setFocus(confirm ? 'confirm' : 'result');
+    else if (was.afterDelete !== afterDelete) setFocus('result');
+    seen.current = { composeMode, confirm, afterDelete };
+  }, [composeMode, confirm, afterDelete]);
+  const scene = focus === 'compose' ? { kind: 'compose', mode: composeMode }
+    : focus === 'confirm' ? { kind: 'confirm' } : { kind: 'result', afterDelete };
 
   return (
     <OnboardingScreen className="onboarding-habits" title={t('onboarding.habitsTitle')} subtitle={t('onboarding.habitsSubtitle')}
       primary={<Button variant="primary" size="lg" onClick={onContinue} data-testid="onboarding-continue">
         {t('common.continue')}<ArrowRight size={14} />
       </Button>}>
+    <div className="onboarding-appearance-grid">
+     <div className="onboarding-appearance-controls onboarding-habits-controls">
       <DefaultMailApp compact />
       <ComposeOpenMode compact />
 
@@ -74,6 +94,9 @@ export function DefaultMailStep({ onContinue }) {
           </label>
         )}
       </section>
+     </div>
+     <div className="onboarding-appearance-example"><AppearancePreview {...previewProps} scene={scene} /></div>
+    </div>
     </OnboardingScreen>
   );
 }

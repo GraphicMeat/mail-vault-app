@@ -6,6 +6,8 @@ import { getEmailColors } from '../../utils/mailChrome';
 import { listRowGround } from '../../utils/listRowGround';
 import { SampleConversation } from '../ui/SampleConversation';
 import { fontStack } from '../../utils/appFont';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { useThemeStore } from '../../stores/themeStore';
 
 // An isolated illustration. Never mount live readers or seed the mail store.
 // The quick actions tab passes `listSlot`: the real, inert rows of
@@ -68,20 +70,62 @@ function SampleSidebarNav({ layout }) {
   return <>{accounts}{heading}{folderNav}</>;
 }
 
-export function AppearancePreview({ layoutMode, sidebarStyle, viewStyle, emailListStyle, threadMode = 'grouped', sidebarLayout = 'stacked', theme = 'dark', palette = 'indigo', emailViewerTheme = 'system', highlight = 'hover', actionButtonDisplay = 'icon-label', appFont, listSlot = null }) {
+export function AppearancePreview({ layoutMode, sidebarStyle, viewStyle, emailListStyle, threadMode = 'grouped', sidebarLayout = 'stacked', theme = 'dark', palette = 'indigo', emailViewerTheme = 'system', highlight = 'hover', actionButtonDisplay = 'icon-label', appFont, listSlot = null, scene = null }) {
   const t = useT();
   const rows = previewRows();
   const replies = previewConversation();
   const threeColumn = layoutMode === 'three-column';
-  const chat = viewStyle === 'chat';
+  // A scene (the habits step) is a mail list and a reader, whatever the view.
+  const chat = viewStyle === 'chat' && !scene;
   const singleLine = emailListStyle !== 'compact';
   const threadSlot = threadMode === 'expandable';
   const emailTheme = emailViewerTheme === 'system' ? theme : emailViewerTheme;
   const colors = getEmailColors(emailTheme, palette);
   const thread = { id: 'preview-thread', sender: 'Nell, Rowan', subject: t('settings.preview.subject'), time: replies.at(-1).time };
 
+  const reader = row => row ? <>
+    <h3>{row.subject}</h3>
+    <div className="onboarding-sample-sender"><strong>{row.sender}</strong><span>{row.time}</span></div>
+    <SampleToolbar display={actionButtonDisplay} dark={emailTheme === 'dark'} />
+    <div className="onboarding-sample-body" data-email-theme={emailTheme} style={{ backgroundColor: colors.background, color: colors.text }}><p>{row.snippet}</p></div>
+  </> : <div className="onboarding-sample-empty"><Mail size={22} aria-hidden="true" /><span>{t('viewer.selectEmailRead')}</span></div>;
+  const composeSheet = <div className="onboarding-sample-compose-sheet">
+    <strong>{t('sidebar.compose')}</strong>
+    <span><em>{t('compose.to')}</em> {rows[2].sender}</span>
+    <span><em>{t('compose.subject')}</em> {rows[2].subject}</span>
+    <i /><i /><i />
+  </div>;
+  // The habits step's scenes: where Compose opens, the delete question, and
+  // what opens after a delete (row 2 of the four is the one deleted).
+  let sceneRows = null, sceneReader = null, overlay = null;
+  if (scene) {
+    const four = rows.slice(0, 4);
+    const draw = (selectedIndex, goneIndex = -1) => four.map((row, i) => i === goneIndex
+      ? <div key={row.id} data-testid="preview-deleted-row" className="onboarding-sample-row onboarding-sample-gone" aria-hidden="true" />
+      : <SampleRow key={row.id} row={row} selected={i === selectedIndex} highlight={highlight} singleLine={singleLine} />);
+    if (scene.kind === 'compose') {
+      sceneRows = draw(0);
+      sceneReader = scene.mode === 'window' ? reader(rows[0]) : null;
+      if (scene.mode === 'window') overlay = <div data-testid="preview-compose" data-mode="window" className="onboarding-sample-float">
+        <span className="onboarding-sample-float-bar" aria-hidden="true"><i /><i /><i /></span>{composeSheet}
+      </div>;
+    } else if (scene.kind === 'confirm') {
+      sceneRows = draw(1);
+      sceneReader = reader(rows[1]);
+      overlay = <div className="onboarding-sample-scrim"><div data-testid="preview-delete-confirm" className="onboarding-sample-dialog">
+        <strong>{t('viewer.deleteEmail')}</strong>
+        <span><b>{t('common.cancel')}</b><b data-danger="">{t('common.delete')}</b></span>
+      </div></div>;
+    } else {
+      const selected = { next: 2, previous: 0 }[scene.afterDelete] ?? -1;
+      sceneRows = draw(selected, 1);
+      sceneReader = reader(four[selected]);
+    }
+  }
+
   return <figure className="onboarding-mail-sample" data-testid="appearance-preview" data-theme={theme} data-palette={palette} style={appFont ? { fontFamily: fontStack(appFont) } : undefined} aria-label={t('onboarding.previewCaption')}>
     <div className="onboarding-sample-app">
+      {overlay}
       <div data-testid="preview-pane-sidebar" data-style={sidebarStyle} data-layout={sidebarLayout} className={`onboarding-sample-sidebar ${sidebarStyle === 'tagcloud' ? 'onboarding-sample-bubbles' : ''}`}>
         <strong className="onboarding-sample-brand">MailVault</strong>
         <span className="onboarding-sample-compose"><PenSquare size={13} aria-hidden="true" />{t('sidebar.compose')}</span>
@@ -93,20 +137,34 @@ export function AppearancePreview({ layoutMode, sidebarStyle, viewStyle, emailLi
         </div> : chat ? <div data-testid="preview-chat" className="onboarding-sample-chat"><SampleConversation /></div> : <>
           <div data-testid="preview-list" data-view="list" data-density={emailListStyle} data-threads={threadMode} className="onboarding-sample-list">
             <strong className="onboarding-sample-list-heading">{t('sidebar.inbox')}</strong>
+            {sceneRows ?? <>
             <SampleRow row={rows[0]} selected highlight={highlight} singleLine={singleLine} threadSlot={threadSlot} />
             {threadMode !== 'flat' && <SampleRow row={thread} count={3} expandable={threadMode === 'expandable'} highlight={highlight} singleLine={singleLine} threadSlot={threadSlot} />}
             {threadMode !== 'grouped' && replies.map(reply => <SampleRow key={reply.id} row={{ ...reply, subject: thread.subject }} nested={threadMode === 'expandable'} highlight={highlight} singleLine={singleLine} threadSlot={threadSlot} />)}
             {rows.slice(1, 4).map(row => <SampleRow key={row.id} row={row} highlight={highlight} singleLine={singleLine} threadSlot={threadSlot} />)}
+            </>}
           </div>
           <div data-testid="preview-pane-viewer" className="onboarding-sample-reader">
-            <h3>{rows[0].subject}</h3>
-            <div className="onboarding-sample-sender"><strong>{rows[0].sender}</strong><span>{rows[0].time}</span></div>
-            <SampleToolbar display={actionButtonDisplay} dark={emailTheme === 'dark'} />
-            <div className="onboarding-sample-body" data-email-theme={emailTheme} style={{ backgroundColor: colors.background, color: colors.text }}><p>{rows[0].snippet}</p></div>
+            {scene?.kind === 'compose' && scene.mode !== 'window'
+              ? <div data-testid="preview-compose" data-mode="app" className="onboarding-sample-compose-inline">{composeSheet}</div>
+              : scene ? sceneReader : reader(rows[0])}
           </div>
         </>}
       </div>
     </div>
     <figcaption><span>{t('onboarding.previewCaption')}</span><span><Cloud size={12} className="text-mail-server" aria-hidden="true" />{t('list.serverOnly')}</span><span><HardDrive size={12} className="text-mail-local" aria-hidden="true" />{t('list.vault')}</span></figcaption>
   </figure>;
+}
+
+/** The preview's props from the live appearance settings, for a step that
+ *  shows the same window without its own appearance controls. */
+export function useAppearancePreviewProps() {
+  const pick = key => useSettingsStore(s => s[key]);
+  return {
+    layoutMode: pick('layoutMode'), sidebarStyle: pick('sidebarStyle'), sidebarLayout: pick('sidebarLayout'),
+    viewStyle: pick('viewStyle'), emailListStyle: pick('emailListStyle'), threadMode: pick('threadMode'),
+    theme: useThemeStore(s => s.theme), palette: useThemeStore(s => s.palette),
+    emailViewerTheme: pick('emailViewerTheme'), highlight: pick('emailRowHighlight'),
+    actionButtonDisplay: pick('actionButtonDisplay'), appFont: pick('appFont'),
+  };
 }

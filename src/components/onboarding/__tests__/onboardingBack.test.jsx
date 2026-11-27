@@ -32,6 +32,8 @@ vi.mock('../AppearanceStep', () => ({
 vi.mock('../FreeFeatures', () => ({
   FreeFeatures: ({ onContinue }) => <button data-testid="go" onClick={onContinue}>free</button>,
 }));
+// The habits step is real here; its sample window reads stores this test fakes.
+vi.mock('../AppearancePreview', () => ({ AppearancePreview: () => null, useAppearancePreviewProps: () => ({}) }));
 vi.mock('../PremiumGallery', () => ({ PremiumGallery: () => <div>premium</div> }));
 vi.mock('../UpgradeCta', () => ({
   UpgradeCta: ({ onSkip }) => <button data-testid="finish" onClick={onSkip}>cta</button>,
