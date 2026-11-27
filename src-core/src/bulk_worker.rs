@@ -447,6 +447,18 @@ pub trait Ports {
     async fn purge_begin(&mut self,_targets:&[PurgeTarget],_cancel:Arc<AtomicBool>)->Result<(),String> {Ok(())}
     async fn purge_prepare(&mut self, _target: &PurgeTarget, _hint: &crate::bulk::TargetHint) -> Result<Prepared,String> { Err("errors.bulkUnsupported".into()) }
     async fn purge_server(&mut self, _target: &PurgeTarget, _cancel: Arc<AtomicBool>) -> Result<(),String> { Err("errors.bulkUnsupported".into()) }
+    /// The server half for several targets of one (account, mailbox), in one
+    /// provider call where the port can. Answers for a prefix of `targets`, in
+    /// order: a target past the answers was not sent at all (cancelled before
+    /// it) and goes back to pending. The default sends each one alone.
+    async fn purge_server_group(&mut self, targets: &[PurgeTarget], cancel: Arc<AtomicBool>) -> Vec<Result<(),String>> {
+        let mut answers = Vec::with_capacity(targets.len());
+        for t in targets {
+            if cancel.load(Ordering::SeqCst) { break; }
+            answers.push(self.purge_server(t, cancel.clone()).await);
+        }
+        answers
+    }
     async fn purge_local(&mut self, _target: &PurgeTarget) -> Result<PurgeEffect,String> { Err("errors.bulkUnsupported".into()) }
     async fn purge_mirror(&mut self, _target: &PurgeTarget) -> Result<PurgeMirror,String> { Err("errors.bulkUnsupported".into()) }
 }
@@ -474,6 +486,8 @@ fn purge_counts(w: &mut Workflow) {
     w.errors = result.failed;
     w.purge_result = Some(result);
 }
+/// Most targets one `Ports::purge_server_group` call carries.
+pub const PURGE_SERVER_UNIT: usize = 100;
 async fn purge_checkpoint(p: &mut impl Ports, w: &mut Workflow) -> Result<(),String> {
     purge_counts(w);
     p.checkpoint(w).await
@@ -533,19 +547,33 @@ async fn run_purge(p: &mut impl Ports,w: &mut Workflow,cancel: Arc<AtomicBool>,r
     // Finish all server work before reaching any local or mirror effect.
     w.phase = "delete".into(); w.status = "deleting".into();
     purge_checkpoint(p,w).await?;
-    for i in 0..w.purge_targets.len() {
-        if cancelled(p,w,&cancel).await? { return Ok(()); }
-        let t = &w.purge_targets[i];
+    // One provider call per folder (in bounded units), not one per message:
+    // every target of the unit is recorded attempted before it is sent.
+    let mut units: Vec<((String,String),Vec<usize>)> = vec![];
+    for (i,t) in w.purge_targets.iter().enumerate() {
         if t.refused || t.skipped || t.local_only() || t.server != PurgeEffect::Pending { continue; }
-        w.purge_current=Some(i);
-        w.purge_targets[i].server = PurgeEffect::Attempted;
+        let key = (t.account_id.clone(),t.mailbox.clone());
+        match units.iter_mut().find(|(k,members)| *k == key && members.len() < PURGE_SERVER_UNIT) {
+            Some((_,members)) => members.push(i),
+            None => units.push((key,vec![i])),
+        }
+    }
+    for (_,members) in units {
+        if cancelled(p,w,&cancel).await? { return Ok(()); }
+        w.purge_current=members.first().copied();
+        for &i in &members { w.purge_targets[i].server = PurgeEffect::Attempted; }
         purge_checkpoint(p,w).await?;
-        let result = p.purge_server(&w.purge_targets[i],cancel.clone()).await;
-        match result {
-            Ok(()) => w.purge_targets[i].server = PurgeEffect::Complete,
-            Err(error) => {
-                tracing::warn!("bulk purge: server delete failed for uid {} in {}: {error}",w.purge_targets[i].uid,w.purge_targets[i].mailbox);
-                w.purge_targets[i].server = PurgeEffect::Failed; w.purge_targets[i].needs_resync=error.contains("Identity");w.purge_targets[i].last_error = Some(error);
+        let targets: Vec<PurgeTarget> = members.iter().map(|&i| w.purge_targets[i].clone()).collect();
+        let answers = p.purge_server_group(&targets,cancel.clone()).await;
+        for (n,&i) in members.iter().enumerate() {
+            match answers.get(n) {
+                Some(Ok(())) => w.purge_targets[i].server = PurgeEffect::Complete,
+                Some(Err(error)) => {
+                    tracing::warn!("bulk purge: server delete failed for uid {} in {}: {error}",w.purge_targets[i].uid,w.purge_targets[i].mailbox);
+                    w.purge_targets[i].server = PurgeEffect::Failed; w.purge_targets[i].needs_resync=error.contains("Identity");w.purge_targets[i].last_error = Some(error.clone());
+                }
+                // Never sent: the port stopped before it.
+                None => w.purge_targets[i].server = PurgeEffect::Pending,
             }
         }
         // Cancellation cannot bypass recording a completed remote effect.

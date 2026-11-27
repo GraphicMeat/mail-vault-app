@@ -507,6 +507,21 @@ pub(crate) async fn delete_provider_only(
     result
 }
 
+/// `delete_provider_only` for several uids of one IMAP folder in one exact
+/// UID delete (`archive::delete_exact_batch`), each bound to the generation
+/// and Message-ID in `identity`. IMAP only; answers the uids the server no
+/// longer holds.
+pub(crate) async fn delete_provider_batch(
+    state: &Arc<DaemonState>, config: &crate::imap::ImapConfig, mailbox: &str, uids: &[u32],
+    identity: &mailvault_core::bulk_worker::Identity, owner: OperationPermit,
+) -> Result<Vec<u32>, String> {
+    let mailvault_core::bulk_worker::Identity::Imap { validity, message_ids } = identity else { return Err("errors.bulkIdentityChanged".into()) };
+    if config.uses_jmap() || config.uses_graph() { return Err("errors.bulkIdentityChanged".into()); }
+    let result = archive::delete_exact_batch(&state.imap_pool, config, mailbox, uids, *validity, message_ids).await;
+    drop(owner);
+    result
+}
+
 // ── Routes ───────────────────────────────────────────────────────────────
 
 pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value, id: Value) -> Option<RpcResponse> {

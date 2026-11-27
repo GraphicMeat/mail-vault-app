@@ -1232,6 +1232,71 @@ async fn delete_single_email(
     .await
 }
 
+/// `delete_single_email`'s identity-bound delete for several uids of one
+/// folder, on one session: one SELECT that must report `validity`, one
+/// Message-ID read of every uid under that same generation, then one exact
+/// `UID STORE`/`UID EXPUNGE` (UIDPLUS) of the uids still holding the expected
+/// message. Per uid, the same rule as the single delete:
+/// - present with the expected Message-ID (or none expected): deleted;
+/// - present with another Message-ID: left alone, not in the answer;
+/// - absent from this generation: already gone, so in the answer, nothing sent.
+///
+/// Answers the uids the server no longer holds. A repeat after a dead socket
+/// re-reads first, so a uid the first attempt removed answers as absent.
+pub async fn delete_exact_batch(
+    pool: &ImapPool,
+    account: &ImapConfig,
+    mailbox: &str,
+    uids: &[u32],
+    validity: u32,
+    expected_ids: &HashMap<u32, String>,
+) -> Result<Vec<u32>, String> {
+    if uids.is_empty() {
+        return Ok(vec![]);
+    }
+    let outcome = pool
+        .run_uid_delete(account, false, |mut session| async move {
+            // A changed generation is an answer, not a broken session: it
+            // goes back to the pool (an `Err` here would discard it).
+            let actual = imap::abd_cmds::uid_validity(&mut session, mailbox).await?;
+            if actual != Some(validity) {
+                return Ok((Err("errors.bulkIdentityChanged".to_string()), session, Some(mailbox.to_string())));
+            }
+            let (fetched_in, current) = imap::abd_cmds::message_ids_in_generation(&mut session, mailbox, uids).await?;
+            if fetched_in != Some(validity) {
+                return Ok((Err("errors.bulkIdentityChanged".to_string()), session, Some(mailbox.to_string())));
+            }
+            let held: HashMap<u32, Option<String>> = current
+                .into_iter()
+                .filter(|(uid, _)| uids.contains(uid))
+                .map(|(uid, id)| (uid, id.as_deref().map(crate::maildir::normalize_message_id)))
+                .collect();
+            let mut gone = vec![];
+            let mut send = vec![];
+            for uid in uids {
+                match held.get(uid) {
+                    None => gone.push(*uid),
+                    Some(id) => {
+                        let expected = expected_ids.get(uid).map(|id| crate::maildir::normalize_message_id(id));
+                        if expected.is_none_or(|expected| id.as_deref() == Some(expected.as_str())) {
+                            send.push(*uid);
+                        } else {
+                            warn!("bulk_delete: UID {} holds another message; left alone", uid);
+                        }
+                    }
+                }
+            }
+            if !send.is_empty() {
+                let caps = imap::abd_cmds::capabilities(&mut session).await?;
+                imap::abd_cmds::expunge_exact(&mut session, mailbox, &send, caps.uidplus, Some(validity)).await?;
+            }
+            gone.extend(send);
+            Ok((Ok(gone), session, Some(mailbox.to_string())))
+        })
+        .await?;
+    outcome
+}
+
 #[cfg(test)]
 mod tests {
     use super::{DrivePace, SLOW_WRITE_MS};
