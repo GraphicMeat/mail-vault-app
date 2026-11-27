@@ -48,8 +48,16 @@ describe('the billing plan line', () => {
   it('shows the day the plan runs until, with no time of day', () => {
     const expiresMs = Date.UTC(2027, 5, 15, 2, 39);
     const line = premiumSummary({ premium: true, source: 'apple', expiresMs });
-    expect(line).toContain(formatDateOnly(expiresMs));
+    expect(line).toContain(formatDateOnly(expiresMs, null, { alwaysShowYear: true }));
     expect(line).not.toMatch(/\d{1,2}:\d{2}/);
+  });
+
+  it('keeps the year when the plan runs until a day of this year, as desktop does', () => {
+    const soon = new Date();
+    soon.setMonth(soon.getMonth() + 1, 15);
+    soon.setHours(12, 0, 0, 0);
+    const line = premiumSummary({ premium: true, source: 'google', expiresMs: soon.getTime() });
+    expect(line).toContain(String(soon.getFullYear()));
   });
 });
 

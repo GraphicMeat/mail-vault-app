@@ -90,7 +90,7 @@ export function premiumSummary(premium) {
   if (!premium?.premium) return t('mobile.premium.free');
   const source = ['apple', 'google', 'web'].includes(premium.source) ? premium.source : 'web';
   return t('mobile.premium.active', {
-    date: premium.expiresMs ? formatDateOnly(premium.expiresMs) : '',
+    date: premium.expiresMs ? formatDateOnly(premium.expiresMs, null, { alwaysShowYear: true }) : '',
     source: t(`mobile.premium.source.${source}`),
   });
 }

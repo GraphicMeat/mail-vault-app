@@ -407,7 +407,7 @@ describe('Premium state', () => {
   it('active Premium shows the summary and no purchase buttons', async () => {
     useMobileStore.getState().setPremium({ premium: true, source: 'google', expiresMs: EXPIRES });
     render(<Premium onClose={() => {}} />);
-    expect((await screen.findByRole('status')).textContent).toBe(`Premium: active until ${formatDateOnly(EXPIRES)} (Google Play)`);
+    expect((await screen.findByRole('status')).textContent).toBe(`Premium: active until ${formatDateOnly(EXPIRES, null, { alwaysShowYear: true })} (Google Play)`);
     expect(screen.queryByRole('button', { name: 'Subscribe' })).toBeNull();
     // Desktop's Manage subscription button, handed to Play's own page as every link is.
     const opened = [];
