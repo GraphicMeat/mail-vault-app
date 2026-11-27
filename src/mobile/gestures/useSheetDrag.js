@@ -10,6 +10,8 @@ import { isRtl, settle } from './motion.js';
 
 const HANDLE = '.mv-sheet__grip, .mv-sheet__title, [data-mv-sheet-handle]';
 const HANDLE_STRIP = 48;
+/** How long after a drag a click is still the drag's, not a tap. */
+const CLICK_SWALLOW_MS = 350;
 
 export function useSheetDrag(panelRef, { kind, onClose }) {
   const close = useRef(onClose);
@@ -21,7 +23,7 @@ export function useSheetDrag(panelRef, { kind, onClose }) {
     const drawer = kind === 'drawer';
     const rtl = isRtl();
     let g = null;
-    let swallow = false;
+    let swallowUntil = 0; // the click a drag leaves behind can come late on iOS: a window of time, not a tick
 
     const place = (d) => {
       panel.style.transition = 'none';
@@ -68,8 +70,7 @@ export function useSheetDrag(panelRef, { kind, onClose }) {
       const s = g;
       g = null;
       if (!s || (e && e.pointerId !== s.id) || !s.claimed) return;
-      swallow = true; // the click that follows a drag is not a tap
-      setTimeout(() => { swallow = false; }, 0);
+      swallowUntil = Date.now() + CLICK_SWALLOW_MS; // the click that follows a drag is not a tap
       const commit = !cancelled && sheetOutcome({ dy: s.d, height: s.size, velocity: s.vel.velocity() }) === 'commit';
       if (backdrop) {
         backdrop.style.transition = 'opacity 0.2s ease';
@@ -84,7 +85,7 @@ export function useSheetDrag(panelRef, { kind, onClose }) {
     };
 
     const click = (e) => {
-      if (!swallow) return;
+      if (Date.now() >= swallowUntil) return;
       e.stopPropagation();
       e.preventDefault();
     };

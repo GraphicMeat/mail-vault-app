@@ -62,7 +62,7 @@ function DrawerHead({ account, allInboxes, onSwitchAccount }) {
   );
 }
 
-export default function FolderDrawer({ account, accounts = [], folders, activeFolder, onSelect, onSelectIn, onClose, onSwitchAccount, drafts = 0, onDrafts, followUps = 0, followUpsDue = 0, onFollowUps, onSettings, views = [], viewCounts = {}, onView, onEditViews, onNewView }) {
+export default function FolderDrawer({ account, accounts = [], folders, activeFolder, onSelect, onSelectIn, onClose, onSwitchAccount, drafts = 0, onDrafts, followUps = 0, followUpsDue = 0, onFollowUps, onSettings, views = [], viewCounts = {}, onView, onEditViews, onNewView, still = false }) {
   const t = useT();
   const allInboxes = activeFolder === ALL_INBOXES;
   // The account's Drafts folder is the one Drafts: the local drafts are counted on it.
@@ -80,7 +80,7 @@ export default function FolderDrawer({ account, accounts = [], folders, activeFo
   const colour = useCallback((folder, accountId) => setColoring({ folder, accountId }), []);
   return (
     <>
-      <Sheet kind="drawer" label={t('mobile.drawer.title')} onClose={onClose}>
+      <Sheet kind="drawer" label={t('mobile.drawer.title')} onClose={onClose} still={still}>
         <div className="mv-drawer__head">
           <DrawerHead account={account} allInboxes={allInboxes} onSwitchAccount={onSwitchAccount} />
         </div>

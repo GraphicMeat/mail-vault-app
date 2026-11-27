@@ -1,9 +1,10 @@
 // The issue row and its sheet, wired to the store: App.jsx renders this between the header and the
 // list and nothing else. `accounts` are the ones on show (a hidden account stays out);
 // `onUpdatePassword(accountId)` opens that account's Mail Server page (the shell owns Settings).
-// The sheet closes by itself once the last issue is fixed.
+// The sheet closes by itself once the last issue is fixed, and on Back.
 import React, { useCallback, useEffect, useState } from 'react';
 import { useMobileStore } from '../store.js';
+import { useBackLayer } from '../backStack.js';
 import IssueRow from './IssueRow.jsx';
 import IssuesSheet from './IssuesSheet.jsx';
 import { useAccountIssues } from './useAccountIssues.js';
@@ -18,6 +19,8 @@ export default function IssuesHost({ accounts, onUpdatePassword }) {
   }, [issues.length]);
 
   const close = useCallback(() => setOpen(false), []);
+  // System Back (Android) closes the sheet.
+  useBackLayer(open && issues.length > 0, close);
   const hide = useCallback(() => {
     dismiss();
     setOpen(false);

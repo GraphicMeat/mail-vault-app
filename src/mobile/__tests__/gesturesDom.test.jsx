@@ -40,22 +40,27 @@ const down = (el, x, y = 300) => fireEvent.pointerDown(el, { pointerId: 1, clien
 const move = (el, x, y = 300) => fireEvent.pointerMove(el, { pointerId: 1, clientX: x, clientY: y, isPrimary: true });
 const up = (el, x, y = 300) => fireEvent.pointerUp(el, { pointerId: 1, clientX: x, clientY: y, isPrimary: true });
 
+// The edge swipe listens on the document (no strip over the page), so a touch is fired on the
+// page's own root. `pushed(layer)` registers the layer the way the app's `useBackLayer` does.
 function edge(props = {}) {
   const onDrawer = vi.fn();
+  const onCloseDrawer = vi.fn();
   const r = render(
-    <div>
+    <div data-root>
       <section role="dialog" aria-modal="true" aria-label="layer" data-layer />
-      <EdgeZone onOpenDrawer={onDrawer} {...props} />
+      <EdgeZone onOpenDrawer={onDrawer} onCloseDrawer={onCloseDrawer} {...props} />
     </div>,
   );
   const layer = r.container.querySelector('[data-layer]');
   layer.getBoundingClientRect = () => rect(400, 800);
-  return { ...r, layer, zone: r.container.querySelector('[data-mv-edge]'), onDrawer };
+  return { ...r, layer, zone: r.container.querySelector('[data-root]'), onDrawer, onCloseDrawer };
 }
+const pushed = (close, layer) => pushLayer(close, () => layer);
 
 describe('edge swipe back', () => {
   it('the layer follows the finger without a React render', () => {
     const { zone, layer } = edge();
+    releases.push(pushed(vi.fn(), layer));
     down(zone, 4);
     move(zone, 20);
     move(zone, 60);
@@ -66,16 +71,16 @@ describe('edge swipe back', () => {
   it('past a third of the width it pops the top back layer', async () => {
     reduceMotion();
     const close = vi.fn();
-    releases.push(pushLayer(close));
-    const { zone } = edge();
+    const { zone, layer } = edge();
+    releases.push(pushed(close, layer));
     down(zone, 4); move(zone, 40); move(zone, 160); up(zone, 160);
     await waitFor(() => expect(close).toHaveBeenCalledTimes(1));
   });
 
   it('a short drag springs back and pops nothing', async () => {
     const close = vi.fn();
-    releases.push(pushLayer(close));
     const { zone, layer } = edge();
+    releases.push(pushed(close, layer));
     down(zone, 4); move(zone, 30); move(zone, 80); up(zone, 80);
     expect(layer.style.transform).toBe('');
     await new Promise((r) => setTimeout(r, 30));
@@ -85,8 +90,8 @@ describe('edge swipe back', () => {
   it('a quick flick pops even when short', async () => {
     reduceMotion();
     const close = vi.fn();
-    releases.push(pushLayer(close));
-    const { zone } = edge();
+    const { zone, layer } = edge();
+    releases.push(pushed(close, layer));
     down(zone, 4);
     move(zone, 30);
     await new Promise((r) => setTimeout(r, 20));
@@ -97,8 +102,8 @@ describe('edge swipe back', () => {
   it('a layer that stays (Compose asking to save) springs back after the pop', async () => {
     reduceMotion();
     const ask = vi.fn(); // Compose's requestLeave: it asks and does not close
-    releases.push(pushLayer(ask));
     const { zone, layer } = edge();
+    releases.push(pushed(ask, layer));
     down(zone, 4); move(zone, 40); move(zone, 200); up(zone, 200);
     await waitFor(() => expect(ask).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(layer.style.transform).toBe(''));
@@ -107,6 +112,7 @@ describe('edge swipe back', () => {
   it('the spring is not animated under reduced motion', () => {
     reduceMotion();
     const { zone, layer } = edge();
+    releases.push(pushed(vi.fn(), layer));
     down(zone, 4); move(zone, 40); move(zone, 80); up(zone, 80);
     expect(layer.style.transform).toBe('');
     expect(layer.style.transition).toBe('none');
@@ -114,31 +120,66 @@ describe('edge swipe back', () => {
 
   it('a vertical drag claims nothing', () => {
     const { zone, layer } = edge();
+    releases.push(pushed(vi.fn(), layer));
     down(zone, 4); move(zone, 6, 330); move(zone, 8, 420);
     expect(layer.style.transform).toBe('');
   });
 });
 
+// The drawer is mounted when the swipe is claimed and follows the finger (App.jsx mounts it without
+// its entrance animation); this stands in for it.
+function mountDrawer(width = 320) {
+  return vi.fn(() => {
+    const overlay = document.createElement('div');
+    overlay.className = 'mv-overlay mv-overlay--drawer';
+    overlay.innerHTML = '<div class="mv-overlay__backdrop"></div><div class="mv-drawer" role="dialog" aria-modal="true"></div>';
+    document.body.appendChild(overlay);
+    overlay.querySelector('.mv-drawer').getBoundingClientRect = () => rect(width, 800);
+  });
+}
+const drawerEl = () => document.querySelector('.mv-overlay--drawer .mv-drawer');
+const backdropEl = () => document.querySelector('.mv-overlay--drawer .mv-overlay__backdrop');
+
 describe('edge swipe on the list', () => {
-  it('opens the folder drawer when no layer is open, with no haptic', () => {
-    const { zone, layer, onDrawer } = edge();
+  afterEach(() => { document.querySelectorAll('.mv-overlay').forEach((n) => n.remove()); });
+
+  it('opens the folder drawer under the finger when no layer is open, with no haptic', () => {
+    reduceMotion();
+    const { zone, layer, onCloseDrawer } = edge({ onOpenDrawer: mountDrawer() });
     layer.remove();
-    down(zone, 4); move(zone, 40); move(zone, 150); up(zone, 150);
-    expect(onDrawer).toHaveBeenCalledTimes(1);
-    expect(haptic.selection).not.toHaveBeenCalled();
+    down(zone, 4); move(zone, 20); move(zone, 120);
+    // dx 116 of a 320px drawer: it is 204px short of fully out, and the scrim has 116/320 of its weight.
+    expect(drawerEl().style.transform).toBe('translate3d(-204px, 0, 0)');
+    expect(Number(backdropEl().style.opacity)).toBeCloseTo(116 / 320, 2);
+    up(zone, 200);
+    expect(drawerEl().style.transform).toBe('');
+    expect(onCloseDrawer).not.toHaveBeenCalled();
+        expect(haptic.selection).not.toHaveBeenCalled();
     expect(haptic.impact).not.toHaveBeenCalled();
   });
-  it('a short drag does not open it', () => {
-    const { zone, layer, onDrawer } = edge();
+  it('the drawer is asked for once, when the swipe is claimed', () => {
+    const onOpenDrawer = mountDrawer();
+    const { zone, layer } = edge({ onOpenDrawer });
+    layer.remove();
+    down(zone, 4);
+    expect(onOpenDrawer).not.toHaveBeenCalled();
+    move(zone, 20); move(zone, 60); move(zone, 90);
+    expect(onOpenDrawer).toHaveBeenCalledTimes(1);
+  });
+  it('a short drag takes the drawer back', () => {
+    reduceMotion();
+    const { zone, layer, onCloseDrawer } = edge({ onOpenDrawer: mountDrawer() });
     layer.remove();
     down(zone, 4); move(zone, 30); move(zone, 50); up(zone, 50);
-    expect(onDrawer).not.toHaveBeenCalled();
+    expect(onCloseDrawer).toHaveBeenCalledTimes(1);
   });
   it('a full-screen layer takes the swipe instead of the drawer', () => {
     reduceMotion();
-    const { zone, onDrawer } = edge();
+    const onOpenDrawer = mountDrawer();
+    const { zone, layer } = edge({ onOpenDrawer });
+    releases.push(pushed(vi.fn(), layer));
     down(zone, 4); move(zone, 40); move(zone, 200); up(zone, 200);
-    expect(onDrawer).not.toHaveBeenCalled();
+    expect(onOpenDrawer).not.toHaveBeenCalled();
   });
 });
 
@@ -230,6 +271,32 @@ describe('sheets', () => {
     down(body, 250, 300); move(body, 252, 330); move(body, 200, 500); up(body, 200, 500);
     expect(panel.style.transform).toBe('');
     expect(onClose).not.toHaveBeenCalled();
+  });
+});
+
+describe('the click that follows a sheet drag', () => {
+  it('is swallowed for a window of time, not one tick (iOS sends it late)', () => {
+    vi.useFakeTimers();
+    const onClose = vi.fn();
+    const r = render(
+      <Sheet kind="sheet" label="s" onClose={onClose}>
+        <div className="mv-sheet__grip" data-grip />
+        <button type="button" data-body>body</button>
+      </Sheet>,
+    );
+    const panel = r.container.querySelector('[role="dialog"]');
+    panel.getBoundingClientRect = () => rect(400, 300);
+    const grip = r.container.querySelector('[data-grip]');
+    const body = r.container.querySelector('[data-body]');
+    const onTap = vi.fn();
+    body.addEventListener('click', onTap);
+    down(grip, 200, 100); move(grip, 200, 130); move(grip, 200, 150); up(grip, 200, 150);
+    act(() => { vi.advanceTimersByTime(80); });
+    fireEvent.click(body);
+    expect(onTap).not.toHaveBeenCalled();
+    act(() => { vi.advanceTimersByTime(400); });
+    fireEvent.click(body);
+    expect(onTap).toHaveBeenCalledTimes(1);
   });
 });
 

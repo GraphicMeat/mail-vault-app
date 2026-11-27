@@ -12,8 +12,8 @@ export function isRtl() {
     && getComputedStyle(document.documentElement).direction === 'rtl';
 }
 
-/** Puts `el` at `transform` (`''` is home) the way a finger let go: eased, or at once. `done` runs once. */
-export function settle(el, transform, done) {
+/** Puts `el` at `transform` (`''` is home) the way a finger let go: eased over `ms`, or at once. `done` runs once. */
+export function settle(el, transform, done, ms = SETTLE_MS) {
   if (!el) { done?.(); return; }
   if (reducedMotion()) {
     el.style.transition = 'none';
@@ -31,8 +31,8 @@ export function settle(el, transform, done) {
     done?.();
   };
   const onEnd = (e) => { if (e.target === el) end(); };
-  const timer = setTimeout(end, SETTLE_MS + 60);
+  const timer = setTimeout(end, ms + 60);
   el.addEventListener('transitionend', onEnd);
-  el.style.transition = `transform ${SETTLE_MS}ms cubic-bezier(0.2, 0.8, 0.2, 1)`;
+  el.style.transition = `transform ${ms}ms cubic-bezier(0.2, 0.8, 0.2, 1)`;
   el.style.transform = transform;
 }

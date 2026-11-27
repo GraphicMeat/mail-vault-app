@@ -50,6 +50,7 @@
 // A fresh install (no accounts, tour never finished) opens the first-run tour (onboarding/) before
 // anything else; Settings' Replay tour opens it again, without its account step.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { daemonCall, closeAuthSheet, listen, requestNotificationPermission, takeNotificationTap } from './transport.js';
 import { useMobileStore, ALL_INBOXES } from './store.js';
 import { ensureTags, followAssignments } from './tags.js';
@@ -67,7 +68,7 @@ import FolderDrawer from './FolderDrawer.jsx';
 import { folderLabel, draftsFolder } from './folders.js';
 import { runPerfGate } from './perf.js';
 import { useT } from './i18n.js';
-import { useBackLayer } from './backStack.js';
+import { SETTINGS_LAYER, useBackLayer } from './backStack.js';
 import EdgeZone from './gestures/EdgeZone.jsx';
 import { neighborRow } from './gestures/neighbors.js';
 import KeepDock from './KeepDock.jsx';
@@ -588,8 +589,8 @@ function App() {
       else useMobileStore.getState().showNotice('mobile.viewer.gone');
     })();
   }, [tap, status, show]);
-  useBackLayer(Boolean(thread), closeThread);
-  useBackLayer(Boolean(open), onClose);
+  useBackLayer(Boolean(thread), closeThread, '.mv-thread');
+  useBackLayer(Boolean(open), onClose, '.mv-viewer');
   useBackLayer(Boolean(panel), closePanel);
 
   // A swipe runs the action its side is set to (`swipeLeftAction` / `swipeRightAction`), from the
@@ -662,6 +663,12 @@ function App() {
     () => ({ onAction: onSwipe, onMove: onRowMove, onCompose: onRowCompose, onSelect: onSelectRow }),
     [onSwipe, onRowMove, onRowCompose, onSelectRow],
   );
+  // The other lists of message rows (search, a view, a conversation, the chat view) cannot select,
+  // so their wheel has no Select wedge.
+  const listWheel = useMemo(
+    () => ({ onAction: onSwipe, onMove: onRowMove, onCompose: onRowCompose }),
+    [onSwipe, onRowMove, onRowCompose],
+  );
   const onViewerAction = useCallback((kind) => {
     if (!open) return undefined;
     return useMobileStore.getState().act(kind, { accountId: open.accountId, folder: open.folder, uids: [open.row.uid] });
@@ -699,14 +706,29 @@ function App() {
   }, [open, show]);
   const onViewerDelete = useCallback(() => confirmThen(deleteOpen), [confirmThen, deleteOpen]);
   // A swipe on the viewer's header: the next or previous message of the list it was opened from.
+  // False when there is no neighbour: the viewer slides the message it slid away back.
   const stepOpen = useCallback((dir) => {
-    if (!open) return;
+    if (!open) return false;
     const s = useMobileStore.getState();
     const near = neighborRow(s.listShowing(open.accountId, open.folder), open.accountId, open.row.uid, dir);
-    if (near) show(near.row, near.index, s.placeOf(near.row));
+    if (!near) return false;
+    show(near.row, near.index, s.placeOf(near.row));
+    return true;
   }, [open, show]);
+  // `still`: the edge swipe pulls the drawer out by hand, so it mounts at once (before the swipe
+  // places it) and skips its entrance.
+  const [drawerStill, setDrawerStill] = useState(false);
   const openDrawer = useCallback(() => {
+    setDrawerStill(false);
     setPanel('drawer');
+    ensureViews();
+    useViewStore.getState().loadCounts();
+  }, []);
+  const pullDrawer = useCallback(() => {
+    flushSync(() => {
+      setDrawerStill(true);
+      setPanel('drawer');
+    });
     ensureViews();
     useViewStore.getState().loadCounts();
   }, []);
@@ -806,17 +828,17 @@ function App() {
     useMobileStore.getState().clearReopenDraft();
     setCompose({ key: Date.now(), accountId: reopenDraft.accountId, mode: 'new', draftId: reopenDraft.draftId });
   }, [reopenDraft]);
-  useBackLayer(searchOpen, closeSearch);
-  useBackLayer(draftsOpen, closeDrafts);
-  useBackLayer(followUpsOpen, closeFollowUps);
-  useBackLayer(Boolean(openView), closeView);
-  useBackLayer(settingsOpen, closeSettings);
+  useBackLayer(searchOpen, closeSearch, '.mv-search');
+  useBackLayer(draftsOpen, closeDrafts, '.mv-drafts');
+  useBackLayer(followUpsOpen, closeFollowUps, '.mv-drafts');
+  useBackLayer(Boolean(openView), closeView, '.mv-view');
+  useBackLayer(settingsOpen, closeSettings, SETTINGS_LAYER);
   const paywall = useMobileStore((s) => s.paywall);
   useEffect(() => {
     if (DEMO_PREMIUM) useMobileStore.getState().openPaywall();
   }, []);
   const closePaywall = useCallback(() => useMobileStore.getState().closePaywall(), []);
-  useBackLayer(Boolean(paywall), closePaywall);
+  useBackLayer(Boolean(paywall), closePaywall, '.mv-premium');
   const onSelectFolder = useCallback((path) => {
     setPanel(null);
     useMobileStore.getState().selectFolder(path);
@@ -1008,7 +1030,7 @@ function App() {
         />
       )}
       {listState === 'ready' && list && chatView && (
-        <ChatView key={listKey} accountId={activeAccountId} folder={activeFolder} list={list} onOpen={onOpen} onSwipe={onSwipe} emptyNote={folderDrafts.length === 0} />
+        <ChatView key={listKey} accountId={activeAccountId} folder={activeFolder} list={list} onOpen={onOpen} onSwipe={onSwipe} emptyNote={folderDrafts.length === 0} wheel={listWheel} />
       )}
       {listState === 'ready' && list && !chatView && (
         <MessageList
@@ -1031,7 +1053,7 @@ function App() {
           <Button variant="secondary" size="touch" className="mt-3" onClick={loadList}>{t('common.retry')}</Button>
         </div>
       )}
-      <EdgeZone onOpenDrawer={openDrawer} />
+      <EdgeZone onOpenDrawer={pullDrawer} onCloseDrawer={closePanel} />
       {fabShown && (
         <button type="button" className="mv-fab" data-mv-compose aria-label={t('mobile.compose.new')} onClick={onNewMessage}>
           <ComposeIcon />
@@ -1046,6 +1068,7 @@ function App() {
           onSelect={onSelectFolder}
           onSelectIn={onSelectFolderIn}
           onClose={closePanel}
+          still={drawerStill}
           onSwitchAccount={() => setPanel('switcher')}
           drafts={drafts.length}
           onDrafts={onDrafts}
@@ -1091,6 +1114,7 @@ function App() {
           onOpen={onOpenMember}
           onSwipe={onSwipe}
           onClose={closeThread}
+          wheel={listWheel}
         />
       )}
       {open && (
@@ -1130,12 +1154,12 @@ function App() {
           </div>
         </Sheet>
       )}
-      {searchOpen && <Search onOpen={onOpenResult} onSwipe={onSwipe} onClose={closeSearch} initialQuery={DEMO_SEARCH_QUERY} />}
+      {searchOpen && <Search onOpen={onOpenResult} onSwipe={onSwipe} onClose={closeSearch} initialQuery={DEMO_SEARCH_QUERY} wheel={listWheel} />}
       {draftsOpen && <DraftsList onOpen={onOpenDraft} onClose={closeDrafts} />}
       {followUpsOpen && <FollowUpList onOpen={onOpenFollowUp} onClose={closeFollowUps} />}
-      {openView && <ViewResults view={openView} onOpen={onOpenResult} onSwipe={onSwipe} onClose={closeView} />}
+      {openView && <ViewResults view={openView} onOpen={onOpenResult} onSwipe={onSwipe} onClose={closeView} wheel={listWheel} />}
       {settingsOpen && <Settings onClose={closeSettings} onReplayTour={onReplayTour} onAddAccount={onSettingsAddAccount} page={(DEMO_SETTINGS && QUERY.get('page')) || settingsAt.page} section={DEMO_SETTINGS ? QUERY.get('section') : (settingsAt.section || null)} account={settingsAt.account || null} newView={settingsAt.newView} />}
-      {paywall && <Premium feature={paywall.feature} signIn={paywall.signIn} onClose={closePaywall} />}
+      {paywall && <Premium feature={paywall.feature} onClose={closePaywall} />}
       {compose && (
         <Compose
           key={compose.key}

@@ -47,6 +47,7 @@ import Sheet from './Sheet.jsx';
 import AttachmentChip from './AttachmentChip.jsx';
 import { useBackLayer } from './backStack.js';
 import { useStepSwipe } from './gestures/useStepSwipe.js';
+import { useStepSlide } from './gestures/useStepSlide.js';
 import { BackButton, EnvelopeIcon, FlagIcon, ForwardIcon, MoreIcon, MoveIcon, ReplyAllIcon, ReplyIcon, ShieldIcon, SpamIcon, TrashIcon } from './icons.jsx';
 import { junkFolder, splitReader } from './quickActions.js';
 import { openPaywall } from './premium.js';
@@ -344,7 +345,9 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
   const t = useT();
   // A horizontal swipe on the header block steps to the next or previous message.
   const top = useRef(null);
-  useStepSwipe(top, { onStep });
+  const root = useRef(null);
+  const slide = useStepSlide(root, { onStep });
+  useStepSwipe(top, { onStep: slide });
   const [seen, setSeen] = useState(row.seen !== false);
   const [flagged, setFlagged] = useState(Boolean(row.flagged));
   // The row can change under an open viewer (a delayed `markAsReadMode` marks it read): follow it.
@@ -503,7 +506,7 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
 
   return (
-    <section className="mv-viewer" aria-modal="true" role="dialog" aria-label={displayText(row.subject, t('common.noSubject'))}>
+    <section ref={root} className="mv-viewer" aria-modal="true" role="dialog" aria-label={displayText(row.subject, t('common.noSubject'))}>
       <div ref={top} className="mv-viewer__top">
         <header className="mv-viewer__bar">
           <BackButton className="mv-viewer__back" data-mv-viewer-close onClick={onClose} />
@@ -563,16 +566,20 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
           change made while the first loads, which kept the broken cid: version once the inline
           images arrived. */}
       {srcDoc && (
-        <iframe
-          key={`${remoteOn ? 'remote' : 'local'}-${theme}-${images ? Object.keys(images).length : 0}-${frameRun}`}
-          className="mv-viewer__frame"
-          title={t('mobile.viewer.frameTitle')}
-          sandbox={FRAME_SANDBOX}
-          referrerPolicy="no-referrer"
-          srcDoc={srcDoc}
-          ref={frameRef}
-          onLoad={onFrameLoad}
-        />
+        <div className="mv-viewer__framebox">
+          <iframe
+            key={`${remoteOn ? 'remote' : 'local'}-${theme}-${images ? Object.keys(images).length : 0}-${frameRun}`}
+            className="mv-viewer__frame"
+            title={t('mobile.viewer.frameTitle')}
+            sandbox={FRAME_SANDBOX}
+            referrerPolicy="no-referrer"
+            srcDoc={srcDoc}
+            ref={frameRef}
+            onLoad={onFrameLoad}
+          />
+          {/* The frame is its own document: this shield gives the edge swipe the touches that start at its edge. */}
+          <span className="mv-viewer__edge" aria-hidden="true" />
+        </div>
       )}
       {!srcDoc && <div className="mv-viewer__fill" />}
       {state.phase === 'ready' && hasContent && (

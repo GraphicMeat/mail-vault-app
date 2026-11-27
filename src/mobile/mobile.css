@@ -511,7 +511,7 @@ body {
   text-align: center;
   color: var(--mail-text-muted);
 }
-.mv-viewer__images + .mv-viewer__frame,
+.mv-viewer__images + .mv-viewer__framebox,
 .mv-viewer__images + .mv-viewer__notice { margin-top: 8px; }
 .mv-viewer__fill { flex: 1; min-height: 0; }
 .mv-viewer__toolbar {
@@ -1616,9 +1616,15 @@ body {
 .mv-app .keep-dock[data-side='right'] { right: calc(var(--mv-safe-right) + 8px); }
 .mv-app .keep-dock[data-side='left'] { left: calc(var(--mv-safe-left) + 8px); }
 
-/* The leading-edge strip (gestures/EdgeZone.jsx): the back / drawer swipe starts here. Above every
-   full-screen layer, under the sheets and drawer. */
-.mv-edge { position: fixed; top: 0; bottom: 0; inset-inline-start: 0; width: 20px; z-index: 19; touch-action: none; }
+/* The leading-edge swipe (gestures/EdgeZone.jsx) has no strip over the page: it listens on the
+   document, so a tap in the left 20px reaches the button or row under it. The mail frame is its own
+   document and never sees the page's touches: a 20px shield over its leading edge (`.mv-viewer__edge`)
+   hands those touches to the page, so the swipe still starts over the message. */
+.mv-viewer__framebox { position: relative; flex: 1; min-height: 0; display: flex; }
+.mv-viewer__framebox > .mv-viewer__frame { flex: 1; }
+.mv-viewer__edge { position: absolute; top: 0; bottom: 0; inset-inline-start: 0; width: 20px; z-index: 1; touch-action: none; }
+/* The drawer pulled out by the edge swipe is placed by the swipe: no entrance animation. */
+.mv-overlay--still .mv-drawer, .mv-overlay--still .mv-overlay__backdrop { animation: none; }
 /* A sheet's handle and the drawer are dragged away (gestures/useSheetDrag.js): the browser keeps
    only the vertical pan the drawer's own list needs. */
 .mv-sheet__grip, .mv-sheet__title { touch-action: none; }

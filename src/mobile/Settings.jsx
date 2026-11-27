@@ -37,7 +37,7 @@ import { SettingsViewProvider } from '../components/settings/views/viewContext';
 import { DesktopNoticeView } from '../components/settings/views/DesktopNoticeView';
 import { useMobileStore } from './store.js';
 import KeyboardLayer from './KeyboardLayer.jsx';
-import { useBackLayer } from './backStack.js';
+import { SETTINGS_LAYER, useBackLayer } from './backStack.js';
 import { useT, getMobileLocale } from './i18n.js';
 import { BackButton } from './icons.jsx';
 import { errorKey } from './errors.js';
@@ -121,7 +121,7 @@ export default function Settings({ onClose, onReplayTour, onAddAccount, version 
   const back = useCallback(() => {
     setPlace((p) => (p.sub ? SUB_PAGES[p.sub].parent : { nav: 'root' }));
   }, []);
-  useBackLayer(place.nav !== 'root', back);
+  useBackLayer(place.nav !== 'root', back, SETTINGS_LAYER);
   // A page that holds unsaved edits (Views' editor) asks before the header's Back leaves it.
   const leaveGuard = useRef(null);
   const setLeaveGuard = useCallback((check) => { leaveGuard.current = check; }, []);
