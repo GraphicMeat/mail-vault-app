@@ -2631,12 +2631,24 @@ async function _eachBounded(items, limit, run) {
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
 }
 
-// The server halves of flag changes, chained so they land in the order asked.
-let _flagTails = Promise.resolve();
+// The server halves of flag changes, chained per (account, folder) so a
+// change and its undo land in the order asked, while a long bulk tail in one
+// folder never holds up a single toggle in another.
+const _flagTails = new Map();
+
+function _chainFlagTail(folderKeys, run) {
+  const tail = Promise.all(folderKeys.map(k => _flagTails.get(k))).then(run);
+  const settled = tail.catch(() => {});
+  for (const k of folderKeys) _flagTails.set(k, settled);
+  settled.then(() => {
+    for (const k of folderKeys) if (_flagTails.get(k) === settled) _flagTails.delete(k);
+  });
+  return tail;
+}
 
 /** Resolves once every flag server half started so far has finished. */
 export function flagTailsSettled() {
-  return _flagTails;
+  return Promise.all([..._flagTails.values()]);
 }
 
 // Send each group's flag change; clear what landed from the journal. Never
@@ -2718,9 +2730,9 @@ function _reportFlagFailures(useMailStore, failed) {
  * `graph: true`, which is how replayOps knows to send it through Graph.
  *
  * A change to more than one message settles once the rows, the vault and the
- * journal are written; its server half runs behind it. Server halves run one
- * at a time, in order (flagTailsSettled), so a change and its undo cannot
- * reach the server in the wrong order.
+ * journal are written; its server half runs behind it. Server halves of one
+ * folder run one at a time, in order (flagTailsSettled), so a change and its
+ * undo cannot reach the server in the wrong order.
  *
  * `targets` are already-resolved locations: [{ account, accountId, mailbox, uid }].
  * A target with `named: true` names its folder from the vault itself (a Notes
@@ -2865,10 +2877,9 @@ export async function applyFlagToTargets(targets, flag, on, { undoable = true, d
       g.journalled = (await db.queueOp({ op: 'flag', accountId: g.accountId, mailbox: g.mailbox, uids: g.uids, arg: g.arg })) != null;
     }
 
-    // One server half at a time, in the order they were asked for: a bulk
-    // mark still in flight and its undo must not race to the server.
-    const tail = _flagTails.then(() => _sendFlagGroups([...groups.values()]));
-    _flagTails = tail.catch(() => {});
+    // One server half per folder at a time, in the order they were asked for:
+    // a bulk mark still in flight and its undo must not race to the server.
+    const tail = _chainFlagTail([...groups.keys()], () => _sendFlagGroups([...groups.values()]));
     const report = (failed) => { if (!detachTail) _reportFlagFailures(useMailStore, failed); };
     // A bulk change settles once its rows, vault and journal are written; the
     // server half runs behind it and reports into the error banner.
