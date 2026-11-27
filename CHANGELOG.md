@@ -26,6 +26,14 @@
 - Fixed: on the phone, a long From address let the whole new email screen slide sideways. It now fits the screen and is cut short.
 - Fixed: on the phone, an email's labels and fields started further in than its subject and sender. They now line up, in the email and in the labels sheet.
 - Changed: on the phone, a starred email shows the computer's star in the mail list instead of a dot, and an email with attachments shows a paperclip beside its date.
+- Added: on the phone, hold an email to open the computer's quick action wheel at your finger, with the same actions, layout and colours, and a light tap as you slide over each action. Settings > Appearance > Quick actions on the phone is the same page as on the computer.
+- Added: on the phone, select many emails. Tap Select, or pick Select in the wheel, then tap or sweep down the rows; the computer's selection bar moves, deletes, archives or flags them all with one Undo.
+- Added: on the phone, gestures everywhere: swipe from the left edge to go back or open the folder list, pull sheets down to close them, and swipe an open email left or right for the next or previous one.
+- Added: on the phone, light taps you can feel when you pull to refresh, swipe, delete, send, flip a switch, or land on a wheel action.
+- Changed: on the phone, the folder list shows every account's folders under All Inboxes, with the computer's coloured folder icons. Hold a folder to change its colour; colours picked on the computer come over with Transfer to phone.
+- Changed: on the phone, syncing and server problems no longer cover the mail list. One quiet line says what is happening, and a problem shows once as a row you can open or dismiss.
+- Changed: on the phone, Billing sits where it does on the computer, at the bottom of Settings, with the same plan, devices and features. Buy in the App Store, or sign in with the email you used to buy Premium on the website. Settings sections have coloured icons, on the computer too.
+- Changed: on the phone, a new email lets you pick the From account or alias, and the bottom bar names every tool. Follow up explains that MailVault reminds you if nobody replies.
 
 ## [2.25.1] - 2026-11-26
 
