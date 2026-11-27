@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Fixed: Delete everywhere on many emails took many minutes, because it asked the server about each email on a new connection. It now checks and deletes a whole folder at once, so a few hundred emails take seconds, and a chip in the corner shows how far it is while it runs.
+- Fixed: on Gmail, Delete everywhere left the All Mail copy of every email on the server, so the emails came back. A copy in a folder MailVault does not sync is now deleted when the server holds the same email at that place.
+- Fixed: after moving an Outlook account from Microsoft Graph to IMAP, deleting an email kept only on this computer failed with "The specified message set is invalid" and was retried forever. Such an email has no server copy, so the delete now goes through at once.
 - Added: a fourth sidebar layout, Folders under account. The selected account (or All Inboxes, or a group) opens in place with All mail, Server and Vault, folder search and its folders right below it, and New folder moves onto the account's row. Pick it in Settings > Appearance > Layout or during setup.
 
 - Fixed: a mailbox could show "1,713 / 2,259 emails downloaded" for good and fetch its mail again on every launch, when the server listed messages it never handed over. MailVault now remembers those messages, stops asking for them (it tries again after a day), counts the mailbox as fully downloaded, and no longer re-downloads pages of mail it already has. One message the server answers with nothing no longer stops the download of all older mail either.
