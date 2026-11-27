@@ -822,6 +822,7 @@
   "errors.composeWindowSettingUnavailable": "Ce réglage de rédaction n’est pas disponible.",
   "errors.daemonOutdated": "Le service d'arrière-plan de MailVault n'est plus à jour. Quittez MailVault et rouvrez-le.",
   "errors.daemonUnavailable": "Le service d'arrière-plan de MailVault ne répond pas. Redémarrez MailVault et réessayez.",
+  "errors.flagNotConfirmed": "le serveur n’a pas confirmé la modification",
   "errors.settingsConflict": "Vos réglages ont changé dans une autre fenêtre. Réessayez.",
   "errors.cleanupUnavailable": "Le nettoyage automatique ne tourne pas. Redémarrez MailVault et réessayez.",
   "errors.cleanupRuleProtectedFolder": "Cette règle vise un dossier protégé, elle ne s'exécute donc jamais.",

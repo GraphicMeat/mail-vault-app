@@ -822,6 +822,7 @@
   "errors.composeWindowSettingUnavailable": "Diese Nachrichteneinstellung ist nicht verfügbar.",
   "errors.daemonOutdated": "Der Hintergrunddienst von MailVault ist veraltet. Beende MailVault und starte es neu.",
   "errors.daemonUnavailable": "Der MailVault-Hintergrunddienst antwortet nicht. Starte MailVault neu und versuche es erneut.",
+  "errors.flagNotConfirmed": "der Server hat die Änderung nicht bestätigt",
   "errors.settingsConflict": "Deine Einstellungen wurden in einem anderen Fenster geändert. Versuche es erneut.",
   "errors.cleanupUnavailable": "Die automatische Bereinigung läuft nicht. Starte MailVault neu und versuche es erneut.",
   "errors.cleanupRuleProtectedFolder": "Diese Regel nennt einen geschützten Ordner und läuft deshalb nie.",

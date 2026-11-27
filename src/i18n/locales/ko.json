@@ -822,6 +822,7 @@
   "errors.composeWindowSettingUnavailable": "이 작성 설정은 사용할 수 없습니다.",
   "errors.daemonOutdated": "MailVault 백그라운드 서비스가 오래되었습니다. MailVault를 종료한 후 다시 여세요.",
   "errors.daemonUnavailable": "MailVault 백그라운드 서비스가 응답하지 않습니다. MailVault를 다시 시작한 후 다시 시도하세요.",
+  "errors.flagNotConfirmed": "서버가 변경 사항을 확인하지 않았습니다",
   "errors.settingsConflict": "다른 창에서 설정이 변경되었습니다. 다시 시도하세요.",
   "errors.cleanupUnavailable": "자동 정리가 실행되고 있지 않습니다. MailVault를 다시 시작한 후 다시 시도하세요.",
   "errors.cleanupRuleProtectedFolder": "이 규칙은 보호된 폴더를 지정하므로 실행되지 않습니다.",

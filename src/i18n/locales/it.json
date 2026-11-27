@@ -822,6 +822,7 @@
   "errors.composeWindowSettingUnavailable": "Questa impostazione di composizione non è disponibile.",
   "errors.daemonOutdated": "Il servizio in background di MailVault non è aggiornato. Esci da MailVault e riaprilo.",
   "errors.daemonUnavailable": "Il servizio in background di MailVault non risponde. Riavvia MailVault e riprova.",
+  "errors.flagNotConfirmed": "il server non ha confermato la modifica",
   "errors.settingsConflict": "Le impostazioni sono cambiate in un'altra finestra. Riprova.",
   "errors.cleanupUnavailable": "La pulizia automatica non è attiva. Riavvia MailVault e riprova.",
   "errors.cleanupRuleProtectedFolder": "Questa regola indica una cartella protetta, quindi non viene mai eseguita.",
