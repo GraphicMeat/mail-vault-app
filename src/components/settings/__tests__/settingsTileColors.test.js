@@ -4,7 +4,7 @@
 // Rule): vault emerald, server blue and only-copy gold keep their meaning.
 import { describe, expect, it } from 'vitest';
 import { readStyleSheet } from '../../../styles/__tests__/readStyleSheet.js';
-import { contrast, deltaE, tokens } from '../../../utils/__tests__/colorMath';
+import { contrast, deltaE, hue, tokens } from '../../../utils/__tests__/colorMath';
 import { allTabs, settingsHosts, settingsSections, footerTabs, SETTINGS_TILE_COLORS, settingsTileColor } from '../settingsManifest';
 
 const css = readStyleSheet(new URL('../../../styles/index.css', import.meta.url));
@@ -22,6 +22,23 @@ describe('tile colours', () => {
   it('an unknown id still gets a neutral tile', () => {
     expect(settingsTileColor('nope')).toMatch(/^#[0-9a-f]{6}$/);
     expect(settingsTileColor('appearance')).toBe(SETTINGS_TILE_COLORS.appearance);
+  });
+
+  it('spreads over the hues of iOS Settings, not a few purples and a red', () => {
+    const colors = new Set(Object.values(SETTINGS_TILE_COLORS));
+    expect(colors.size).toBeGreaterThanOrEqual(9);
+    const families = new Set([...colors].map((c) => Math.floor(hue(c) / 30)));
+    expect(families.size, [...families].join(',')).toBeGreaterThanOrEqual(9);
+  });
+
+  it('neighbours in one group are visibly different tiles', () => {
+    const groups = [...settingsSections.map((section) => section.tabs), footerTabs];
+    for (const tabs of groups) {
+      for (let i = 1; i < tabs.length; i++) {
+        const [a, b] = [tabs[i - 1].id, tabs[i].id];
+        expect(deltaE(SETTINGS_TILE_COLORS[a], SETTINGS_TILE_COLORS[b]), `${a} next to ${b}`).toBeGreaterThanOrEqual(15);
+      }
+    }
   });
 
   it('holds a white glyph at 3:1 or better', () => {

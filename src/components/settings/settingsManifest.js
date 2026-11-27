@@ -99,42 +99,44 @@ export const footerIds = ['billing', 'diagnostics', 'help'];
 export const footerTabs = navEntries(footerIds);
 
 // The colour tile behind each navigation icon (SettingsNavIcon draws it in both apps). Fixed hues,
-// not theme tokens: a tile says "which page", never "where your mail lives", so they keep clear of
-// vault emerald, server blue and only-copy gold (settingsTiles.test.jsx measures it) and use none of
-// the status greens, oranges and reds.
+// not theme tokens: a tile says "which page", never "where your mail lives", so each keeps clear of
+// vault emerald, server blue and only-copy gold in both themes (settingsTileColors.test.js measures
+// it) and holds a white glyph at 3:1. The spread is iOS Settings': orange, amber, green (a leaf
+// green, not vault emerald), teal, cyan, sky (a deep sky, not server blue), indigo, purple, pink,
+// red and gray, and neighbours in one group never share a hue.
 const TILE = Object.freeze({
-  pink: '#db2777', fuchsia: '#c026d3', purple: '#9333ea', violet: '#7c3aed',
-  rose: '#e11d48', cyan: '#0e7490', slate: '#475569',
+  pink: '#db2777', purple: '#9333ea', indigo: '#4f46e5', sky: '#0369a1', cyan: '#0e7490', teal: '#0f766e',
+  green: '#15803d', amber: '#d97706', orange: '#ea580c', red: '#dc2626', gray: '#6b7280',
 });
 export const SETTINGS_TILE_COLORS = Object.freeze({
   appearance: TILE.pink,
-  'mail-preferences': TILE.violet,
-  language: TILE.cyan,
-  accounts: TILE.purple,
-  templates: TILE.fuchsia,
-  migration: TILE.slate,
-  views: TILE.violet,
-  'auto-tags': TILE.pink,
+  'mail-preferences': TILE.gray,
+  language: TILE.teal,
+  accounts: TILE.sky,
+  templates: TILE.orange,
+  migration: TILE.teal,
+  views: TILE.indigo,
+  'auto-tags': TILE.amber,
   'ai-providers': TILE.purple,
-  unsubscribe: TILE.rose,
-  cleanup: TILE.rose,
-  storage: TILE.slate,
+  unsubscribe: TILE.red,
+  cleanup: TILE.cyan,
+  storage: TILE.gray,
   'data-usage': TILE.cyan,
-  backup: TILE.cyan,
-  portable: TILE.slate,
-  'time-capsule': TILE.fuchsia,
-  privacy: TILE.fuchsia,
-  security: TILE.fuchsia,
-  tracking: TILE.rose,
-  encryption: TILE.purple,
+  backup: TILE.green,
+  portable: TILE.amber,
+  'time-capsule': TILE.indigo,
+  privacy: TILE.sky,
+  security: TILE.sky,
+  tracking: TILE.red,
+  encryption: TILE.indigo,
   'network-activity': TILE.cyan,
-  billing: TILE.pink,
-  diagnostics: TILE.slate,
-  daemon: TILE.slate,
-  logs: TILE.slate,
-  help: TILE.cyan,
+  billing: TILE.green,
+  diagnostics: TILE.gray,
+  daemon: TILE.gray,
+  logs: TILE.gray,
+  help: TILE.sky,
 });
-export const settingsTileColor = id => SETTINGS_TILE_COLORS[id] || TILE.slate;
+export const settingsTileColor = id => SETTINGS_TILE_COLORS[id] || TILE.gray;
 
 // Labels are resolved at render time, so search follows the current language.
 // A result points to the same page and section that contain its real control.
