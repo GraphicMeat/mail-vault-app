@@ -569,3 +569,27 @@ async fn a_presence_check_that_fails_keeps_the_original_error() {
         other => panic!("an unanswered check is not gone: {other:?}"),
     }
 }
+
+/// A vault message in the import range (`message_store::is_import_uid`:
+/// an mbox import, or mail a Graph → IMAP switch kept here because the
+/// server did not list it) has no server copy: no IMAP server hands out a
+/// uid that high. Deleting it from the server is already done. Sending the
+/// uid anyway got Outlook's `BAD The specified message set is invalid` on
+/// every retry, and the queue kept it owed forever.
+#[tokio::test]
+async fn an_import_range_uid_is_gone_from_the_server_without_asking_it() {
+    let uid = 0xC000_0000 + 13;
+    assert!(mailvault_core::message_store::is_import_uid(uid), "the uid is in the import range");
+    for mode in [Mode::Trash, Mode::Auto, Mode::Permanent] {
+        let bad = |c: &str| (Trigger::on(c), Action::RefuseWith("BAD".into(), "The specified message set is invalid.".into()));
+        let f = fixture(vec![bad("MOVE"), bad("COPY"), bad("STORE"), bad("SEARCH")]);
+        let r = delete_one(&f.s, Provider::Imap(&f.config), "acc1", "INBOX", uid, mode, true).await;
+        let out = r.unwrap_or_else(|e| panic!("{mode:?}: a local-only uid is gone from the server, not {e:?}"));
+        assert!(out.gone, "{mode:?}: {out:?}");
+        assert_eq!((out.trash, out.trash_uid, out.bin_id), (None, None, None), "{mode:?}: nothing to undo");
+        for c in ["MOVE", "COPY", "STORE", "SEARCH", "EXPUNGE"] {
+            assert_eq!(f.srv.count_commands(c), 0, "{mode:?}: sent {c} for a uid no server holds");
+        }
+        assert!(f.in_inbox(), "{mode:?}: uid 1 untouched");
+    }
+}

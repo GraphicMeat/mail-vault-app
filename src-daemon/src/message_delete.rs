@@ -55,7 +55,7 @@ use crate::state::DaemonState;
 use mailvault_core::actions::policy::{delete_disposition, imap_trash_place, DeleteDisposition, FolderRole, TrashPlace, WithoutTrash};
 use serde_json::Value;
 use std::sync::Arc;
-use tracing::{error, warn};
+use tracing::{error, info, warn};
 
 /// What the caller asked for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -338,6 +338,16 @@ async fn run(
 ) -> Result<Outcome, Refusal> {
     debug_assert_ne!(mode, Mode::Auto, "the caller resolves Auto against the folder");
     let tag = provider.name();
+    // The import range (`message_store::is_import_uid`) is local-only mail:
+    // an mbox import, or a message a Graph → IMAP switch kept here because the
+    // server no longer listed it. No server uid reaches it, so the server has
+    // nothing to delete and is not asked (Outlook answers such a uid with
+    // `BAD The specified message set is invalid`, on every retry). Graph
+    // addresses by its own message id, not by this uid.
+    if !matches!(provider, Provider::Graph { .. }) && mailvault_core::message_store::is_import_uid(uid) {
+        info!("[delete:{tag}] {account_id}/{mailbox} uid={uid}: local-only uid, nothing on the server to delete");
+        return Ok(Outcome { gone: true, ..Default::default() });
+    }
     let permanent = mode == Mode::Permanent;
     // JMAP addresses the message through the account's ledger, which needs
     // the stamp: without one there is nothing to delete with.
