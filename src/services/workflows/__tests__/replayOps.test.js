@@ -22,6 +22,8 @@ const mockGetAccounts = vi.fn().mockResolvedValue([ACCOUNT]);
 const mockSaveEmailHeaders = vi.fn().mockResolvedValue(undefined);
 const mockDeleteQueueSubmit = vi.fn().mockResolvedValue({ landed: [], queued: [], dropped: [] });
 const mockUpdateEmailFlags = vi.fn().mockResolvedValue(undefined);
+const mockUpdateEmailFlagsBatch = vi.fn();
+const mockSetFlagOnServer = vi.fn().mockResolvedValue(undefined);
 const mockMoveEmails = vi.fn().mockResolvedValue(undefined);
 const mockMarkServerDeleted = vi.fn().mockResolvedValue(true);
 const mockLoadEmails = vi.fn();
@@ -40,11 +42,12 @@ vi.mock('../../db', () => ({
 vi.mock('../../api', () => ({
   deleteQueueSubmit: (...a) => mockDeleteQueueSubmit(...a),
   updateEmailFlags: (...a) => mockUpdateEmailFlags(...a),
+  updateEmailFlagsBatch: (...a) => mockUpdateEmailFlagsBatch(...a),
   moveEmails: (...a) => mockMoveEmails(...a),
 }));
 
 vi.mock('../../authUtils', () => ({ ensureFreshToken: async (a) => a }));
-vi.mock('../../graphConfig', () => ({ isGraphAccount: () => false }));
+vi.mock('../../graphConfig', () => ({ isGraphAccount: (a) => a?.oauth2Transport === 'graph' }));
 
 const mockReplayPurge = vi.fn();
 const mockQueueLanded = vi.fn().mockResolvedValue(undefined);
@@ -59,6 +62,7 @@ const mockShowQueued = vi.fn().mockResolvedValue(undefined);
 vi.mock('../messageMutations', async (importOriginal) => ({
   ...(await importOriginal()),
   markServerDeleted: (...a) => mockMarkServerDeleted(...a),
+  _setFlagOnServer: (...a) => mockSetFlagOnServer(...a),
   replayPurge: (...a) => mockReplayPurge(...a),
   hideQueuedDeletes: (...a) => mockHideQueued(...a),
   showQueuedRows: (...a) => mockShowQueued(...a),
@@ -92,6 +96,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockReadOps.mockResolvedValue([]);
   mockGetAccounts.mockResolvedValue([ACCOUNT]);
+  mockUpdateEmailFlagsBatch.mockImplementation(async (_a, uids) => ({ success: true, written: [], done: uids, skipped: [] }));
   mailState.activeAccountId = 'acct1';
   mailState.activeMailbox = 'INBOX';
   vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -252,6 +257,101 @@ describe('replayOps', () => {
     expect(mockNoteOpFailure).toHaveBeenCalledWith({ op: 'purge', accountId: 'acct1', mailbox: 'INBOX', uid: 7 }, 'errors.bulkIdentityChanged');
     expect(mockShowQueued).toHaveBeenCalledWith(purge, [7]);
     expect(result).toMatchObject({ attempted: 2, done: 0, kept: 1 });
+  });
+
+  // A uid at or above 0xC000_0000 is a local-only mbox import filed into a
+  // server folder after a Graph to IMAP switch. No server holds it, Outlook
+  // answers BAD, and the entry used to be kept and retried forever.
+  it('answers an import-range uid of a flag without the server and sends the rest', async () => {
+    const IMPORT = 0xC0000001;
+    const arg = { flags: ['\\Seen'], action: 'add' };
+    mockReadOps.mockResolvedValue([entry({ op: 'flag', uids: [IMPORT, 3], arg })]);
+
+    const result = await replayOps();
+
+    expect(mockUpdateEmailFlags).toHaveBeenCalledTimes(1);
+    expect(mockUpdateEmailFlags).toHaveBeenCalledWith(ACCOUNT, 3, ['\\Seen'], 'add', 'INBOX');
+    expect(mockUpdateEmailFlagsBatch).not.toHaveBeenCalled();
+    const cleared = mockClearOps.mock.calls.flatMap(c => c[0].uids);
+    expect(cleared).toEqual(expect.arrayContaining([IMPORT, 3]));
+    expect(result).toMatchObject({ kept: 0 });
+  });
+
+  it('answers an import-range uid of a move without the server and prunes nothing for it', async () => {
+    const IMPORT = 0xC0000002;
+    mockReadOps.mockResolvedValue([entry({ op: 'move', uids: [IMPORT], arg: { target: 'Archive' } })]);
+
+    const result = await replayOps();
+
+    expect(mockMoveEmails).not.toHaveBeenCalled();
+    expect(mockClearOps).toHaveBeenCalledWith({ op: 'move', accountId: 'acct1', mailbox: 'INBOX', uids: [IMPORT], arg: { target: 'Archive' } });
+    expect(mockSaveEmailHeaders).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ kept: 0, failed: 0 });
+  });
+
+  it('replays a flag entry of many uids as one batch', async () => {
+    const arg = { flags: ['\\Flagged'], action: 'add' };
+    mockReadOps.mockResolvedValue([entry({ op: 'flag', uids: [3, 4, 5], arg })]);
+
+    const result = await replayOps();
+
+    expect(mockUpdateEmailFlagsBatch).toHaveBeenCalledTimes(1);
+    expect(mockUpdateEmailFlagsBatch).toHaveBeenCalledWith(ACCOUNT, [3, 4, 5], ['\\Flagged'], 'add', 'INBOX');
+    expect(mockUpdateEmailFlags).not.toHaveBeenCalled();
+    expect(mockClearOps).toHaveBeenCalledWith({ op: 'flag', accountId: 'acct1', mailbox: 'INBOX', uids: [3, 4, 5], arg });
+    expect(result).toMatchObject({ attempted: 3, done: 3, kept: 0 });
+  });
+
+  it('keeps every uid of a refused flag batch', async () => {
+    const arg = { flags: ['\\Flagged'], action: 'add' };
+    mockReadOps.mockResolvedValue([entry({ op: 'flag', uids: [3, 4], arg })]);
+    mockUpdateEmailFlagsBatch.mockRejectedValueOnce(new Error('NO busy'));
+
+    const result = await replayOps();
+
+    expect(mockClearOps).not.toHaveBeenCalled();
+    expect(mockNoteOpFailure).toHaveBeenCalledWith({ op: 'flag', accountId: 'acct1', mailbox: 'INBOX', uid: 4 }, expect.stringContaining('NO busy'));
+    expect(result).toMatchObject({ attempted: 2, failed: 2, kept: 2 });
+  });
+
+  describe('a Graph account', () => {
+    const GRAPH = { id: 'acct1', email: 'a@example.com', oauth2Transport: 'graph' };
+    beforeEach(() => mockGetAccounts.mockResolvedValue([GRAPH]));
+
+    it('replays a Graph flag entry through the Graph write and clears it', async () => {
+      const arg = { flags: ['\\Seen'], action: 'add', graph: true };
+      mockReadOps.mockResolvedValue([entry({ op: 'flag', uids: [3, 4], arg })]);
+
+      const result = await replayOps();
+
+      expect(mockSetFlagOnServer).toHaveBeenCalledWith(GRAPH, 'acct1', 'INBOX', 3, ['\\Seen'], 'add');
+      expect(mockSetFlagOnServer).toHaveBeenCalledWith(GRAPH, 'acct1', 'INBOX', 4, ['\\Seen'], 'add');
+      expect(mockUpdateEmailFlags).not.toHaveBeenCalled();
+      expect(mockClearOps).toHaveBeenCalledWith({ op: 'flag', accountId: 'acct1', mailbox: 'INBOX', uids: [3, 4], arg });
+      expect(result).toMatchObject({ done: 2, kept: 0 });
+    });
+
+    it('keeps a Graph flag that failed', async () => {
+      const arg = { flags: ['\\Seen'], action: 'add', graph: true };
+      mockReadOps.mockResolvedValue([entry({ op: 'flag', uids: [3], arg })]);
+      mockSetFlagOnServer.mockRejectedValueOnce(new Error('429'));
+
+      const result = await replayOps();
+
+      expect(mockClearOps).not.toHaveBeenCalled();
+      expect(result).toMatchObject({ failed: 1, kept: 1 });
+    });
+
+    it('still drops a Graph entry it cannot replay (a move)', async () => {
+      const gone = entry({ op: 'move', uids: [3], arg: { target: 'Archive' } });
+      mockReadOps.mockResolvedValue([gone]);
+
+      await replayOps();
+
+      expect(mockMoveEmails).not.toHaveBeenCalled();
+      expect(mockSetFlagOnServer).not.toHaveBeenCalled();
+      expect(mockClearOps).toHaveBeenCalledWith({ op: 'move', accountId: 'acct1', mailbox: 'INBOX', uids: [3], arg: { target: 'Archive' } });
+    });
   });
 
   it('does not raise the reminder for a replay started from the Settings list', async () => {

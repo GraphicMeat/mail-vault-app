@@ -163,6 +163,8 @@ beforeEach(() => {
   netOnline = true;
   graphId = null;
   mockMoveEmails.mockResolvedValue({ success: true, moved: 2, newUids: [41, 42] });
+  mockQueueOp.mockResolvedValue(1);
+  useMailStore.setState({ error: null, errorType: null, undo: null });
 });
 
 describe('moveEmails', () => {
@@ -332,6 +334,8 @@ describe('moveEmails retires the uid it moved away from', () => {
 
   it('a failed move tombstones nothing: the row never left', async () => {
     mockMoveEmails.mockRejectedValue(new Error('server said no'));
+    // Not journalled: nothing will finish it, so the move fails out loud.
+    mockQueueOp.mockResolvedValueOnce(null);
     primeStore({ emails: [row(7)] });
 
     await expect(useMailStore.getState().moveEmails([7], 'Archive')).rejects.toThrow('server said no');
@@ -374,5 +378,75 @@ describe('moveEmails retires the uid it moved away from', () => {
     await showQueuedRows({ op: 'move', accountId: 'a1', mailbox: 'INBOX', uids: [7] });
 
     expect(useMailStore.getState().deleteTombstones.has('a1|INBOX|7')).toBe(false);
+  });
+});
+
+// What a move across folders does when one part of it cannot happen.
+describe('moveEmails: import-range uids and partial failures', () => {
+  const IMPORT = 0xC0000009;
+  const sentRow = (uid) => row(uid, { _accountId: ACCOUNT.id, _mailbox: 'Sent', _fromSentFolder: true });
+
+  // A local-only mbox import filed into a server folder after a Graph to IMAP
+  // switch: no server holds it, and Outlook answers BAD for the whole set.
+  it('leaves an import-range uid where it is and moves the rest', async () => {
+    mockMoveEmails.mockResolvedValue({ success: true, moved: 1, newUids: [41] });
+    primeStore({ emails: [row(7), row(IMPORT)], selected: [7, IMPORT] });
+
+    const result = await useMailStore.getState().moveEmails([7, IMPORT], 'Archive');
+
+    expect(mockQueueOp).toHaveBeenCalledWith({ op: 'move', accountId: 'a1', mailbox: 'INBOX', uids: [7], arg: { target: 'Archive' } });
+    expect(mockMoveEmails).toHaveBeenCalledWith(ACCOUNT, [7], 'INBOX', 'Archive');
+    expect(result.moved[0]).toMatchObject({ srcUids: [7], messageIds: ['m7@mock'] });
+    expect(result.skippedImport).toBe(1);
+    expect(useMailStore.getState().emails.map(e => e.uid)).toEqual([IMPORT]);
+    expect([...useMailStore.getState().selectedEmailIds]).toEqual([IMPORT]);
+  });
+
+  it('a selection of import-range uids sends nothing and journals nothing', async () => {
+    primeStore({ emails: [row(IMPORT)], selected: [IMPORT] });
+
+    const result = await useMailStore.getState().moveEmails([IMPORT], 'Archive');
+
+    expect(mockQueueOp).not.toHaveBeenCalled();
+    expect(mockMoveEmails).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ moved: [], skippedImport: 1 });
+    expect(useMailStore.getState().emails.map(e => e.uid)).toEqual([IMPORT]);
+  });
+
+  it('when the second folder fails, the first folder\'s rows still leave the list and get their undo', async () => {
+    mockMoveEmails.mockImplementation(async (_a, uids, from) => {
+      if (from === 'Sent') throw new Error('Sent refused');
+      return { success: true, moved: uids.length, newUids: [41] };
+    });
+    // INBOX journalled, Sent not: nothing will finish the Sent half.
+    mockQueueOp.mockImplementation(async ({ mailbox }) => (mailbox === 'Sent' ? null : 1));
+    primeStore({ emails: [row(7)] });
+    const sent = sentRow(5);
+    useMailStore.setState({ sentEmails: [sent] });
+
+    await expect(useMailStore.getState().moveEmails([7, _selKey(sent)], 'Archive')).rejects.toThrow('Sent refused');
+
+    expect(useMailStore.getState().emails).toEqual([]);
+    expect(useMailStore.getState().deleteTombstones.has('a1|INBOX|7')).toBe(true);
+    expect(useMailStore.getState().deleteTombstones.has('a1|Sent|5')).toBe(false);
+    expect(useMailStore.getState().sentEmails.map(e => e.uid)).toEqual([5]);
+    expect(useMailStore.getState().undo).toMatchObject({ labelKey: 'undo.moved', labelParams: { count: 1 } });
+    expect(useMailStore.getState().moveProgress).toBeNull();
+  });
+
+  it('a refused move the journal keeps is "not moved yet", not a failure: the rows stay, MailVault keeps trying', async () => {
+    mockMoveEmails.mockRejectedValue(new Error('NO server busy'));
+    primeStore({ emails: [row(7)] });
+
+    const result = await useMailStore.getState().moveEmails([7], 'Archive');
+
+    expect(mockClearOps).not.toHaveBeenCalled();
+    expect(result.moved).toEqual([]);
+    expect(result.notMoved).toBe(1);
+    expect(useMailStore.getState().emails.map(e => e.uid)).toEqual([7]);
+    const { error, errorType } = useMailStore.getState();
+    expect(error).toMatch(/server busy/);
+    expect(error).toMatch(/keeps trying/i);
+    expect(errorType).toBe('warning');
   });
 });

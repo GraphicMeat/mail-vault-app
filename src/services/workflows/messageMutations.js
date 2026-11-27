@@ -5,6 +5,7 @@ import * as api from '../api';
 import { send } from '../transport';
 import { daemonCall } from '../daemonClient';
 import { binCaptureError } from '../../utils/binCapture';
+import { isImportUid } from '../../utils/importUid';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { isGraphAccount } from '../graphConfig';
 import { isJmapAccount } from '../providerKind';
@@ -2615,19 +2616,111 @@ export async function exportEmail(uid, subject) {
 
 // ── the one flag workflow (read state, the star, \Answered, $Forwarded) ──
 
+// Graph has no batch flag write: each message is its own request, this many
+// at a time.
+const GRAPH_FLAG_CONCURRENCY = 4;
+
+async function _eachBounded(items, limit, run) {
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      await run(items[i], i);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+}
+
+// The server halves of flag changes, chained so they land in the order asked.
+let _flagTails = Promise.resolve();
+
+/** Resolves once every flag server half started so far has finished. */
+export function flagTailsSettled() {
+  return _flagTails;
+}
+
+// Send each group's flag change; clear what landed from the journal. Never
+// throws: resolves to the groups that did not land, `{ count, error, journalled }`.
+// Offline nothing is sent: the journal entries are replayOps' to finish.
+async function _sendFlagGroups(groups) {
+  const failed = [];
+  for (const g of groups) {
+    if (!useConnectivityStore.getState().online) continue;
+    const { account, accountId, mailbox, uids, rows, arg } = g;
+    if (g.graph) {
+      const landedAt = new Set();
+      let error = null;
+      let misses = 0;
+      await _eachBounded(uids, GRAPH_FLAG_CONCURRENCY, async (uid, i) => {
+        try {
+          await _setFlagOnServer(account, accountId, mailbox, uid, arg.flags, arg.action, rows[i]);
+          landedAt.add(i);
+        } catch (e) {
+          console.error(`[applyFlag] Graph ${arg.flags} ${arg.action} failed for ${accountId}/${mailbox}/${uid}, left in the journal:`, e);
+          error ??= e;
+          misses++;
+        }
+      });
+      const landed = uids.filter((_, i) => landedAt.has(i));
+      if (landed.length) await db.clearOps({ op: 'flag', accountId, mailbox, uids: landed, arg });
+      if (misses) failed.push({ count: misses, error, journalled: g.journalled });
+      continue;
+    }
+    try {
+      let answered = uids;
+      if (uids.length === 1) {
+        await _setFlagOnServer(account, accountId, mailbox, uids[0], arg.flags, arg.action, rows[0]);
+      } else {
+        const res = await api.updateEmailFlagsBatch(account, uids, arg.flags, arg.action, mailbox);
+        if (res && res.success === false) throw new Error(res.error || 'flag batch refused');
+        // `done` and `skipped` (import-range, never sent) are answered; a uid
+        // in neither stays owed.
+        if (Array.isArray(res?.done)) answered = [...res.done, ...(res.skipped || [])];
+      }
+      await db.clearOps({ op: 'flag', accountId, mailbox, uids: answered, arg });
+    } catch (e) {
+      console.error(`[applyFlag] ${arg.flags} ${arg.action} failed for ${accountId}/${mailbox} (${uids.length}), left in the journal:`, e);
+      failed.push({ count: uids.length, error: e, journalled: g.journalled });
+    }
+  }
+  return failed;
+}
+
+// One line for every flag write that did not land. A journalled one is still
+// owed and replayOps keeps sending it, so it is a warning, not a failure.
+function _reportFlagFailures(useMailStore, failed) {
+  if (!failed.length) return;
+  const { error } = failed[0];
+  if (failed.every(f => f.journalled)) {
+    const count = failed.reduce((n, f) => n + f.count, 0);
+    const why = String(tErr(error)).trim().replace(/[.。]+$/u, '');
+    const message = tr('svc.messageMutations.flagNotYet', { count, error: why });
+    useMailStore.setState({ error: message, errorType: 'warning', errorTypeFor: message });
+    return;
+  }
+  useMailStore.setState({ error: tr('svc.messageMutations.couldChangeFlagServer', { error: tErr(error) }) });
+}
+
 /**
  * Land one flag change for `targets` everywhere it renders, in the vault, in
  * the journal and on the server — in that order.
  *
  * Rows first because the user is watching them; the journal before the server,
  * because a reload between the two must not lose the intent; the server last,
- * and one message at a time.
+ * one journal entry and one write per (account, folder): a batch `UID STORE`
+ * on IMAP, at most four requests in flight on Graph (no batch there). An
+ * import-range uid (a local-only mbox import) is left out of both.
  *
  * Offline (the connectivity store's verdict) the journal entry is left in
  * place and the round-trip skipped — replayOps sends it once the link is back.
  * A server failure leaves the entry too: only success clears it, for the same
- * reason. Graph accounts are the exception at both ends — replayOps cannot
- * replay one, so those go straight out and are never journalled.
+ * reason, and says once that MailVault keeps trying. A Graph entry carries
+ * `graph: true`, which is how replayOps knows to send it through Graph.
+ *
+ * A change to more than one message settles once the rows, the vault and the
+ * journal are written; its server half runs behind it. Server halves run one
+ * at a time, in order (flagTailsSettled), so a change and its undo cannot
+ * reach the server in the wrong order.
  *
  * `targets` are already-resolved locations: [{ account, accountId, mailbox, uid }].
  * A target with `named: true` names its folder from the vault itself (a Notes
@@ -2724,6 +2817,10 @@ export async function applyFlagToTargets(targets, flag, on, { undoable = true, d
     }
 
     const action = on ? 'add' : 'remove';
+    // The server half, one journal entry and one write per (account, folder):
+    // a bulk mark of 284 rows used to be 284 entries, 284 round trips and 284
+    // clears, serial, with the click waiting on all of them.
+    const groups = new Map();
     for (const t of targets) {
       // A vault-only row has no server copy, and its uid is a pseudo-uid the
       // server would refuse — journalling it files an op that can never be
@@ -2736,36 +2833,50 @@ export async function applyFlagToTargets(targets, flag, on, { undoable = true, d
       // has lost, an Insights note).
       if (t.serverless || t.emailObj?.source === 'local-only' || t.emailObj?._localStaged
         || isLocalMailbox(state.localFolders, t.accountId, t.mailbox)) continue;
-      if (isGraphAccount(t.account)) {
-        // A mark nobody asked for has nothing to say to the user, and offline
-        // there is no point trying: the next open of the message tries again.
-        if (detachTail && !useConnectivityStore.getState().online) {
-          console.warn('[applyFlag] Offline: the Graph %s for %s/%s/%s is not sent', flag, t.accountId, t.mailbox, t.uid);
-          continue;
-        }
-        try {
-          // The id the caller already resolved rides on the row, so the write
-          // does not look it up (and relist the folder) a second time.
-          const row = t.graphId ? { ...t.emailObj, _graphId: t.graphId } : t.emailObj;
-          await _setFlagOnServer(t.account, t.accountId, t.mailbox, t.uid, [flag], action, row);
-        } catch (e) {
-          // The one branch with no journal behind it — replayOps cannot replay a
-          // Graph op — so a failure here is the end of the road and has to say so.
-          console.error('[applyFlag] Graph write failed:', e);
-          if (!detachTail) useMailStore.setState({ error: tr('svc.messageMutations.couldChangeFlagServer', { error: tErr(e) }) });
-        }
+      const graph = isGraphAccount(t.account);
+      // An import-range uid: a local-only mbox import re-filed into a server
+      // folder after a Graph to IMAP switch. No server holds it, and Outlook
+      // answers BAD for the whole set it is in. Its vault copy is the change.
+      if (!graph && isImportUid(t.uid)) {
+        console.log('[applyFlag] %s/%s/%s is a local-only import: vault only', t.accountId, t.mailbox, t.uid);
         continue;
       }
-      await db.queueOp({ op: 'flag', accountId: t.accountId, mailbox: t.mailbox, uids: [t.uid], arg: { flags: [flag], action } });
-      if (!useConnectivityStore.getState().online) continue;   // replayOps finishes it
-      try {
-        const account = t.account;
-        await _setFlagOnServer(account, t.accountId, t.mailbox, t.uid, [flag], action, t.emailObj);
-        await db.clearOps({ op: 'flag', accountId: t.accountId, mailbox: t.mailbox, uids: [t.uid], arg: { flags: [flag], action } });
-      } catch (e) {
-        console.error(`[applyFlag] ${flag} ${action} failed for ${t.accountId}/${t.mailbox}/${t.uid} — left in the journal:`, e);
+      const k = `${t.accountId}|${t.mailbox}`;
+      if (!groups.has(k)) {
+        groups.set(k, {
+          account: t.account, accountId: t.accountId, mailbox: t.mailbox, graph, uids: [], rows: [],
+          // `graph` is part of the entry's identity: replayOps sends it through
+          // the Graph write, and never mistakes it for an IMAP one.
+          arg: graph ? { flags: [flag], action, graph: true } : { flags: [flag], action },
+        });
       }
+      const g = groups.get(k);
+      g.uids.push(t.uid);
+      // The id the caller already resolved rides on the row, so the Graph
+      // write does not look it up (and relist the folder) a second time.
+      g.rows.push(t.graphId ? { ...t.emailObj, _graphId: t.graphId } : t.emailObj);
     }
+    if (!groups.size) return;
+
+    // The journal before the server, awaited here: a reload between the two
+    // must not lose the intent, and only success clears it (replayOps sends
+    // whatever is left, offline or refused).
+    for (const g of groups.values()) {
+      g.journalled = (await db.queueOp({ op: 'flag', accountId: g.accountId, mailbox: g.mailbox, uids: g.uids, arg: g.arg })) != null;
+    }
+
+    // One server half at a time, in the order they were asked for: a bulk
+    // mark still in flight and its undo must not race to the server.
+    const tail = _flagTails.then(() => _sendFlagGroups([...groups.values()]));
+    _flagTails = tail.catch(() => {});
+    const report = (failed) => { if (!detachTail) _reportFlagFailures(useMailStore, failed); };
+    // A bulk change settles once its rows, vault and journal are written; the
+    // server half runs behind it and reports into the error banner.
+    if (targets.length > 1) {
+      tail.then(report).catch(e => console.warn('[applyFlag] server half failed:', e));
+      return;
+    }
+    report(await tail);
   };
 
   if (!detachTail) return finish();
@@ -2805,7 +2916,13 @@ export async function applyFlagToKeys(keys, flag, on, opts) {
       console.warn('[applyFlag] skipped a row that names no account:', key);
       continue;
     }
-    targets.push({ key, ...ctx });
+    // A message whose row is not loaded (the bulk modal ticks a folder's whole
+    // cache) has no row to prove its folder to the vault write, and its key
+    // does: a full key names the folder, and a bare uid names the folder on
+    // screen (a merged Sent copy is always keyed in full, so it is never one).
+    // The server write goes to the same place.
+    const named = !ctx.emailObj && (!!_parseSelKey(key).mailbox || !spansMailboxes(state));
+    targets.push({ key, ...ctx, ...(named ? { named: true } : {}) });
   }
 
   // Same hold as applySeenLocally's: these rows stop matching the unread
@@ -3526,6 +3643,13 @@ export async function purgeEverywhereReporting(keys, opts) {
 // `dstUids` is null when the server reported none; `deferred` marks a group the
 // journal is still holding because the app is offline. Graph groups get no
 // record: their move is addressed by a per-session id, not a uid.
+// `skippedImport` counts import-range uids (local-only mbox imports no server
+// holds), left where they are; `notMoved` counts messages whose move the
+// server refused but the journal keeps, said once as "not moved yet".
+//
+// One folder failing does not undo the others: the groups that moved leave
+// the list and get their undo, and only then is a failure nothing will finish
+// (no journal entry, a Graph group) thrown.
 
 export async function moveEmails(keys, targetMailbox) {
   const { useMailStore } = await import('./boundStore');
@@ -3540,6 +3664,7 @@ export async function moveEmails(keys, targetMailbox) {
   // which is what an undo finds the moved copy by on a server with no UIDPLUS.
   const emailMap = indexRows(resolvePool(state), e => selectionKey(e, state));
   const groups = new Map();
+  let skippedImport = 0;
   for (const key of keys) {
     const ctx = _resolveKeyContext(key, state, emailMap, { require: false });
     if (!ctx) {
@@ -3552,6 +3677,14 @@ export async function moveEmails(keys, targetMailbox) {
     if (isLocalMailbox(state.localFolders, ctx.accountId, ctx.mailbox)
       || isLocalMailbox(state.localFolders, ctx.accountId, targetMailbox)) {
       console.warn('[moveEmails] refused a move out of or into a local folder:', key);
+      continue;
+    }
+    // An import-range uid: a local-only mbox import re-filed into a server
+    // folder after a Graph to IMAP switch. No server holds it to move, and
+    // Outlook answers BAD for the whole set it is in, so it stays where it is.
+    if (!isGraphAccount(ctx.account) && isImportUid(ctx.uid)) {
+      console.log('[moveEmails] %s/%s/%s is a local-only import: left where it is', ctx.accountId, ctx.mailbox, ctx.uid);
+      skippedImport++;
       continue;
     }
     const gk = `${ctx.accountId}|${ctx.mailbox}`;
@@ -3570,19 +3703,30 @@ export async function moveEmails(keys, targetMailbox) {
   const tally = { total: [...groups.values()].reduce((n, g) => n + g.uids.length, 0), completed: 0, errors: 0 };
   const paintMove = (active) => useMailStore.setState({ moveProgress: { ...tally, active, folder: targetMailbox } });
   if (groups.size) paintMove(true);
-  try {
-    for (const group of groups.values()) {
-      const account = group.account;
-      const record = (dstUids, extra) => ({
-        account, accountId: group.accountId, from: group.mailbox, to: targetMailbox,
-        srcUids: group.uids, dstUids, messageIds: group.rows.map(r => r?.messageId || null),
-        ...extra,
-      });
+  // The groups that moved (or were journalled offline): only their rows leave
+  // the list and get an undo. A group that failed keeps its rows on screen.
+  const doneGroups = [];
+  // A failure nothing will finish (no journal entry behind it, a Graph group)
+  // is thrown once the moved groups are settled; a journalled one is "not
+  // moved yet", since replayOps keeps sending it.
+  let thrown = null;
+  let notYet = null;
+  let notMoved = 0;
+  for (const group of groups.values()) {
+    const account = group.account;
+    const record = (dstUids, extra) => ({
+      account, accountId: group.accountId, from: group.mailbox, to: targetMailbox,
+      srcUids: group.uids, dstUids, messageIds: group.rows.map(r => r?.messageId || null),
+      ...extra,
+    });
+    let journalled = false;
+    try {
       if (isGraphAccount(account)) {
         // Addressed by a per-session message id, not a replayable uid: a
         // journalled entry is something no later launch could act on, and there
         // is no destination uid to hand an undo either.
         await _graphMoveGroup(state, account, group, targetMailbox);
+        doneGroups.push(group);
         tally.completed += group.uids.length;
         paintMove(true);
         continue;
@@ -3590,10 +3734,11 @@ export async function moveEmails(keys, targetMailbox) {
       // Same ordering as every other mutation: the journal is written before the
       // round trip (the rows are about to leave the list, so a reload or a quit
       // in between must not lose the intent) and cleared only after it.
-      await db.queueOp({ op: 'move', accountId: group.accountId, mailbox: group.mailbox, uids: group.uids, arg: { target: targetMailbox } });
+      journalled = (await db.queueOp({ op: 'move', accountId: group.accountId, mailbox: group.mailbox, uids: group.uids, arg: { target: targetMailbox } })) != null;
       if (!useConnectivityStore.getState().online) {
         console.log(`[moveEmails] offline — ${group.mailbox} → ${targetMailbox} journalled, replayOps will finish it`);
         records.push(record(null, { deferred: true }));
+        doneGroups.push(group);
         tally.completed += group.uids.length;
         paintMove(true);
         continue;
@@ -3604,89 +3749,100 @@ export async function moveEmails(keys, targetMailbox) {
       void dismissFollowUpsAt(group.uids.map(uid => ({ accountId: group.accountId, mailbox: group.mailbox, uid }))).catch(() => {});
       // Null when the server reported no COPYUID (no UIDPLUS) — never a guess.
       records.push(record(Array.isArray(res?.newUids) ? res.newUids : null));
+      doneGroups.push(group);
       tally.completed += group.uids.length;
       paintMove(true);
+    } catch (e) {
+      console.error(`[moveEmails] ${group.accountId}/${group.mailbox} → ${targetMailbox} failed${journalled ? ', left in the journal' : ''}:`, e);
+      tally.errors += group.uids.length;
+      if (journalled) {
+        notYet ??= e;
+        notMoved += group.uids.length;
+      } else {
+        thrown ??= e;
+      }
     }
-  } catch (e) {
-    // The dropdown reports the failure inline; a toast left mid-move would
-    // claim a run that is not happening and has no way to be dismissed.
-    useMailStore.setState({ moveProgress: null });
-    throw e;
   }
-  if (groups.size) paintMove(false);
+  // The dropdown reports a thrown failure inline; a toast left mid-move would
+  // claim a run that is not happening and has no way to be dismissed.
+  if (thrown) useMailStore.setState({ moveProgress: null });
+  else if (groups.size) paintMove(false);
 
-  // Resolved rows only. A key nothing could place named no folder, so nothing
-  // moved for it: taking its row off the list (or its tick off the selection)
-  // would show the user a move that did not happen. Clearing only the keys
-  // this move resolved — not the whole selectedEmailIds set — means a single
-  // row-menu move leaves an unrelated bulk selection intact.
-  const keySet = new Set([...groups.values()].flatMap(g => g.keys));
-  const filteredEmails = get().emails.filter(e => !keySet.has(selectionKey(e, state)));
-  const newTotal = Math.max(0, (get().totalEmails || 0) - (get().emails.length - filteredEmails.length));
-  // The uid each moved message had is retired: the destination gave it another.
-  // A Sent fill's pages, read before the move, would put it back in the mirror.
-  const retired = [...groups.values()].flatMap(g => g.uids.map(uid => _targetId({ accountId: g.accountId, mailbox: g.mailbox, uid })));
-  const updates = {
-    emails: filteredEmails,
-    sentEmails: get().sentEmails.filter(e => !keySet.has(selectionKey(e, state))),
-    deleteTombstones: new Set([...get().deleteTombstones, ...retired]),
-    totalEmails: newTotal,
-    // Live, not the snapshot: the per-group network loop above is awaited, and
-    // a row ticked across it is the user's, not this move's to drop.
-    selectedEmailIds: new Set([...get().selectedEmailIds].filter(k => !keySet.has(k))),
-    selectedEmailSnapshots: retainSelectionSnapshots(get().selectedEmailSnapshots, [...get().selectedEmailIds].filter(k => !keySet.has(k))),
-  };
+  if (doneGroups.length) {
+    // Rows of the groups that moved only. A key nothing could place named no
+    // folder, a group whose move failed, an import-range uid: nothing moved for
+    // those: taking its row off the list (or its tick off the selection)
+    // would show the user a move that did not happen. Clearing only the keys
+    // this move resolved — not the whole selectedEmailIds set — means a single
+    // row-menu move leaves an unrelated bulk selection intact.
+    const keySet = new Set(doneGroups.flatMap(g => g.keys));
+    const filteredEmails = get().emails.filter(e => !keySet.has(selectionKey(e, state)));
+    const newTotal = Math.max(0, (get().totalEmails || 0) - (get().emails.length - filteredEmails.length));
+    // The uid each moved message had is retired: the destination gave it another.
+    // A Sent fill's pages, read before the move, would put it back in the mirror.
+    const retired = doneGroups.flatMap(g => g.uids.map(uid => _targetId({ accountId: g.accountId, mailbox: g.mailbox, uid })));
+    const updates = {
+      emails: filteredEmails,
+      sentEmails: get().sentEmails.filter(e => !keySet.has(selectionKey(e, state))),
+      deleteTombstones: new Set([...get().deleteTombstones, ...retired]),
+      totalEmails: newTotal,
+      // Live, not the snapshot: the per-group network loop above is awaited, and
+      // a row ticked across it is the user's, not this move's to drop.
+      selectedEmailIds: new Set([...get().selectedEmailIds].filter(k => !keySet.has(k))),
+      selectedEmailSnapshots: retainSelectionSnapshots(get().selectedEmailSnapshots, [...get().selectedEmailIds].filter(k => !keySet.has(k))),
+    };
 
-  if (selectionStillNames(get, { keys: keySet })) {
-    updates.selectedEmailId = null;
-    updates.selectedEmail = null;
-    updates.selectedEmailSource = null;
-    updates.selectedThread = null;
+    if (selectionStillNames(get, { keys: keySet })) {
+      updates.selectedEmailId = null;
+      updates.selectedEmail = null;
+      updates.selectedEmailSource = null;
+      updates.selectedThread = null;
+    }
+    // Its unread messages leave the INBOX badge with it.
+    const movedOut = get().emails.filter(e => keySet.has(selectionKey(e, state)));
+    _shiftUnread(movedOut.map(row => ({ ...rowIdentity(row, get()), row })).filter(e => e.accountId), -1);
+    useMailStore.setState(updates);
+    // Drop the moved rows now — loadEmails() below is a server round-trip, and
+    // until it returns the list still renders what was moved away.
+    get().updateSortedEmails();
+
+    // A hit moved out of the results list stays gone: the results are not
+    // `emails`, and loadEmails() reloads the folder, not the search.
+    await pruneSearchResults(doneGroups.flatMap(group => group.uids.map(uid => ({
+      accountId: group.accountId,
+      mailbox: group.mailbox,
+      uid,
+    }))));
+
+    const { invalidateRestoreDescriptors: _invalidateRestore } = await import('../cacheManager');
+    // Only the view's own folder can name removed uids — the sidecar is per
+    // (account, mailbox), and a merged copy's uid belongs to another one.
+    //
+    // And no write at all when the list spans folders: `filteredEmails` then
+    // holds rows from every folder in the scope, while `activeMailbox` is the
+    // branch ROOT — a real folder ('INBOX' on bson73's INBOX-prefixed server,
+    // discussion #1), unlike the literal 'UNIFIED'. Writing the branch list and
+    // its total into that folder's cache is what the next single-folder load
+    // paints cache-first: mail that was moved away still in the inbox.
+    //
+    // The prune and the count only: the cache holds the remaining rows already,
+    // and re-sending the list serialised the whole mailbox for every move.
+    const own = doneGroups.find(g => g.accountId === activeAccountId && g.mailbox === activeMailbox);
+    if (!isUnified) {
+      await db.saveEmailHeaders(activeAccountId, activeMailbox, [], newTotal,
+        own ? { removedUids: own.uids } : undefined);
+    }
+    // Every other folder a moved row came from (a merged Sent row, a folder of
+    // All inboxes) loses just those uids from its own cache: a removal names the
+    // folder it is filed under, so it cannot reach the branch root's.
+    for (const g of doneGroups) {
+      if (isUnified || g !== own) await db.saveEmailHeaders(g.accountId, g.mailbox, [], null, { removedUids: g.uids });
+    }
+
+    _invalidateRestore(activeAccountId);
+
+    reloadListInView();
   }
-  // Its unread messages leave the INBOX badge with it.
-  const movedOut = get().emails.filter(e => keySet.has(selectionKey(e, state)));
-  _shiftUnread(movedOut.map(row => ({ ...rowIdentity(row, get()), row })).filter(e => e.accountId), -1);
-  useMailStore.setState(updates);
-  // Drop the moved rows now — loadEmails() below is a server round-trip, and
-  // until it returns the list still renders what was moved away.
-  get().updateSortedEmails();
-
-  // A hit moved out of the results list stays gone: the results are not
-  // `emails`, and loadEmails() reloads the folder, not the search.
-  await pruneSearchResults([...groups.values()].flatMap(group => group.uids.map(uid => ({
-    accountId: group.accountId,
-    mailbox: group.mailbox,
-    uid,
-  }))));
-
-  const { invalidateRestoreDescriptors: _invalidateRestore } = await import('../cacheManager');
-  // Only the view's own folder can name removed uids — the sidecar is per
-  // (account, mailbox), and a merged copy's uid belongs to another one.
-  //
-  // And no write at all when the list spans folders: `filteredEmails` then
-  // holds rows from every folder in the scope, while `activeMailbox` is the
-  // branch ROOT — a real folder ('INBOX' on bson73's INBOX-prefixed server,
-  // discussion #1), unlike the literal 'UNIFIED'. Writing the branch list and
-  // its total into that folder's cache is what the next single-folder load
-  // paints cache-first: mail that was moved away still in the inbox.
-  //
-  // The prune and the count only: the cache holds the remaining rows already,
-  // and re-sending the list serialised the whole mailbox for every move.
-  const own = groups.get(`${activeAccountId}|${activeMailbox}`);
-  if (!isUnified) {
-    await db.saveEmailHeaders(activeAccountId, activeMailbox, [], newTotal,
-      own ? { removedUids: own.uids } : undefined);
-  }
-  // Every other folder a moved row came from (a merged Sent row, a folder of
-  // All inboxes) loses just those uids from its own cache: a removal names the
-  // folder it is filed under, so it cannot reach the branch root's.
-  for (const g of groups.values()) {
-    if (isUnified || g !== own) await db.saveEmailHeaders(g.accountId, g.mailbox, [], null, { removedUids: g.uids });
-  }
-
-  _invalidateRestore(activeAccountId);
-
-  reloadListInView();
 
   // Graph groups produce no record — no replayable uid, no COPYUID — so a
   // Graph-only move leaves the previous slot alone rather than offering an
@@ -3702,7 +3858,17 @@ export async function moveEmails(keys, targetMailbox) {
     });
   }
 
-  return { moved: records };
+  if (thrown) throw thrown;
+  if (notYet) {
+    const why = String(tErr(notYet)).trim().replace(/[.。]+$/u, '');
+    const message = tr('list.moveNotYet', { reason: why });
+    useMailStore.setState({ error: message, errorType: 'warning', errorTypeFor: message });
+  } else if (skippedImport) {
+    const message = tr('list.moveSkippedImported', { count: skippedImport });
+    useMailStore.setState({ error: message, errorType: 'warning', errorTypeFor: message });
+  }
+
+  return { moved: records, skippedImport, notMoved };
 }
 
 // Move the messages back. The destination uids came with COPYUID; without

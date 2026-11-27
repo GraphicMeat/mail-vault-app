@@ -145,6 +145,7 @@ function primeUnifiedVault(flags = []) {
     emailCache: new Map(),
     loadEmails: vi.fn(),
     _sortedEmailsFingerprint: '',
+    error: null,
   });
   invalidateChatAndThreadCaches();
   useMailStore.getState().updateSortedEmails();
@@ -221,6 +222,8 @@ describe('marking a vault-only row read from the unified list', () => {
 
     expect(rowSeen()).toBe(true);
     expect(mockVaultApplyFlags).toHaveBeenCalled();
+    // Still journalled, so it is said as owed, not as lost.
+    expect(useMailStore.getState().error).toMatch(/keeps trying/);
   });
 
   // Whether the vault holds the message is Rust's question now — it has the

@@ -20,6 +20,7 @@ if (!globalThis.window) {
 }
 
 const mockUpdateEmailFlags = vi.fn().mockResolvedValue(undefined);
+const mockUpdateEmailFlagsBatch = vi.fn(async (_a, uids) => ({ success: true, written: [], done: uids, skipped: [] }));
 const mockGraphSetRead = vi.fn().mockResolvedValue(undefined);
 const mockDeleteEmail = vi.fn().mockResolvedValue(undefined);
 // The daemon's delete queue, answering through the per-message mock above.
@@ -115,6 +116,7 @@ vi.mock('../../api', () => ({
   vaultApplyFlags: (...a) => mockVaultApplyFlags(...a),
   fetchEmailLight: vi.fn().mockResolvedValue(null),
   updateEmailFlags: (...a) => mockUpdateEmailFlags(...a),
+  updateEmailFlagsBatch: (...a) => mockUpdateEmailFlagsBatch(...a),
   graphSetRead: (...a) => mockGraphSetRead(...a),
   deleteQueueSubmit: (...a) => mockDeleteQueueSubmit(...a),
   deleteQueueList: async () => [],
@@ -177,7 +179,7 @@ vi.mock('../../safeStorage', () => ({
 const { useMailStore } = await import('../../../stores/mailStore');
 await import('../bindStoreActions');
 const { whenUnreadIdle } = await import('../../unreadCountsClient');
-const { removeLocalEmail: removeLocalEmailWorkflow, removeLocalEmails: removeLocalEmailsWorkflow } = await import('../messageMutations');
+const { removeLocalEmail: removeLocalEmailWorkflow, removeLocalEmails: removeLocalEmailsWorkflow, flagTailsSettled } = await import('../messageMutations');
 const { loadEmails: realLoadEmails } = await import('../loadEmails');
 const { viewId } = await import('../../../stores/slices/unifiedHelpers');
 const { invalidateChatAndThreadCaches, _resetArchivedGroupsForTest, setArchivedGroup, getArchivedGroup } = await import('../../../stores/slices/messageListSlice');
@@ -308,13 +310,14 @@ describe('markSelectedAsRead', () => {
     expect(useMailStore.getState().selectedEmail.flags).toContain('\\Seen');
   });
 
-  it('adds \\Seen on the server for every selected uid', async () => {
+  it('adds \\Seen on the server for every selected uid, in one batch', async () => {
     primeStore(seedThread(), [1, 2]);
 
     await useMailStore.getState().markSelectedAsRead();
+    await flagTailsSettled();
 
-    expect(mockUpdateEmailFlags.mock.calls.map(c => [c[1], c[3]]))
-      .toEqual([[1, 'add'], [2, 'add']]);
+    expect(mockUpdateEmailFlagsBatch.mock.calls.map(c => [c[1], c[3]]))
+      .toEqual([[[1, 2], 'add']]);
   });
 
   it('refreshes the sidebar unread badge', async () => {
@@ -373,9 +376,10 @@ describe('markSelectedAsUnread', () => {
     primeStore(seedThread({ 1: ['\\Seen'], 2: ['\\Seen'] }), [1, 2]);
 
     await useMailStore.getState().markSelectedAsUnread();
+    await flagTailsSettled();
 
-    expect(mockUpdateEmailFlags.mock.calls.map(c => [c[1], c[3]]))
-      .toEqual([[1, 'remove'], [2, 'remove']]);
+    expect(mockUpdateEmailFlagsBatch.mock.calls.map(c => [c[1], c[3]]))
+      .toEqual([[[1, 2], 'remove']]);
   });
 });
 

@@ -3,7 +3,8 @@
 import * as db from '../db';
 import * as api from '../api';
 import { isGraphAccount } from '../graphConfig';
-import { replayPurge, hideQueuedDeletes, showQueuedRows, onDeleteQueueLanded, onDeleteQueueChanged, onDeleteQueueStatus } from './messageMutations';
+import { isImportUid } from '../../utils/importUid';
+import { replayPurge, _setFlagOnServer, hideQueuedDeletes, showQueuedRows, onDeleteQueueLanded, onDeleteQueueChanged, onDeleteQueueStatus } from './messageMutations';
 import { remindOfUnfinished } from './pendingActionsReminder';
 import { useConnectivityStore } from '../../stores/connectivityStore';
 import { UNDO_TOAST_MS } from '../../stores/slices/undoSlice';
@@ -128,9 +129,11 @@ export async function replayOps({ reason = 'launch' } = {}) {
     if (!op || !accountId || !mailbox || !uids?.length) continue;
 
     const account = accounts.find((a) => a.id === accountId);
-    // Account removed since, or a Graph account that should never have been
-    // journalled: nothing here can act on it, so stop carrying it.
-    if (!account || isGraphAccount(account)) {
+    const graph = !!account && isGraphAccount(account);
+    // Account removed since, or a Graph op nothing here can replay: stop
+    // carrying it. A Graph flag the live path journalled (`arg.graph`) is the
+    // one Graph op replayed, through the Graph write and its id ladder.
+    if (!account || (graph && !(op === 'flag' && arg?.graph))) {
       await db.clearOps({ op, accountId, mailbox, uids, arg });
       await showQueuedRows(entry);
       continue;
@@ -169,10 +172,43 @@ export async function replayOps({ reason = 'launch' } = {}) {
     // `removed` is the narrower set that is no longer in this mailbox.
     const answered = [];
     const removed = [];
-    for (const uid of uids) {
+    let owed = uids;
+    // An import-range uid is a local-only mbox import re-filed into a server
+    // folder after a Graph to IMAP switch: no server holds it, and Outlook
+    // answers BAD for it. Answered here, nothing sent, or it is retried forever.
+    if (!graph && (op === 'flag' || op === 'move')) {
+      const local = uids.filter(isImportUid);
+      if (local.length) {
+        log(`[replayOps] ${op} ${mailbox}: ${local.length} import-range uid(s) no server holds, dropped:`, local.join(','));
+        answered.push(...local);
+        owed = uids.filter((uid) => !isImportUid(uid));
+      }
+    }
+    // A flag entry of many uids (the live path journals a bulk mark as one) is
+    // one batch round trip, not one per message.
+    if (!graph && op === 'flag' && owed.length > 1) {
+      attempted += owed.length;
+      try {
+        const res = await api.updateEmailFlagsBatch(fresh, owed, arg?.flags, arg?.action, mailbox);
+        if (res && res.success === false) throw new Error(res.error || 'flag batch refused');
+        ok += owed.length;
+        answered.push(...owed);
+      } catch (e) {
+        const message = String(e?.message || e);
+        failed += owed.length;
+        kept += owed.length;
+        errors.push(`${op} ${mailbox}/${owed.join(',')}: ${message}`);
+        log(`[replayOps] ${account.email} ${op} ${mailbox} uids ${owed.join(',')} failed:`, message);
+        for (const uid of owed) db.noteOpFailure({ op, accountId, mailbox, uid }, message);
+      }
+      owed = [];
+    }
+    for (const uid of owed) {
       attempted++;
       try {
-        if (op === 'flag') {
+        if (op === 'flag' && graph) {
+          await _setFlagOnServer(fresh, accountId, mailbox, uid, arg?.flags || [], arg?.action);
+        } else if (op === 'flag') {
           await api.updateEmailFlags(fresh, uid, arg?.flags, arg?.action, mailbox);
         } else if (op === 'move') {
           await api.moveEmails(fresh, [uid], mailbox, arg?.target);

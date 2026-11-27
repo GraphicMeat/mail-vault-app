@@ -19,6 +19,7 @@ if (!globalThis.window) {
 }
 
 const mockUpdateEmailFlags = vi.fn().mockResolvedValue({ success: true, written: [] });
+const mockUpdateEmailFlagsBatch = vi.fn();
 const mockGraphSetFlagged = vi.fn().mockResolvedValue(undefined);
 const mockGraphSetRead = vi.fn().mockResolvedValue(undefined);
 const mockQueueOp = vi.fn().mockResolvedValue(1);
@@ -74,6 +75,7 @@ vi.mock('../../api', () => ({
   vaultApplyFlags: (...a) => mockVaultApplyFlags(...a),
   fetchEmailLight: vi.fn().mockResolvedValue(null),
   updateEmailFlags: (...a) => mockUpdateEmailFlags(...a),
+  updateEmailFlagsBatch: (...a) => mockUpdateEmailFlagsBatch(...a),
   graphSetRead: (...a) => mockGraphSetRead(...a),
   graphSetFlagged: (...a) => mockGraphSetFlagged(...a),
   graphGetMessage: vi.fn().mockResolvedValue(null),
@@ -148,7 +150,7 @@ await import('../bindStoreActions');
 const { useSearchStore } = await import('../../../stores/searchStore');
 const { useSnoozeStore } = await import('../../../stores/snoozeStore');
 const { invalidateChatAndThreadCaches } = await import('../../../stores/slices/messageListSlice');
-const { toggleFlagged, markAnswered, markForwarded, applyFlagToTargets, applySeenLocally } = await import('../messageMutations');
+const { toggleFlagged, markAnswered, markForwarded, applyFlagToTargets, applyFlagToKeys, applySeenLocally, flagTailsSettled } = await import('../messageMutations');
 const { whenUnreadIdle } = await import('../../unreadCountsClient');
 
 const ACCOUNT = { id: 'a1', email: 'a1@x' };
@@ -206,6 +208,7 @@ beforeEach(() => {
   netOnline = true;
   graphId = null;
   mockUpdateEmailFlags.mockResolvedValue({ success: true, written: [] });
+  mockUpdateEmailFlagsBatch.mockImplementation(async (_a, uids) => ({ success: true, written: [], done: uids, skipped: [] }));
   useSearchStore.setState({ searchResults: [] });
 });
 
@@ -369,7 +372,7 @@ describe('toggleFlagged', () => {
     expect(mockUpdateEmailFlags).not.toHaveBeenCalled();
   });
 
-  it('a Graph account routes the star to graphSetFlagged and never journals it', async () => {
+  it('a Graph account routes the star to graphSetFlagged, journalled as a Graph op', async () => {
     const graphAccount = { id: 'a1', email: 'a1@x', oauth2Transport: 'graph', oauth2AccessToken: 'tok' };
     primeStore({
       emails: [{ uid: 7, messageId: 'a@mock', subject: 'General', flags: [], from: { address: 'them@x' }, date: '2026-08-01T10:00:00Z' }],
@@ -381,8 +384,12 @@ describe('toggleFlagged', () => {
 
     expect(mockGraphSetFlagged).toHaveBeenCalledWith(expect.objectContaining({ id: 'a1' }), 'gid', true);
     expect(mockUpdateEmailFlags).not.toHaveBeenCalled();
-    // Graph is not an IMAP op — replayOps would only throw it away again.
-    expect(mockQueueOp).not.toHaveBeenCalled();
+    // Marked `graph` so replayOps sends it through Graph, never as IMAP.
+    expect(mockQueueOp).toHaveBeenCalledWith({
+      op: 'flag', accountId: 'a1', mailbox: 'INBOX', uids: [7],
+      arg: { flags: ['\\Flagged'], action: 'add', graph: true },
+    });
+    expect(mockClearOps).toHaveBeenCalledWith(expect.objectContaining({ uids: [7], arg: { flags: ['\\Flagged'], action: 'add', graph: true } }));
     expect(flagsOf(7)).toContain('\\Flagged');
   });
 });
@@ -399,6 +406,7 @@ describe('setSelectedFlagged', () => {
     });
 
     await useMailStore.getState().setSelectedFlagged(true);
+    await flagTailsSettled();
 
     expect(flagsOf(7)).toContain('\\Flagged');
     expect(flagsOf(3)).toContain('\\Flagged');
@@ -545,5 +553,172 @@ describe('the vault write', () => {
     } finally {
       mockVaultApplyFlags.mockReset().mockResolvedValue({ renamed: 0, mirrored: 0, index_patched: 0, sidecars_patched: 0 });
     }
+  });
+});
+
+// A bulk mark used to be one journal entry, one round trip and one clear per
+// message, serial and awaited by the click: 284 rows were 284 SELECT + STORE
+// pairs with the toolbar waiting, and every failure went to the console only.
+describe('bulk flags: one journal entry and one batch per folder', () => {
+  const IMPORT_UID = 0xC0000005;
+  const plain = (uid, extra = {}) => ({
+    uid, messageId: `m${uid}@mock`, subject: `m${uid}`, flags: [], from: { address: 'them@x' }, date: '2026-08-01T10:00:00Z', ...extra,
+  });
+  const graphAccount = { id: 'a1', email: 'a1@x', oauth2Transport: 'graph', oauth2AccessToken: 'tok' };
+
+  it('stars a folder\'s selection with one journal entry, one batch call and one clear', async () => {
+    primeStore({ emails: [plain(7), plain(8), plain(9)], selected: [7, 8, 9] });
+
+    await useMailStore.getState().setSelectedFlagged(true);
+    await flagTailsSettled();
+
+    const arg = { flags: ['\\Flagged'], action: 'add' };
+    expect(mockQueueOp).toHaveBeenCalledTimes(1);
+    expect(mockQueueOp).toHaveBeenCalledWith({ op: 'flag', accountId: 'a1', mailbox: 'INBOX', uids: [7, 8, 9], arg });
+    expect(mockUpdateEmailFlagsBatch).toHaveBeenCalledTimes(1);
+    expect(mockUpdateEmailFlagsBatch).toHaveBeenCalledWith(ACCOUNT, [7, 8, 9], ['\\Flagged'], 'add', 'INBOX');
+    expect(mockUpdateEmailFlags).not.toHaveBeenCalled();
+    expect(mockClearOps).toHaveBeenCalledTimes(1);
+    expect(mockClearOps).toHaveBeenCalledWith({ op: 'flag', accountId: 'a1', mailbox: 'INBOX', uids: [7, 8, 9], arg });
+  });
+
+  it('settles once the rows are painted and the journal written, before the server answers', async () => {
+    primeStore({ emails: [plain(7), plain(8)], selected: [7, 8] });
+    let land;
+    mockUpdateEmailFlagsBatch.mockImplementation((_a, uids) => new Promise(r => { land = () => r({ success: true, done: uids, skipped: [] }); }));
+
+    await useMailStore.getState().setSelectedFlagged(true);
+
+    expect(flagsOf(7)).toContain('\\Flagged');
+    expect(flagsOf(8)).toContain('\\Flagged');
+    expect(mockQueueOp).toHaveBeenCalledTimes(1);
+    expect(mockClearOps).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(land).toBeTypeOf('function'));
+    land();
+    await flagTailsSettled();
+    expect(mockClearOps).toHaveBeenCalledTimes(1);
+  });
+
+  it('a refused batch keeps its journal entry and says so once, as a warning that MailVault keeps trying', async () => {
+    primeStore({ emails: [plain(7), plain(8)], selected: [7, 8] });
+    mockUpdateEmailFlagsBatch.mockRejectedValue(new Error('NO server busy'));
+
+    await useMailStore.getState().setSelectedFlagged(true);
+    await flagTailsSettled();
+
+    expect(mockClearOps).not.toHaveBeenCalled();
+    const { error, errorType } = useMailStore.getState();
+    expect(error).toMatch(/server busy/);
+    expect(error).toMatch(/keeps trying/i);
+    expect(errorType).toBe('warning');
+  });
+
+  it('a mark nobody asked for (detachTail) says nothing when the server refuses it', async () => {
+    primeStore({ emails: [plain(7)] });
+    useMailStore.setState({ error: null });
+    mockUpdateEmailFlags.mockRejectedValue(new Error('boom'));
+
+    await applyFlagToTargets([{ account: ACCOUNT, accountId: 'a1', mailbox: 'INBOX', uid: 7 }], '\\Seen', true, { undoable: false, detachTail: true });
+    await flagTailsSettled();
+
+    expect(mockUpdateEmailFlags).toHaveBeenCalled();
+    expect(useMailStore.getState().error).toBeFalsy();
+  });
+
+  // A uid in the import range is a local-only mbox import filed into a server
+  // folder after a Graph to IMAP switch: no server holds it, and Outlook
+  // answers BAD for the whole set. Its vault copy still changes.
+  it('leaves an import-range uid out of the journal and the server write, and still writes its vault copy', async () => {
+    primeStore({ emails: [plain(7), plain(IMPORT_UID)], selected: [7, IMPORT_UID] });
+
+    await useMailStore.getState().setSelectedFlagged(true);
+    await flagTailsSettled();
+
+    expect(mockQueueOp).toHaveBeenCalledWith(expect.objectContaining({ uids: [7] }));
+    expect(mockUpdateEmailFlags).toHaveBeenCalledWith(ACCOUNT, 7, ['\\Flagged'], 'add', 'INBOX');
+    expect(mockUpdateEmailFlagsBatch).not.toHaveBeenCalled();
+    expect(mockVaultApplyFlags).toHaveBeenCalledWith('a1', 'INBOX', 'a1@x', [
+      { uid: 7, flags: ['\\Flagged'], on: true },
+      { uid: IMPORT_UID, flags: ['\\Flagged'], on: true },
+    ]);
+  });
+
+  it('a selection of import-range uids only touches the vault', async () => {
+    primeStore({ emails: [plain(IMPORT_UID)], selected: [IMPORT_UID] });
+
+    await useMailStore.getState().setSelectedFlagged(true);
+    await flagTailsSettled();
+
+    expect(mockQueueOp).not.toHaveBeenCalled();
+    expect(mockUpdateEmailFlags).not.toHaveBeenCalled();
+    expect(mockVaultApplyFlags).toHaveBeenCalled();
+  });
+
+  // The bulk modal ticks rows of the folder's whole cache, most of which the
+  // list never loaded. The key names the message; the vault copy is written
+  // like the server's.
+  it('writes the vault copy of a selected message whose row is not loaded', async () => {
+    primeStore({ emails: [plain(7)] });
+
+    await applyFlagToKeys([7, 99], '\\Flagged', true);
+    await flagTailsSettled();
+
+    expect(mockVaultApplyFlags).toHaveBeenCalledWith('a1', 'INBOX', 'a1@x', [
+      { uid: 7, flags: ['\\Flagged'], on: true },
+      { uid: 99, flags: ['\\Flagged'], on: true },
+    ]);
+  });
+
+  it('Graph: journals one entry per folder, sends at most four at a time, clears what landed', async () => {
+    const uids = [1, 2, 3, 4, 5, 6];
+    primeStore({ emails: uids.map(u => plain(u)), selected: uids, account: graphAccount });
+    graphId = 'gid';
+    let inFlight = 0;
+    let peak = 0;
+    mockGraphSetFlagged.mockImplementation(async () => {
+      inFlight++;
+      peak = Math.max(peak, inFlight);
+      await new Promise(r => setTimeout(r, 5));
+      inFlight--;
+    });
+
+    await useMailStore.getState().setSelectedFlagged(true);
+    await flagTailsSettled();
+
+    const arg = { flags: ['\\Flagged'], action: 'add', graph: true };
+    expect(mockQueueOp).toHaveBeenCalledTimes(1);
+    expect(mockQueueOp).toHaveBeenCalledWith({ op: 'flag', accountId: 'a1', mailbox: 'INBOX', uids, arg });
+    expect(mockGraphSetFlagged).toHaveBeenCalledTimes(6);
+    expect(peak).toBeGreaterThan(1);
+    expect(peak).toBeLessThanOrEqual(4);
+    expect(mockClearOps).toHaveBeenCalledWith({ op: 'flag', accountId: 'a1', mailbox: 'INBOX', uids, arg });
+    expect(mockUpdateEmailFlags).not.toHaveBeenCalled();
+    expect(mockUpdateEmailFlagsBatch).not.toHaveBeenCalled();
+  });
+
+  it('Graph: a message that failed stays journalled and is said once', async () => {
+    primeStore({ emails: [plain(1), plain(2)], selected: [1, 2], account: graphAccount });
+    graphId = 'gid';
+    let n = 0;
+    mockGraphSetFlagged.mockImplementation(async () => { if (++n === 2) throw new Error('429 throttled'); });
+
+    await useMailStore.getState().setSelectedFlagged(true);
+    await flagTailsSettled();
+
+    const cleared = mockClearOps.mock.calls.flatMap(c => c[0].uids);
+    expect(cleared).toHaveLength(1);
+    expect(useMailStore.getState().error).toMatch(/throttled/);
+  });
+
+  it('Graph offline: journalled for the replay, nothing sent', async () => {
+    primeStore({ emails: [plain(7)], account: graphAccount });
+    graphId = 'gid';
+    netOnline = false;
+
+    await toggleFlagged(7);
+    await flagTailsSettled();
+
+    expect(mockQueueOp).toHaveBeenCalledWith(expect.objectContaining({ uids: [7], arg: { flags: ['\\Flagged'], action: 'add', graph: true } }));
+    expect(mockGraphSetFlagged).not.toHaveBeenCalled();
   });
 });

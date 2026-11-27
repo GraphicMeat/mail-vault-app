@@ -22,6 +22,7 @@ if (!globalThis.window) {
 
 const mockMoveEmails = vi.fn();
 const mockUpdateEmailFlags = vi.fn().mockResolvedValue({ success: true, written: [] });
+const mockUpdateEmailFlagsBatch = vi.fn(async (_a, uids) => ({ success: true, written: [], done: uids, skipped: [] }));
 const mockFindMessageId = vi.fn();
 const mockGetLocalIndexEntry = vi.fn();
 const mockAppendLocalIndex = vi.fn().mockResolvedValue(undefined);
@@ -63,6 +64,7 @@ vi.mock('../../api', () => ({
   vaultApplyFlags: vi.fn().mockResolvedValue({ renamed: 0, mirrored: 0, index_patched: 0, sidecars_patched: 0 }),
   fetchEmailLight: (...a) => mockFetchEmailLight(...a),
   updateEmailFlags: (...a) => mockUpdateEmailFlags(...a),
+  updateEmailFlagsBatch: (...a) => mockUpdateEmailFlagsBatch(...a),
   graphSetRead: vi.fn().mockResolvedValue(undefined),
   graphSetFlagged: vi.fn().mockResolvedValue(undefined),
   graphMoveEmails: vi.fn().mockResolvedValue(undefined),
@@ -217,14 +219,18 @@ describe('a bulk flag change over search hits', () => {
       labelKey: 'undo.markedRead', labelParams: { count: 7 }, canUndo: true,
     });
 
-    mockUpdateEmailFlags.mockClear();
+    const { flagTailsSettled } = await import('../messageMutations');
+    await flagTailsSettled();
+    mockUpdateEmailFlagsBatch.mockClear();
     await useMailStore.getState().runUndo();
+    await flagTailsSettled();
 
-    // Only the seven this action moved go back to unread on the server ...
-    expect(mockUpdateEmailFlags.mock.calls.map(c => c[1]).sort((a, b) => a - b)).toEqual(CHANGED);
-    for (const call of mockUpdateEmailFlags.mock.calls) {
-      expect(call.slice(2)).toEqual([['\\Seen'], 'remove', 'Archive']);
-    }
+    // Only the seven this action moved go back to unread on the server, in one
+    // batch ...
+    expect(mockUpdateEmailFlagsBatch).toHaveBeenCalledTimes(1);
+    const [, uids, ...rest] = mockUpdateEmailFlagsBatch.mock.calls[0];
+    expect([...uids].sort((a, b) => a - b)).toEqual(CHANGED);
+    expect(rest).toEqual([['\\Seen'], 'remove', 'Archive']);
     // ... and on screen the three the user had already read are still read.
     await vi.waitFor(() => expect(CHANGED.every(uid => !searchRow(uid).flags.includes('\\Seen'))).toBe(true));
     for (const uid of ALREADY_READ) expect(searchRow(uid).flags).toContain('\\Seen');

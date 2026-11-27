@@ -340,6 +340,16 @@ export async function updateEmailFlags(account, uid, flags, action = 'add', mail
   });
 }
 
+/**
+ * One flag change for many uids of one folder: one SELECT and one
+ * `UID STORE` on the daemon's side. Resolves to
+ * `{ success, written, done: [uid], skipped: [uid] }`; `skipped` are
+ * import-range uids, never sent to the server.
+ */
+export async function updateEmailFlagsBatch(account, uids, flags, action = 'add', mailbox = 'INBOX') {
+  return tauriInvoke('imap_set_flags_batch', { account, mailbox, uids, flags, action });
+}
+
 // ── the daemon's delete queue (src-daemon/src/delete_queue.rs) ──
 //
 // The daemon journals a delete before it sends it, retries it on its own
