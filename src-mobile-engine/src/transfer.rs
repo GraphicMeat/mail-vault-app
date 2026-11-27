@@ -446,7 +446,7 @@ fn apply_settings(engine: &Engine, added: &[(String, &PhoneAccount)], global: Op
             if prefs::get_in(c, prefs::DESKTOP_SETTINGS_APPLIED_AT)?.is_some() {
                 return Ok(false);
             }
-            apply_global(c, global, added)?;
+            apply_global(c, global)?;
             let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as i64);
             put_in(c, prefs::DESKTOP_SETTINGS_APPLIED_AT, &now.to_string())?;
             Ok(true)
@@ -455,20 +455,44 @@ fn apply_settings(engine: &Engine, added: &[(String, &PhoneAccount)], global: Op
 }
 
 /// The desktop's folder colour picks (`{ "<address>|<path>": "#rrggbb" }`) as the phone keeps them
-/// (`{ "<account id>|<path>": "#rrggbb" }`): only the accounts added by this import, only a six
-/// digit hex colour, kept lowercase.
-fn phone_folder_colors(picks: &Value, added: &[(String, &PhoneAccount)]) -> serde_json::Map<String, Value> {
-    let mut out = serde_json::Map::new();
-    let Some(picks) = picks.as_object() else { return out };
+/// (`{ "<account id>|<path>": "#rrggbb" }`), for every account on the phone `accounts` lists as
+/// `(id, email)`, those this import added and those already here: only a six digit hex colour,
+/// kept lowercase. `kept` are the picks the phone already holds; they stay unless the desktop
+/// picked the same folder. The map is cut to what the phone stores ([`FOLDER_COLORS_MAX_BYTES`]),
+/// the desktop's picks first, so a big map keeps the picks that fit instead of none.
+fn phone_folder_colors(picks: &Value, accounts: &[(String, String)], kept: serde_json::Map<String, Value>) -> serde_json::Map<String, Value> {
+    let mut mapped = serde_json::Map::new();
+    let Some(picks) = picks.as_object() else { return kept };
     for (key, color) in picks {
         let Some((address, path)) = key.split_once('|') else { continue };
         let Some(color) = color.as_str().filter(|c| c.len() == 7 && c.starts_with('#') && c[1..].bytes().all(|b| b.is_ascii_hexdigit())) else { continue };
         if path.is_empty() {
             continue;
         }
-        if let Some((id, _)) = added.iter().find(|(_, a)| a.email.eq_ignore_ascii_case(address)) {
-            out.insert(format!("{id}|{path}"), json!(color.to_ascii_lowercase()));
+        if let Some((id, _)) = accounts.iter().find(|(_, email)| email.eq_ignore_ascii_case(address)) {
+            mapped.insert(format!("{id}|{path}"), json!(color.to_ascii_lowercase()));
         }
+    }
+    let mut out = serde_json::Map::new();
+    let mut bytes = 2; // the braces
+    for (key, color) in mapped {
+        let add = Value::String(key.clone()).to_string().len() + color.to_string().len() + 2; // `"key":"color",`, escapes counted
+        if bytes + add > crate::settings::FOLDER_COLORS_MAX_BYTES {
+            break;
+        }
+        bytes += add;
+        out.insert(key, color);
+    }
+    for (key, color) in kept {
+        if out.contains_key(&key) {
+            continue;
+        }
+        let add = Value::String(key.clone()).to_string().len() + color.to_string().len() + 2;
+        if bytes + add > crate::settings::FOLDER_COLORS_MAX_BYTES {
+            break;
+        }
+        bytes += add;
+        out.insert(key, color);
     }
     out
 }
@@ -521,7 +545,7 @@ fn phone_after_delete(desktop: &str) -> &'static str {
 }
 
 /// The desktop's global settings into the phone's preference rows, each through its own check.
-fn apply_global(c: &Connection, s: &PhoneSettings, added: &[(String, &PhoneAccount)]) -> rusqlite::Result<()> {
+fn apply_global(c: &Connection, s: &PhoneSettings) -> rusqlite::Result<()> {
     let mut values: Vec<(&str, Value)> = Vec::new();
     let mut text = |key: &'static str, v: &Option<String>| {
         if let Some(v) = v {
@@ -598,9 +622,19 @@ fn apply_global(c: &Connection, s: &PhoneSettings, added: &[(String, &PhoneAccou
         values.push(("quickActionsReader", json!(bar)));
     }
     // Folder colour picks arrive keyed by the account's address; they become the phone's own
-    // account ids, for the accounts this import added.
-    if let Some(picks) = s.folder_icon_colors.as_ref().map(|p| phone_folder_colors(p, added)).filter(|p| !p.is_empty()) {
-        values.push(("folderIconColors", Value::Object(picks)));
+    // account ids, for every account on the phone (the ones this import added and the ones already
+    // here), on top of the picks the phone already holds.
+    if let Some(picks) = s.folder_icon_colors.as_ref() {
+        let mut st = c.prepare("SELECT id, email FROM accounts")?;
+        let accounts = st.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?.collect::<Result<Vec<_>, _>>()?;
+        let kept = match prefs::get_in(c, "folderIconColors")?.and_then(|raw| serde_json::from_str::<Value>(&raw).ok()) {
+            Some(Value::Object(o)) => o,
+            _ => serde_json::Map::new(),
+        };
+        let picks = phone_folder_colors(picks, &accounts, kept);
+        if !picks.is_empty() {
+            values.push(("folderIconColors", Value::Object(picks)));
+        }
     }
     // The row wheel and selection bar, as the desktop keeps them (the page normalizes).
     if let Some(q) = &s.quick_actions {

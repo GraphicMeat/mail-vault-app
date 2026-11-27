@@ -1109,3 +1109,60 @@ fn reply_all_leaves_out_every_own_address() {
     assert_eq!(all["to"], "alice@example.com", "{all}");
     assert_eq!(all["cc"], "", "{all}");
 }
+
+impl Fixture {
+    /// A second account on the same mock server.
+    fn add_account(&self, server: &MockImap, email: &str) -> String {
+        let added = self
+            .engine
+            .rpc(
+                "mobile.accounts.add",
+                json!({ "email": email, "password": PASSWORD, "imapHost": server.host(), "imapPort": server.port(), "security": "none", "smtpHost": server.host(), "smtpPort": server.smtp_port(), "smtpSecurity": "starttls" }),
+            )
+            .unwrap();
+        assert_eq!(added["ok"], true, "{added}");
+        added["account"]["id"].as_str().unwrap().to_string()
+    }
+}
+
+/// A forwarded attachment's handle (`out/<dir>/<name>`) belongs to the cache, not to the account
+/// that prepared it: a forward re-homed to another account (the From pick) still sends it.
+#[test]
+fn a_forward_moved_to_another_account_still_sends_its_attachments() {
+    let server = MockImap::start(scenario());
+    let f = setup(&server);
+    let second = f.add_account(&server, "v@example.test");
+    let handle = f.pick("1111111111111111", "fwd.pdf", b"%PDF-1.4 forwarded");
+    let from = f.events.len();
+    let r = f
+        .engine
+        .rpc(
+            "mobile.compose.send",
+            json!({
+                "accountId": second, "to": "rcpt@example.test", "cc": "", "bcc": "", "subject": "Fwd: Plans", "text": "see attached",
+                "attachments": [{ "handle": handle, "mime": "application/pdf" }]
+            }),
+        )
+        .unwrap();
+    assert_eq!(r["state"], "queued", "{r}");
+    let done = f.events.send_result(from, r["id"].as_str().unwrap(), "sent");
+    assert_eq!(done["accountId"], second.as_str());
+    let sent = server.sent_messages();
+    assert_eq!(sent.len(), 1);
+    let raw = text(&sent[0]);
+    assert!(raw.contains("fwd.pdf"), "the forwarded file went out from the other account: {raw}");
+}
+
+/// Reply all leaves out the addresses of every account, not only the one it was prepared on, so a
+/// From pick that moves the compose to another account needs no recipient clean-up.
+#[test]
+fn reply_all_also_leaves_out_the_other_accounts_addresses() {
+    let server = MockImap::start(scenario());
+    let f = setup(&server);
+    f.sync();
+    // `bob@example.com` is a recipient of the original; here it is also the user's second account.
+    f.add_account(&server, "bob@example.com");
+    let all = f.prepare("replyAll", 1);
+    assert_eq!(all["to"], "alice@example.com", "{all}");
+    assert_eq!(all["cc"], "carol@example.com", "{all}");
+}

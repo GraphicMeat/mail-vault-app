@@ -753,9 +753,11 @@ fn quick_actions_stay_while_dropping_templates_is_enough_and_go_right_after() {
     let (accounts, mut s) = heavy(|i| json!({ "html": format!("<p>User {i}</p>"), "text": format!("User {i}") }), 0);
     s["quickActions"] = json!({ "defaults": { "row": { "noise": noise(77, 30_000) } } });
     let (d, b) = fit_of(&accounts, &s);
-    assert_eq!(d, Degrade::NoTemplates);
+    assert_eq!(d, Degrade::NoLayout, "dropping the layout is reported as the layout going, not as the templates");
     let got = b.settings.unwrap();
     assert!(got.quick_actions.is_none());
+    assert!(got.folder_icon_colors.is_none());
+    assert!(got.templates.is_none());
     assert_eq!(got.language.as_deref(), Some("de"));
 }
 
@@ -770,9 +772,8 @@ fn the_folder_icon_style_and_picks_are_carried_and_a_bad_shape_loses_only_that_s
     let got = b.settings.unwrap();
     assert_eq!(got.folder_icon_style.as_deref(), Some("theme"));
     assert_eq!(got.folder_icon_colors, Some(picks));
-    // Another shape, or too many picks for a code, loses only the picks.
-    let many: serde_json::Map<String, Value> = (0..2_000).map(|i| (format!("ann@example.test|F{i}"), json!("#ef4444"))).collect();
-    for bad in [json!(["a"]), json!("a"), Value::Object(many)] {
+    // Another shape loses only the picks.
+    for bad in [json!(["a"]), json!("a")] {
         s["folderIconColors"] = bad;
         let (b, _) = phone_bundle_with_settings(&json!([gmail_oauth()]), Some(&s));
         let got = b.settings.unwrap();
@@ -780,6 +781,27 @@ fn the_folder_icon_style_and_picks_are_carried_and_a_bad_shape_loses_only_that_s
         assert_eq!(got.folder_icon_style.as_deref(), Some("theme"));
         assert_eq!(got.language.as_deref(), Some("de"));
     }
+}
+
+#[test]
+fn too_many_or_too_long_picks_are_cut_to_what_the_phone_can_keep_not_dropped_whole() {
+    use super::settings::{MAX_FOLDER_COLORS, MAX_FOLDER_COLORS_BYTES};
+    let mut s = desktop_settings();
+    // Many picks: the first MAX_FOLDER_COLORS stay.
+    let many: serde_json::Map<String, Value> = (0..2_000).map(|i| (format!("ann@example.test|F{i}"), json!("#ef4444"))).collect();
+    s["folderIconColors"] = Value::Object(many);
+    let (b, _) = phone_bundle_with_settings(&json!([gmail_oauth()]), Some(&s));
+    let got = b.settings.unwrap();
+    let picks = got.folder_icon_colors.expect("the picks that fit stay");
+    assert_eq!(picks.as_object().unwrap().len(), MAX_FOLDER_COLORS);
+    // Few picks with very long folder paths: bounded by size, so the phone's own cap never rejects the map.
+    let long: serde_json::Map<String, Value> = (0..300).map(|i| (format!("ann@example.test|{}{i}", "x".repeat(110)), json!("#ef4444"))).collect();
+    s["folderIconColors"] = Value::Object(long);
+    let (b, _) = phone_bundle_with_settings(&json!([gmail_oauth()]), Some(&s));
+    let picks = b.settings.unwrap().folder_icon_colors.expect("the picks that fit stay");
+    let n = picks.as_object().unwrap().len();
+    assert!(n > 0 && n < 300, "{n}");
+    assert!(picks.to_string().len() <= MAX_FOLDER_COLORS_BYTES, "{}", picks.to_string().len());
 }
 
 // ── tags ────────────────────────────────────────────────────────────────────

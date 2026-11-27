@@ -7,8 +7,9 @@
 //! (the bundle has no `deny_unknown_fields`), an older desktop sends none.
 //!
 //! The QR code has room for a few frames of settings ([`SETTINGS_BUDGET_BYTES`]): when they do
-//! not fit, [`fit`] drops templates first, then images inline in signatures, then signatures,
-//! then the rest of the settings. Accounts and their secrets are never dropped for settings.
+//! not fit, [`fit`] drops templates first, then the quick action layout and folder colours
+//! ([`Degrade::NoLayout`]), then images inline in signatures, then signatures, then the rest of
+//! the settings. Accounts and their secrets are never dropped for settings.
 use super::PhoneBundle;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -171,7 +172,9 @@ pub struct PhoneSettings {
     pub folder_icon_style: Option<String>,
     /// Desktop's `folderIconColors` (`{ "<account>|<folder path>": "#rrggbb" }`) with each key's
     /// account named by its address, the one name both devices share (the desktop's account ids
-    /// mean nothing on the phone). An object of at most [`MAX_FOLDER_COLORS`] picks, else none.
+    /// mean nothing on the phone). An object; of more than [`MAX_FOLDER_COLORS`] picks or
+    /// [`MAX_FOLDER_COLORS_BYTES`] of JSON it keeps the first that fit (the phone refuses a
+    /// bigger map whole, so an import never ends with none).
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "lenient_object")]
     pub folder_icon_colors: Option<Value>,
     /// `aiSettings` when its provider is an endpoint ([`PhoneAiEndpoint`]).
@@ -268,6 +271,9 @@ impl PhoneAccountSettings {
 pub const MAX_TEMPLATES: usize = 50;
 /// The most folder colour picks a code carries.
 pub const MAX_FOLDER_COLORS: usize = 300;
+/// The most JSON bytes of folder colour picks a code carries. Under what the phone stores (32 KiB
+/// in its `folderIconColors` preference), with room for its account ids replacing the addresses.
+pub const MAX_FOLDER_COLORS_BYTES: usize = 24 * 1024;
 /// The most JSON bytes of the quick action configuration a code carries.
 pub const MAX_QUICK_ACTIONS_BYTES: usize = 32 * 1024;
 /// The most characters of one template body or signature html a code carries.
@@ -313,9 +319,7 @@ pub fn global_settings(v: Option<&Value>) -> Option<PhoneSettings> {
     if s.quick_actions.as_ref().is_some_and(|q| q.to_string().len() > MAX_QUICK_ACTIONS_BYTES) {
         s.quick_actions = None;
     }
-    if s.folder_icon_colors.as_ref().is_some_and(|c| c.as_object().is_none_or(|o| o.len() > MAX_FOLDER_COLORS)) {
-        s.folder_icon_colors = None;
-    }
+    s.folder_icon_colors = s.folder_icon_colors.take().and_then(fit_folder_colors);
     if let Some(t) = s.templates.as_mut() {
         t.truncate(MAX_TEMPLATES);
         for tpl in t.iter_mut() {
@@ -327,6 +331,24 @@ pub fn global_settings(v: Option<&Value>) -> Option<PhoneSettings> {
         }
     }
     (s != PhoneSettings::default()).then_some(s)
+}
+
+/// The picks of `colors` that fit a code: the first [`MAX_FOLDER_COLORS`] picks within
+/// [`MAX_FOLDER_COLORS_BYTES`] of JSON. `None` for anything but an object, or when no pick fits.
+fn fit_folder_colors(colors: Value) -> Option<Value> {
+    let Value::Object(all) = colors else { return None };
+    let mut kept = serde_json::Map::new();
+    let mut bytes = 2; // the braces
+    for (key, color) in all {
+        // `"key":"color",` as JSON writes it (escapes counted)
+        let add = Value::String(key.clone()).to_string().len() + color.to_string().len() + 2;
+        if kept.len() >= MAX_FOLDER_COLORS || bytes + add > MAX_FOLDER_COLORS_BYTES {
+            break;
+        }
+        bytes += add;
+        kept.insert(key, color);
+    }
+    (!kept.is_empty()).then_some(Value::Object(kept))
 }
 
 /// One account's settings from the desktop's account object: its `phoneSettings` block, with the
@@ -419,6 +441,8 @@ impl Write for Counter {
 pub enum Degrade {
     Full,
     NoTemplates,
+    /// The quick action layout and the folder colours went too (templates before them).
+    NoLayout,
     NoSignatureImages,
     NoSignatures,
     NoSettings,
@@ -426,7 +450,7 @@ pub enum Degrade {
 
 /// Cuts `bundle`'s settings until they fit the code's settings budget: deflated, they add at most
 /// [`SETTINGS_BUDGET_BYTES`]; inflated, at most [`SETTINGS_PLAIN_BYTES`]; and the whole code stays
-/// within [`super::MAX_FRAMES`]. Drops templates, then the quick action layout, then `data:` images in signatures, then
+/// within [`super::MAX_FRAMES`]. Drops templates, then the quick action layout and folder colours, then `data:` images in signatures, then
 /// signatures, then every setting. Never touches an account's sign-in. Deflates only (no
 /// sealing), so it is cheap.
 pub fn fit(bundle: &mut PhoneBundle) -> Degrade {
@@ -456,14 +480,14 @@ pub fn fit(bundle: &mut PhoneBundle) -> Degrade {
     if fits(bundle) {
         return Degrade::NoTemplates;
     }
-    // The quick action layout is next (still reported as the templates going: both are the
-    // person's own content, not a scalar).
+    // The quick action layout and the folder colours are next: the person's own content, not a
+    // scalar, and reported as what they are.
     if let Some(s) = bundle.settings.as_mut() {
         s.quick_actions = None;
         s.folder_icon_colors = None;
     }
     if fits(bundle) {
-        return Degrade::NoTemplates;
+        return Degrade::NoLayout;
     }
     for a in bundle.accounts.iter_mut() {
         if let Some(sig) = a.settings.as_mut().and_then(|s| s.signature.as_mut()) {

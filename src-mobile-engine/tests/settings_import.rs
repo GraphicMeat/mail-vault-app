@@ -461,6 +461,41 @@ fn the_folder_icon_style_and_picks_are_prefs_and_import_keyed_to_the_phone_accou
     assert_eq!(p["folderIconColors"], json!({ format!("{id}|Work"): "#ef4444" }));
 }
 
+#[test]
+fn desktop_folder_colours_reach_accounts_already_on_the_phone() {
+    let tmp = tempfile::tempdir().unwrap();
+    let e = open(tmp.path());
+    // The account is here first, from an import that carried no settings.
+    import(&e, &code(vec![imap("ann@example.test")], None));
+    let id = id_of(&e, "ann@example.test");
+    let mut s = desk_settings();
+    s.folder_icon_colors = Some(json!({
+        "ANN@example.test|Work": "#EF4444",
+        "gone@example.test|Work": "#00ff00",
+    }));
+    let r = import(&e, &code(vec![imap("ann@example.test")], Some(s)));
+    assert_eq!(r["imported"], json!([]), "{r}");
+    assert_eq!(r["existing"], json!(["ann@example.test"]), "{r}");
+    let p = e.rpc("mobile.prefs.get", json!({})).unwrap();
+    assert_eq!(p["folderIconColors"], json!({ format!("{id}|Work"): "#ef4444" }));
+}
+
+#[test]
+fn an_oversized_map_of_picks_keeps_what_fits_instead_of_dropping_every_pick() {
+    let tmp = tempfile::tempdir().unwrap();
+    let e = open(tmp.path());
+    let mut s = desk_settings();
+    let long: serde_json::Map<String, Value> =
+        (0..300).map(|i| (format!("ann@example.test|{}{i:03}", "x".repeat(110)), json!("#ef4444"))).collect();
+    s.folder_icon_colors = Some(Value::Object(long));
+    import(&e, &code(vec![imap("ann@example.test")], Some(s)));
+    let p = e.rpc("mobile.prefs.get", json!({})).unwrap();
+    let picks = p["folderIconColors"].as_object().expect("an object");
+    assert!(!picks.is_empty(), "an import never silently drops every pick");
+    assert!(picks.len() < 300, "{}", picks.len());
+    assert!(p["folderIconColors"].to_string().len() <= 32 * 1024);
+}
+
 /// Desktop's AI on an endpoint arrives as the phone's AI settings; never a key or a review (the
 /// bundle has neither), and a loopback URL (the desktop's own computer) not at all.
 #[test]

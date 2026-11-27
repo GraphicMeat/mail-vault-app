@@ -52,6 +52,9 @@ pub(crate) enum Kind {
     Num(&'static [f64]),
 }
 
+/// The most JSON bytes of `folderIconColors` the phone stores (a desktop import cuts its picks to this).
+pub(crate) const FOLDER_COLORS_MAX_BYTES: usize = 32 * 1024;
+
 /// What a swipe may do on the phone.
 pub(crate) const SWIPES: &[&str] = &["toggleRead", "delete", "flag", "move", "none"];
 /// Desktop's `TEXT_SCALES` (`src/utils/appFont.js`).
@@ -119,7 +122,7 @@ pub(crate) const PREFS: &[(&str, Kind, &str)] = &[
     // Folder glyph colours (desktop's `folderIconStyle` and `folderIconColors`, src/utils/folderIconColor.js):
     // one colour per kind of folder, or the theme's accent; picks are `{ "<account id>|<path>": "#rrggbb" }`.
     ("folderIconStyle", Kind::OneOf(&["colorful", "theme"]), "\"colorful\""),
-    ("folderIconColors", Kind::Object(32 * 1024), "{}"),
+    ("folderIconColors", Kind::Object(FOLDER_COLORS_MAX_BYTES), "{}"),
     // The phone showed every signature.
     ("signatureDisplay", Kind::OneOf(&["smart", "always-show", "always-hide", "collapsed"]), "\"always-show\""),
     // The phone's toolbar had icons only.
