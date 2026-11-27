@@ -1,5 +1,5 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { hasPremiumAccess, useSettingsStore } from '../stores/settingsStore';
 import { useAccountStore } from '../stores/accountStore';
 import { onboardingSteps } from './onboarding/steps.js';
@@ -108,6 +108,7 @@ export function Onboarding({ onOpenFaq, onComplete }) {
         <OnboardingScreen title={t('onboarding.premiumTitle')} className="onboarding-premium"
           primary={<Button variant="primary" size="lg" onClick={next} data-testid="onboarding-continue">
             {t('common.continue')}
+            <ArrowRight size={14} />
           </Button>}>
           <PremiumGallery />
         </OnboardingScreen>

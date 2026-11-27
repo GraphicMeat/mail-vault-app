@@ -23,6 +23,25 @@ describe('onboarding account step', () => {
     expect(strip.children).toHaveLength(4);
   });
 
+  // The step used to fill a third of the window. The picture beside the
+  // mechanisms draws the one claim people doubt: mail goes between their
+  // provider and this computer, with no MailVault server in that path.
+  it('draws where the mail goes, with no MailVault server in the path', () => {
+    render(<AccountStep onAdded={() => {}} />);
+    const map = screen.getByTestId('onboarding-data-map');
+    expect(map.textContent).toContain('This computer');
+    expect(map.textContent).toContain('Your mail provider');
+    expect(map.querySelector('[data-node="no-server"]').textContent).toContain('No MailVault server');
+  });
+
+  // Its title said nearly what the storage step's said ("Where your data
+  // lives" after "Where your mail lives"); it names what it is about now.
+  it('has a title of its own and a subtitle', () => {
+    render(<AccountStep onAdded={() => {}} />);
+    expect(screen.getByRole('heading', { level: 2 }).textContent).toBe('Your passwords and privacy');
+    expect(screen.getByText('Your mail travels straight between your provider and this computer.')).toBeTruthy();
+  });
+
   it('warns about the keychain prompt', () => {
     render(<AccountStep onAdded={() => {}} />);
     expect(screen.getByTestId('onboarding-keychain-notice').textContent).toMatch(/Always Allow/i);
