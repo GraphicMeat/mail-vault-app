@@ -3,7 +3,7 @@
 // no render per move) and, let go past a third of the width or in a flick, leaves through
 // `popTopLayer` (backStack.js), the same path as System Back, so Compose asks to save its draft
 // exactly as its Cancel does. Let go short, it springs back. The layer is the one Back would
-// close (`topLayerElement`), not the last dialog in the document. With no full-screen layer open
+// close (`topLayerElement`: the topmost layer that has an element), not the last dialog in the document. With no full-screen layer open
 // the same swipe pulls the folder drawer out under the finger: `onOpenDrawer` mounts it (without
 // its entrance animation) when the swipe is claimed, it follows the finger and either stays out
 // or goes back (`onCloseDrawer`). Neither commit ticks a haptic.

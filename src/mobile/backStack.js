@@ -69,13 +69,25 @@ export function useBackLayer(active, onClose, find = null) {
   useEffect(() => (active ? pushLayer(() => latest.current?.(), find) : undefined), [active]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
-/** The element of the layer Back would close now, or null when that layer has none (or none is open). */
+/**
+ * The element of the topmost layer that has one (a viewer, a search, settings), or null when none
+ * does (nothing open, or only sheets, pickers and modes). A layer without an element on top of it
+ * (an inline editor, an expanded dock) is what Back closes first; the swipe still moves the
+ * full-screen layer under it, which comes back when it stays.
+ */
 export function topLayerElement() {
-  const find = layers[layers.length - 1]?.find;
-  if (!find) return null;
-  if (typeof find === 'function') return find() || null;
-  const all = [...document.querySelectorAll(find)].filter((n) => !n.closest('.mv-overlay'));
-  return all[all.length - 1] || null;
+  for (let i = layers.length - 1; i >= 0; i--) {
+    const { find } = layers[i];
+    if (!find) continue;
+    if (typeof find === 'function') {
+      const el = find();
+      if (el) return el;
+      continue;
+    }
+    const all = [...document.querySelectorAll(find)].filter((n) => !n.closest('.mv-overlay'));
+    if (all.length) return all[all.length - 1];
+  }
+  return null;
 }
 
 /** Closes the top layer the way System Back does (the edge swipe's commit). False with none open. */

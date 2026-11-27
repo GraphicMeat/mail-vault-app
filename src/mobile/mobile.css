@@ -77,6 +77,9 @@ body {
   pointer-events: none;
 }
 .mv-app { display: flex; flex-direction: column; }
+/* The edge swipe (gestures/EdgeZone.jsx) has no strip to hold the touch: the page pans vertically only, so
+   WebKit never takes a horizontal drag for itself and cancels it. Inner horizontal scrollers keep their own. */
+.mv-app { touch-action: pan-y; }
 
 .mv-header {
   flex: none;

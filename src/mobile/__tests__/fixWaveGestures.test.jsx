@@ -69,6 +69,31 @@ describe('edge back picks the top back layer', () => {
     expect(closeSearch).not.toHaveBeenCalled();
   });
 
+  it('a layer without an element on top (an inline editor) does not turn the swipe into the drawer', async () => {
+    const closeViewer = vi.fn();
+    const closeInline = vi.fn();
+    const onOpenDrawer = vi.fn();
+    const r = render(
+      <div data-root>
+        <section role="dialog" aria-modal="true" aria-label="viewer" data-viewer />
+        <EdgeZone onOpenDrawer={onOpenDrawer} onCloseDrawer={vi.fn()} />
+      </div>,
+    );
+    const viewer = r.container.querySelector('[data-viewer]');
+    viewer.getBoundingClientRect = () => rect(400, 800);
+    releases.push(pushLayer(closeViewer, () => viewer));
+    releases.push(pushLayer(closeInline));
+    const root = r.container.querySelector('[data-root]');
+    down(root, 4); move(root, 40); move(root, 160);
+    expect(viewer.style.transform).toBe('translate3d(156px, 0, 0)');
+    up(root, 160);
+    // Back closes what is on top; the viewer under it comes back, still open.
+    await waitFor(() => expect(closeInline).toHaveBeenCalledTimes(1));
+    expect(closeViewer).not.toHaveBeenCalled();
+    expect(onOpenDrawer).not.toHaveBeenCalled();
+    await waitFor(() => expect(viewer.style.transform).toBe(''));
+  });
+
   it('records the layer the app registers by a selector too, and ignores layers inside a sheet', () => {
     const r = render(
       <div data-root>
