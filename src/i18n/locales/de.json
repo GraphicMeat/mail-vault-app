@@ -3943,6 +3943,7 @@
   "settings.storage.modeHintKeepRecent": "E-Mails aus dem gewählten Zeitraum werden geladen und auf diesem Computer behalten. Ältere Kopien können hier entfernt werden; der Server behält seine Kopie. Die Volltextsuche in entfernten E-Mails braucht indexierte Nachrichtentexte.",
   "settings.storage.modeHintIndexOnly": "E-Mails aus dem gewählten Zeitraum werden geladen, für die Suche indexiert und dann von diesem Computer entfernt. Beim Öffnen erscheint sofort die Vorschau, während die ganze Nachricht lädt. Die Volltextsuche in entfernten E-Mails braucht indexierte Nachrichtentexte.",
   "settings.storage.modeHintHoarder": "Lädt alle Ordner und den gesamten Verlauf im Hintergrund herunter, etwa 1.000 MB pro Tag und Konto oder den Rest Ihres täglichen Download-Limits, wenn dieses Limit aktiv ist. Nichts wird automatisch entfernt, und die Kopien bleiben erhalten, wenn E-Mails vom Server gelöscht werden. Es sind Arbeitskopien, die „Cache leeren“ entfernt. Um E-Mails dauerhaft zu behalten, nutzen Sie Archivieren oder ein Backup.",
+  "settings.storage.legendIndexed": "Indexiert, dann hier entfernt",
   "settings.storage.hoarderOrBackup": "Sammler oder Backup?",
   "settings.storage.hoarderOrBackupHoarder": "Schnell und offline: alle Ordner und der gesamte Verlauf liegen als Arbeitskopien auf diesem Computer. „Cache leeren“ entfernt sie.",
   "settings.storage.hoarderOrBackupArchiveTitle": "Archiv und Backup",

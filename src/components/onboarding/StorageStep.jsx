@@ -73,7 +73,7 @@ export function StorageStep({ onContinue, onBusyChange }) {
         <p className="text-xs text-mail-text-muted">{t('onboarding.storageModeHint')}</p>
         {/* No upgrade button mid-tour: the upsell text still explains Hoarder,
             and Premium is two steps ahead. */}
-        <DownloadModeControl />
+        <DownloadModeControl variant="cards" />
       </section>
 
     </div>

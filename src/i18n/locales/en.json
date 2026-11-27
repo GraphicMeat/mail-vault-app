@@ -3947,6 +3947,7 @@
   "settings.storage.modeHintKeepRecent": "Mail from the chosen period is downloaded and kept on this computer. Older copies may be removed here; the server keeps its copy. Full-text search of removed mail needs message bodies indexed.",
   "settings.storage.modeHintIndexOnly": "Mail from the chosen period is downloaded, indexed for search, then removed from this computer. Opening a message shows its preview at once while the full message downloads. Full-text search of removed mail needs message bodies indexed.",
   "settings.storage.modeHintHoarder": "Downloads every folder and all history in the background, about 1,000 MB a day per account, or what is left of your daily download limit when that limit is on. Nothing is removed automatically, and copies stay after mail is deleted from the server. These are working copies that Clear Cache removes. To keep mail for good, use Archive or a backup.",
+  "settings.storage.legendIndexed": "Indexed, then removed here",
   "settings.storage.hoarderOrBackup": "Hoarder or backup?",
   "settings.storage.hoarderOrBackupHoarder": "Fast and offline: every folder and all history on this computer as working copies. Clear Cache removes them.",
   "settings.storage.hoarderOrBackupArchiveTitle": "Archive and backup",

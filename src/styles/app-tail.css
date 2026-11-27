@@ -331,6 +331,18 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--mail-accent-fi
 .onboarding-storage-grid > [data-testid="storage-row-mode"] { grid-column: 2; grid-row: 1 / span 2; }
 .onboarding-storage-grid > :only-child, .onboarding-storage-grid > [data-testid="storage-row-backup"]:first-child { grid-column: 1; }
 .onboarding-storage-grid .settings-section { margin: 0; padding: 12px 14px; }
+/* Storage: the mode info sits on the card's heading line, not alone above the choice. */
+.onboarding-storage [data-testid="storage-row-mode"] { position: relative; }
+.onboarding-storage [data-testid="download-mode"] > :first-child { position: absolute; top: 10px; right: 12px; }
+.download-mode-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.download-mode-picture { display: flex; flex-direction: column; gap: 4px; height: 46px; padding: 6px; border-radius: 7px; background: var(--mail-bg); }
+.download-mode-picture > i, .download-mode-legend i { flex: 1; border-radius: 2px; }
+.download-mode-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 11px; color: var(--mail-text-muted); }
+.download-mode-legend > span { display: inline-flex; align-items: center; gap: 6px; }
+.download-mode-legend i { flex: none; width: 16px; height: 6px; }
+.download-mode-picture > i[data-keep="kept"], .download-mode-legend i[data-keep="kept"] { background: var(--mail-accent); }
+.download-mode-picture > i[data-keep="indexed"], .download-mode-legend i[data-keep="indexed"] { background: transparent; border: 1px solid var(--mail-accent); }
+.download-mode-picture > i[data-keep="none"], .download-mode-legend i[data-keep="none"] { background: transparent; border: 1px dashed var(--mail-border); }
 
 /* Appearance: tabs as one segmented control, controls left, preview right. */
 .onboarding-appearance .settings-tabbed-page { flex: 1; min-height: 0; display: flex; flex-direction: column; }
@@ -469,7 +481,9 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--mail-accent-fi
   .onboarding-footer { min-height: 52px; padding: 8px 0; }
   .onboarding-choice-hint, .onboarding-habit-copy > span { display: none; }
   .onboarding-appearance-controls { gap: 10px; }
-  .onboarding-pic, .onboarding-after-delete-picture { display: none; }
+  .onboarding-pic, .onboarding-after-delete-picture, .download-mode-picture, .download-mode-legend { display: none; }
+  /* Storage: the notes under the mode go first; the choices stay. */
+  .onboarding-storage [data-testid="download-mode"] > p.text-xs, .onboarding-storage [data-testid="storage-row-mail"] p.text-xs, .onboarding-storage [data-testid="storage-row-backup"] > p.text-xs.text-mail-text-muted { display: none; }
   .onboarding-cta .onboarding-thankyou-art, .onboarding-cta [data-testid="onboarding-reviews"] { display: none; }
   .onboarding-habit-row { padding: 8px 12px; }
   .onboarding-free-sample { display: none; }
@@ -487,7 +501,11 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--mail-accent-fi
   .onboarding-free-sample { display: none; }
   .onboarding-account-grid { grid-template-columns: minmax(0, 1fr); }
   .onboarding-data-map { display: none; }
-  .onboarding-storage-grid { grid-template-columns: minmax(0, 1fr); }
+  .download-mode-picture, .download-mode-legend { display: none; }
+  /* One column of three cards can outgrow a small window: the cards keep their
+     height and the body scrolls, rather than one card sliding under the next. */
+  .onboarding-storage-grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; flex: none; }
+  .onboarding-storage .onboarding-screen-body { overflow-y: auto; }
   .onboarding-storage-grid > [data-testid="storage-row-mode"] { grid-column: 1; grid-row: auto; }
 }
 

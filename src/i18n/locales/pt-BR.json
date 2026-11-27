@@ -3943,6 +3943,7 @@
   "settings.storage.modeHintKeepRecent": "Os e-mails do período escolhido são baixados e guardados neste computador. Cópias mais antigas podem ser removidas daqui; o servidor mantém a cópia dele. Buscar no texto de e-mails removidos exige indexar o corpo das mensagens.",
   "settings.storage.modeHintIndexOnly": "Os e-mails do período escolhido são baixados, indexados para a busca e depois removidos deste computador. Ao abrir uma mensagem, a prévia aparece na hora enquanto a mensagem completa é baixada. Buscar no texto de e-mails removidos exige indexar o corpo das mensagens.",
   "settings.storage.modeHintHoarder": "Baixa todas as pastas e todo o histórico em segundo plano, cerca de 1.000 MB por dia por conta, ou o que restar do seu limite diário de download quando esse limite está ativado. Nada é removido automaticamente, e as cópias permanecem depois que os e-mails são excluídos do servidor. São cópias de trabalho que Limpar cache remove. Para guardar e-mails de forma permanente, use Arquivar ou um backup.",
+  "settings.storage.legendIndexed": "Indexado e depois removido daqui",
   "settings.storage.hoarderOrBackup": "Acumulador ou backup?",
   "settings.storage.hoarderOrBackupHoarder": "Rápido e offline: todas as pastas e todo o histórico neste computador como cópias de trabalho. Limpar cache as remove.",
   "settings.storage.hoarderOrBackupArchiveTitle": "Arquivo e backup",

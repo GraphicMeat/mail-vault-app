@@ -3943,6 +3943,7 @@
   "settings.storage.modeHintKeepRecent": "선택한 기간의 메일을 다운로드해 이 컴퓨터에 보관합니다. 그보다 오래된 사본은 여기서 삭제될 수 있으며 서버의 사본은 남습니다. 삭제된 메일의 전체 텍스트 검색에는 본문 색인이 필요합니다.",
   "settings.storage.modeHintIndexOnly": "선택한 기간의 메일을 다운로드하고 검색용으로 색인한 뒤 이 컴퓨터에서 삭제합니다. 메시지를 열면 미리보기가 바로 표시되고 그동안 전체 메시지를 다운로드합니다. 삭제된 메일의 전체 텍스트 검색에는 본문 색인이 필요합니다.",
   "settings.storage.modeHintHoarder": "모든 폴더와 전체 기록을 백그라운드에서 계정당 하루 약 1,000 MB씩 다운로드하며, 일일 다운로드 한도를 켜 두었다면 그중 남은 양만큼 받습니다. 자동으로 삭제되는 것은 없고, 서버에서 메일을 삭제해도 사본은 남습니다. 이 사본은 작업용이며 캐시 지우기로 삭제됩니다. 메일을 영구히 보관하려면 보관 또는 백업을 사용하세요.",
+  "settings.storage.legendIndexed": "색인 후 여기서 삭제",
   "settings.storage.hoarderOrBackup": "'모두 보관'과 백업의 차이",
   "settings.storage.hoarderOrBackupHoarder": "빠르고 오프라인에서도 쓸 수 있습니다. 모든 폴더와 전체 기록이 작업용 사본으로 이 컴퓨터에 저장됩니다. 캐시 지우기로 삭제됩니다.",
   "settings.storage.hoarderOrBackupArchiveTitle": "보관과 백업",

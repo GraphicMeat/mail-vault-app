@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { SegmentedChoice } from '../ui/SegmentedChoice';
+import { ChoiceCards } from '../ui/ChoiceCards';
 import { Button } from '../ui/Button';
 import { InfoPopover } from '../ui/InfoPopover';
 import { useSettingsStore, hasPremiumAccess, FETCH_MODES } from '../../stores/settingsStore';
@@ -18,6 +19,18 @@ const MODE_HINT = {
   indexOnly: 'settings.storage.modeHintIndexOnly',
   hoarder: 'settings.storage.modeHintHoarder',
 };
+// What each mode keeps on this computer, newest message on top: kept (the
+// whole message), indexed (searchable, the body removed) or not kept.
+const KEEPS = {
+  onDemand: ['none', 'none', 'none', 'none'],
+  keepRecent: ['kept', 'kept', 'none', 'none'],
+  indexOnly: ['indexed', 'indexed', 'none', 'none'],
+  hoarder: ['kept', 'kept', 'kept', 'kept'],
+};
+const ModePicture = ({ mode }) => <span className="download-mode-picture" data-mode-picture={mode} aria-hidden="true">
+  {KEEPS[mode].map((keep, i) => <i key={i} data-keep={keep} />)}
+</span>;
+
 const WINDOWS = [[1, 'settings.storage.mo1'], [3, 'settings.storage.mo3'], [6, 'settings.storage.mo6'], [12, 'settings.storage.year1']];
 
 /**
@@ -26,7 +39,11 @@ const WINDOWS = [[1, 'settings.storage.mo1'], [3, 'settings.storage.mo3'], [6, '
  * `accountId` it is that account's override ("Use default" clears it), and the
  * window, which is global, is left to the default's control.
  */
-export function DownloadModeControl({ accountId = null, onUpgrade }) {
+/**
+ * `variant="cards"` (onboarding): each mode a card with a picture of what it
+ * keeps here; Settings keeps the segmented control. Same `choose`, same gate.
+ */
+export function DownloadModeControl({ accountId = null, onUpgrade, variant = 'segmented' }) {
   const t = useT();
   const premium = useSettingsStore(s => hasPremiumAccess(s.billingProfile));
   const defaultMode = useSettingsStore(s => s.fetchMode) || 'keepRecent';
@@ -79,7 +96,15 @@ export function DownloadModeControl({ accountId = null, onUpgrade }) {
           </ul>
         </InfoPopover>
       </div>
-      <SegmentedChoice label={t('settings.storage.downloadMode')} options={options} value={value} onChange={choose} />
+      {variant === 'cards' ? <>
+        <ChoiceCards label={t('settings.storage.downloadMode')} value={value} onChange={choose} className="download-mode-cards"
+          options={options.map(option => ({ ...option, preview: FETCH_MODES.includes(option.value) ? <ModePicture mode={option.value} /> : null }))} />
+        <p className="download-mode-legend" data-testid="download-mode-legend" aria-hidden="true">
+          <span><i data-keep="kept" />{t('sidebar.onThisComputer')}</span>
+          <span><i data-keep="indexed" />{t('settings.storage.legendIndexed')}</span>
+          <span><i data-keep="none" />{t('list.serverOnly')}</span>
+        </p>
+      </> : <SegmentedChoice label={t('settings.storage.downloadMode')} options={options} value={value} onChange={choose} />}
       <p className="text-sm text-mail-text-muted">{t(MODE_HINT[mode])}</p>
 
       {!accountId && (mode === 'keepRecent' || mode === 'indexOnly') && (

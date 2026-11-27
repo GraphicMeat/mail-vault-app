@@ -188,4 +188,34 @@ describe('Clear Cache copy (Part C)', () => {
     expect(text).toMatch(/Archived emails are preserved/);
     expect(text).not.toMatch(/\u2014/);
   });
+
+  // Onboarding draws each mode as a card with a picture of what stays on this
+  // computer; Settings keeps the segmented control. Same setting, same gate.
+  describe('cards variant', () => {
+    // The keep-window picker is segmented in both; the mode group is the one named Download mode.
+    const modeGroup = () => screen.getByRole('radiogroup', { name: t('settings.storage.downloadMode') });
+    it('Settings keeps the segmented control', () => {
+      render(<DownloadModeControl />);
+      expect(modeGroup().classList.contains('segmented-choice')).toBe(true);
+      expect(screen.getByTestId('download-mode').querySelector('.choice-cards')).toBeNull();
+    });
+
+    it('draws each mode as a card with its picture', () => {
+      render(<DownloadModeControl variant="cards" />);
+      const mode = screen.getByTestId('download-mode');
+      expect(modeGroup().classList.contains('choice-cards')).toBe(true);
+      for (const m of ['onDemand', 'keepRecent', 'indexOnly', 'hoarder']) {
+        expect(mode.querySelector(`[data-mode-picture="${m}"]`), m).toBeTruthy();
+      }
+      fireEvent.click(radio(t('settings.storage.modeOnDemand')));
+      expect(useSettingsStore.getState().fetchMode).toBe('onDemand');
+    });
+
+    it('still holds Hoarder behind Premium', () => {
+      render(<DownloadModeControl variant="cards" />);
+      fireEvent.click(hoarder());
+      expect(useSettingsStore.getState().fetchMode).toBe('keepRecent');
+      expect(screen.getByTestId('download-mode-upsell')).toBeTruthy();
+    });
+  });
 });

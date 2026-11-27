@@ -3943,6 +3943,7 @@
   "settings.storage.modeHintKeepRecent": "下载所选时间段内的邮件并保存在这台电脑上。更早的副本可能会从这里移除，服务器上的副本仍保留。要全文搜索已移除的邮件，需要为邮件正文建立索引。",
   "settings.storage.modeHintIndexOnly": "下载所选时间段内的邮件，为搜索建立索引后从这台电脑移除。打开邮件时会立即显示预览，同时下载完整邮件。要全文搜索已移除的邮件，需要为邮件正文建立索引。",
   "settings.storage.modeHintHoarder": "在后台下载所有文件夹和全部历史邮件，每个账户每天约 1,000 MB；如果开启了每日下载限额，则以当天剩余额度为准。不会自动删除任何内容，即使邮件已从服务器删除，副本也会保留。这些是工作副本，清空缓存会将其删除。若要永久保留邮件，请使用归档或备份。",
+  "settings.storage.legendIndexed": "建立索引后从这里移除",
   "settings.storage.hoarderOrBackup": "“全部保存”还是备份？",
   "settings.storage.hoarderOrBackupHoarder": "速度快，可离线使用：所有文件夹和全部历史邮件都以工作副本的形式保存在这台电脑上。清空缓存会将其删除。",
   "settings.storage.hoarderOrBackupArchiveTitle": "归档与备份",

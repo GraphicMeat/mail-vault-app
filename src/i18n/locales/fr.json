@@ -3943,6 +3943,7 @@
   "settings.storage.modeHintKeepRecent": "Le courrier de la période choisie est téléchargé et conservé sur cet ordinateur. Les copies plus anciennes peuvent être supprimées ici ; le serveur garde sa copie. La recherche en texte intégral du courrier supprimé exige l'indexation du corps des messages.",
   "settings.storage.modeHintIndexOnly": "Le courrier de la période choisie est téléchargé, indexé pour la recherche, puis supprimé de cet ordinateur. À l'ouverture, l'aperçu s'affiche aussitôt pendant le téléchargement du message complet. La recherche en texte intégral du courrier supprimé exige l'indexation du corps des messages.",
   "settings.storage.modeHintHoarder": "Télécharge tous les dossiers et tout l'historique en arrière-plan, environ 1 000 Mo par jour et par compte, ou ce qu'il reste de votre limite quotidienne de téléchargement lorsqu'elle est activée. Rien n'est supprimé automatiquement, et les copies restent même après la suppression des e-mails sur le serveur. Ce sont des copies de travail que Vider le cache supprime. Pour conserver vos e-mails durablement, utilisez Archiver ou une sauvegarde.",
+  "settings.storage.legendIndexed": "Indexé, puis retiré d'ici",
   "settings.storage.hoarderOrBackup": "Collectionneur ou sauvegarde ?",
   "settings.storage.hoarderOrBackupHoarder": "Rapide et hors ligne : tous les dossiers et tout l'historique sur cet ordinateur, en copies de travail. Vider le cache les supprime.",
   "settings.storage.hoarderOrBackupArchiveTitle": "Archive et sauvegarde",
