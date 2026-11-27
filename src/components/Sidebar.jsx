@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback, useRef, memo } from 'react';
+import React, { useState, useMemo, useEffect, useLayoutEffect, useCallback, useRef, memo } from 'react';
 import '../styles/sidebar-navigation.css';
 import { Dialog } from './ui/Dialog';
 import { Button } from './ui/Button';
@@ -388,6 +388,23 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   const hoverTimerRef = useRef(null);
   const hoverCloseTimerRef = useRef(null);
   const hoverRowRefs = useRef({});
+  // Picking an account closes the folder list under the previous one. When
+  // that list sits above the picked row, the row would jump up by its height;
+  // shift the scroll by the same amount so the row stays under the pointer.
+  const navScrollRef = useRef(null);
+  const pickAnchorRef = useRef(null);
+  const anchorPickedRow = accountId => {
+    const el = hoverRowRefs.current[accountId];
+    pickAnchorRef.current = el ? { accountId, top: el.getBoundingClientRect().top } : null;
+  };
+  useLayoutEffect(() => {
+    const anchor = pickAnchorRef.current;
+    pickAnchorRef.current = null;
+    if (!anchor || anchor.accountId !== activeAccountId) return;
+    const el = hoverRowRefs.current[anchor.accountId];
+    const scroller = navScrollRef.current;
+    if (el && scroller) scroller.scrollTop += el.getBoundingClientRect().top - anchor.top;
+  }, [activeAccountId]);
 
   const clearHoverTimer = useCallback(() => {
     if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
@@ -953,6 +970,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         onActivateInbox={() => { if (chooser) closeChooser(); activateInbox(account.id); }}
         onActivate={() => {
           if (chooser) closeChooser();
+          else if (nested) anchorPickedRow(account.id);
           const lastMailbox = useSettingsStore.getState().getLastMailbox(account.id);
           openMailFolder(account.id, lastMailbox || 'INBOX');
         }}
@@ -1027,7 +1045,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         </button>
       </div>
 
-      <div className="sidebar-navigation-scroll" data-sidebar-layout={sidebarLayout}>
+      <div ref={navScrollRef} className="sidebar-navigation-scroll" data-sidebar-layout={sidebarLayout}>
         <button
           type="button"
           data-testid="sidebar-scheduled-btn"

@@ -209,6 +209,21 @@ describe('Sidebar layouts', () => {
       expect(within(selector()).getByTestId('folder-row').dataset.path).toBe('INBOX');
     });
 
+    it('keeps a picked account under the pointer while the folders above it close', () => {
+      useSettingsStore.setState({ sidebarLayout: 'nested' });
+      const { container } = render(<Sidebar />);
+      const scroller = container.querySelector('.sidebar-navigation-scroll');
+      Object.defineProperty(scroller, 'scrollTop', { value: 1000, writable: true, configurable: true });
+      const wrapper = row('Personal').parentElement;
+      let top = 600;
+      wrapper.getBoundingClientRect = () => ({ top, bottom: top + 40, left: 0, right: 256, height: 40, width: 256 });
+      fireEvent.click(screen.getByRole('button', { name: 'Personal, personal@example.com' }));
+      // Studio's folder list above Personal closes: Personal would jump 480px up.
+      top = 120;
+      act(() => useMailStore.setState({ activeAccountId: 'personal', mailboxes: [{ name: 'INBOX', path: 'INBOX' }] }));
+      expect(scroller.scrollTop).toBe(520);
+    });
+
     it('opens the All Inboxes folders below the All Inboxes row', () => {
       useSettingsStore.setState({ sidebarLayout: 'nested' });
       useMailStore.setState({ unifiedInbox: true, unifiedFolder: 'INBOX' });
