@@ -692,7 +692,7 @@ describe('the Drafts folder in the app', () => {
     // Each row has its delete, as on the drafts screen.
     expect(within(block).getByRole('button', { name: t('mobile.drafts.delete', { subject: 'Draft d1' }) })).toBeTruthy();
     fireEvent.click(within(block).getByText('Draft d1'));
-    await waitFor(() => expect(document.querySelector('.mv-compose__from')?.textContent).toBe('a1@example.test'));
+    await waitFor(() => expect(document.querySelector('[data-mv-from-chip] .mv-compose__from-address')?.textContent).toBe('a1@example.test'));
     expect(callsOf('mobile.drafts.get')).toEqual([{ id: 'd1' }]);
   });
 
