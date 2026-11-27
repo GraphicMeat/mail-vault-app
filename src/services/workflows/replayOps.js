@@ -125,7 +125,7 @@ export async function replayOps({ reason = 'launch' } = {}) {
   const errors = [];
 
   for (const entry of ops) {
-    const { op, accountId, mailbox, uids, arg } = entry;
+    const { id, op, accountId, mailbox, uids, arg } = entry;
     if (!op || !accountId || !mailbox || !uids?.length) continue;
 
     const account = accounts.find((a) => a.id === accountId);
@@ -134,7 +134,7 @@ export async function replayOps({ reason = 'launch' } = {}) {
     // carrying it. A Graph flag the live path journalled (`arg.graph`) is the
     // one Graph op replayed, through the Graph write and its id ladder.
     if (!account || (graph && !(op === 'flag' && arg?.graph))) {
-      await db.clearOps({ op, accountId, mailbox, uids, arg });
+      await db.clearOps({ id, op, accountId, mailbox, uids, arg });
       await showQueuedRows(entry);
       continue;
     }
@@ -149,12 +149,12 @@ export async function replayOps({ reason = 'launch' } = {}) {
       kept += owed.length;
       for (const uid of owed) db.noteOpFailure({ op, accountId, mailbox, uid }, error);
       if (owed.length) errors.push(`purge ${mailbox}/${owed.join(',')}: ${error}`);
-      if (landed.length) await db.clearOps({ op, accountId, mailbox, uids: landed, arg });
+      if (landed.length) await db.clearOps({ id, op, accountId, mailbox, uids: landed, arg });
       // Refused for good: off the queue and back in the list, its reason kept
       // (after the clear, which drops reasons) for the entry's message list.
       if (dropped.length) {
         const uidsDropped = dropped.map((d) => d.uid);
-        await db.clearOps({ op, accountId, mailbox, uids: uidsDropped, arg });
+        await db.clearOps({ id, op, accountId, mailbox, uids: uidsDropped, arg });
         for (const d of dropped) db.noteOpFailure({ op, accountId, mailbox, uid: d.uid }, d.error);
         errors.push(`purge ${mailbox}/${uidsDropped.join(',')}: refused`);
         await showQueuedRows(entry, uidsDropped);
@@ -191,8 +191,21 @@ export async function replayOps({ reason = 'launch' } = {}) {
       try {
         const res = await api.updateEmailFlagsBatch(fresh, owed, arg?.flags, arg?.action, mailbox);
         if (res && res.success === false) throw new Error(res.error || 'flag batch refused');
-        ok += owed.length;
-        answered.push(...owed);
+        // `done` and `skipped` (import-range, never sent) are answered, as on
+        // the live path; a uid in neither did not land and stays owed.
+        const said = Array.isArray(res?.done) ? new Set([...res.done, ...(res.skipped || [])].map(Number)) : null;
+        const landed = said ? owed.filter((uid) => said.has(Number(uid))) : owed;
+        const missed = said ? owed.filter((uid) => !said.has(Number(uid))) : [];
+        ok += landed.length;
+        answered.push(...landed);
+        if (missed.length) {
+          const message = 'errors.flagNotConfirmed';
+          failed += missed.length;
+          kept += missed.length;
+          errors.push(`${op} ${mailbox}/${missed.join(',')}: not confirmed`);
+          log(`[replayOps] ${account.email} ${op} ${mailbox} uids ${missed.join(',')} not confirmed by the server`);
+          for (const uid of missed) db.noteOpFailure({ op, accountId, mailbox, uid }, message);
+        }
       } catch (e) {
         const message = String(e?.message || e);
         failed += owed.length;
@@ -234,7 +247,7 @@ export async function replayOps({ reason = 'launch' } = {}) {
         kept++;
       }
     }
-    if (answered.length) await db.clearOps({ op, accountId, mailbox, uids: answered, arg });
+    if (answered.length) await db.clearOps({ id, op, accountId, mailbox, uids: answered, arg });
 
     if (removed.length) {
       // Prune the header sidecar too, or the row comes straight back.

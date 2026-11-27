@@ -72,6 +72,17 @@ describe('clearOps', () => {
     expect(invoke.mock.calls[0][1].arg).toEqual({ flags: ['\\Seen'], action: 'add' });
   });
 
+  // Two entries can share op, account, mailbox and arg (a mark-read, its undo,
+  // and the same mark-read again). The id names the one entry this clear is
+  // for, so it never empties the other's uids.
+  it('names the entry by id when given one', async () => {
+    await clearOps({ id: 12, op: 'flag', accountId: 'acct1', mailbox: 'INBOX', uids: [7], arg: { flags: ['\\Seen'], action: 'add' } });
+
+    expect(invoke).toHaveBeenCalledWith('op_journal_clear', {
+      id: 12, op: 'flag', accountId: 'acct1', mailbox: 'INBOX', uids: [7], arg: { flags: ['\\Seen'], action: 'add' },
+    });
+  });
+
   it('defaults arg to an empty object — the shape a delete was queued with', async () => {
     await clearOps({ op: 'delete', accountId: 'acct1', mailbox: 'INBOX', uids: [1] });
 

@@ -141,7 +141,7 @@ describe('replayOps', () => {
     await replayOps();
 
     expect(mockUpdateEmailFlags).toHaveBeenCalledWith(ACCOUNT, 3, ['\\Seen'], 'add', 'INBOX');
-    expect(mockClearOps).toHaveBeenCalledWith({ op: 'flag', accountId: 'acct1', mailbox: 'INBOX', uids: [3], arg: { flags: ['\\Seen'], action: 'add' } });
+    expect(mockClearOps).toHaveBeenCalledWith({ id: 1, op: 'flag', accountId: 'acct1', mailbox: 'INBOX', uids: [3], arg: { flags: ['\\Seen'], action: 'add' } });
     // A flag removes no uid, so nothing is pruned — but the row on screen still
     // paints the old state, so the open folder is reloaded.
     expect(mockSaveEmailHeaders).not.toHaveBeenCalled();
@@ -154,7 +154,7 @@ describe('replayOps', () => {
     await replayOps();
 
     expect(mockMoveEmails).toHaveBeenCalledWith(ACCOUNT, [5], 'INBOX', 'Archive');
-    expect(mockClearOps).toHaveBeenCalledWith({ op: 'move', accountId: 'acct1', mailbox: 'INBOX', uids: [5], arg: { target: 'Archive' } });
+    expect(mockClearOps).toHaveBeenCalledWith({ id: 1, op: 'move', accountId: 'acct1', mailbox: 'INBOX', uids: [5], arg: { target: 'Archive' } });
     expect(mockSaveEmailHeaders).toHaveBeenCalledWith('acct1', 'INBOX', [], null, { removedUids: [5] });
     // A move is not this app deleting the server copy — the message still exists.
     expect(mockMarkServerDeleted).not.toHaveBeenCalled();
@@ -218,7 +218,7 @@ describe('replayOps', () => {
     await replayOps();
 
     expect(mockMoveEmails).not.toHaveBeenCalled();
-    expect(mockClearOps).toHaveBeenCalledWith({ op: 'move', accountId: 'vanished', mailbox: 'INBOX', uids: [7], arg: { target: 'Archive' } });
+    expect(mockClearOps).toHaveBeenCalledWith({ id: 1, op: 'move', accountId: 'vanished', mailbox: 'INBOX', uids: [7], arg: { target: 'Archive' } });
     expect(mockShowQueued).toHaveBeenCalledWith(expect.objectContaining({ accountId: 'vanished', uids: [7] }));
   });
 
@@ -240,7 +240,7 @@ describe('replayOps', () => {
 
     expect(mockReplayPurge).toHaveBeenCalledWith(purge);
     expect(mockDeleteQueueSubmit).not.toHaveBeenCalled();
-    expect(mockClearOps).toHaveBeenCalledWith({ op: 'purge', accountId: 'acct1', mailbox: 'INBOX', uids: [7], arg: purge.arg });
+    expect(mockClearOps).toHaveBeenCalledWith({ id: 1, op: 'purge', accountId: 'acct1', mailbox: 'INBOX', uids: [7], arg: purge.arg });
     expect(mockNoteOpFailure).toHaveBeenCalledWith({ op: 'purge', accountId: 'acct1', mailbox: 'INBOX', uid: 8 }, 'NO try later');
     expect(result).toMatchObject({ attempted: 2, done: 1, kept: 1 });
     expect(mockRemind).toHaveBeenCalledWith(1);
@@ -253,7 +253,7 @@ describe('replayOps', () => {
 
     const result = await replayOps();
 
-    expect(mockClearOps).toHaveBeenCalledWith({ op: 'purge', accountId: 'acct1', mailbox: 'INBOX', uids: [7], arg: purge.arg });
+    expect(mockClearOps).toHaveBeenCalledWith({ id: 1, op: 'purge', accountId: 'acct1', mailbox: 'INBOX', uids: [7], arg: purge.arg });
     expect(mockNoteOpFailure).toHaveBeenCalledWith({ op: 'purge', accountId: 'acct1', mailbox: 'INBOX', uid: 7 }, 'errors.bulkIdentityChanged');
     expect(mockShowQueued).toHaveBeenCalledWith(purge, [7]);
     expect(result).toMatchObject({ attempted: 2, done: 0, kept: 1 });
@@ -284,7 +284,7 @@ describe('replayOps', () => {
     const result = await replayOps();
 
     expect(mockMoveEmails).not.toHaveBeenCalled();
-    expect(mockClearOps).toHaveBeenCalledWith({ op: 'move', accountId: 'acct1', mailbox: 'INBOX', uids: [IMPORT], arg: { target: 'Archive' } });
+    expect(mockClearOps).toHaveBeenCalledWith({ id: 1, op: 'move', accountId: 'acct1', mailbox: 'INBOX', uids: [IMPORT], arg: { target: 'Archive' } });
     expect(mockSaveEmailHeaders).not.toHaveBeenCalled();
     expect(result).toMatchObject({ kept: 0, failed: 0 });
   });
@@ -298,8 +298,33 @@ describe('replayOps', () => {
     expect(mockUpdateEmailFlagsBatch).toHaveBeenCalledTimes(1);
     expect(mockUpdateEmailFlagsBatch).toHaveBeenCalledWith(ACCOUNT, [3, 4, 5], ['\\Flagged'], 'add', 'INBOX');
     expect(mockUpdateEmailFlags).not.toHaveBeenCalled();
-    expect(mockClearOps).toHaveBeenCalledWith({ op: 'flag', accountId: 'acct1', mailbox: 'INBOX', uids: [3, 4, 5], arg });
+    expect(mockClearOps).toHaveBeenCalledWith({ id: 1, op: 'flag', accountId: 'acct1', mailbox: 'INBOX', uids: [3, 4, 5], arg });
     expect(result).toMatchObject({ attempted: 3, done: 3, kept: 0 });
+  });
+
+  // The batch answers per uid: `done` landed, `skipped` is import-range and
+  // never sent. A uid in neither did not land and stays owed, as on the live
+  // path, or the next replay has nothing left to send for it.
+  it('clears only the uids a flag batch answered, and keeps the rest owed', async () => {
+    const arg = { flags: ['\\Seen'], action: 'add' };
+    mockReadOps.mockResolvedValue([entry({ op: 'flag', uids: [3, 4, 5], arg })]);
+    mockUpdateEmailFlagsBatch.mockResolvedValueOnce({ success: true, done: [3], skipped: [4] });
+
+    const result = await replayOps();
+
+    expect(mockClearOps).toHaveBeenCalledTimes(1);
+    expect(mockClearOps).toHaveBeenCalledWith({ id: 1, op: 'flag', accountId: 'acct1', mailbox: 'INBOX', uids: [3, 4], arg });
+    expect(mockNoteOpFailure).toHaveBeenCalledWith({ op: 'flag', accountId: 'acct1', mailbox: 'INBOX', uid: 5 }, expect.any(String));
+    expect(result).toMatchObject({ attempted: 3, done: 2, failed: 1, kept: 1 });
+  });
+
+  it('clears by the entry\'s id, so another entry with the same arg keeps its uids', async () => {
+    const arg = { flags: ['\\Seen'], action: 'add' };
+    mockReadOps.mockResolvedValue([entry({ id: 41, op: 'flag', uids: [3, 4], arg })]);
+
+    await replayOps();
+
+    expect(mockClearOps).toHaveBeenCalledWith({ id: 41, op: 'flag', accountId: 'acct1', mailbox: 'INBOX', uids: [3, 4], arg });
   });
 
   it('keeps every uid of a refused flag batch', async () => {
@@ -327,7 +352,7 @@ describe('replayOps', () => {
       expect(mockSetFlagOnServer).toHaveBeenCalledWith(GRAPH, 'acct1', 'INBOX', 3, ['\\Seen'], 'add');
       expect(mockSetFlagOnServer).toHaveBeenCalledWith(GRAPH, 'acct1', 'INBOX', 4, ['\\Seen'], 'add');
       expect(mockUpdateEmailFlags).not.toHaveBeenCalled();
-      expect(mockClearOps).toHaveBeenCalledWith({ op: 'flag', accountId: 'acct1', mailbox: 'INBOX', uids: [3, 4], arg });
+      expect(mockClearOps).toHaveBeenCalledWith({ id: 1, op: 'flag', accountId: 'acct1', mailbox: 'INBOX', uids: [3, 4], arg });
       expect(result).toMatchObject({ done: 2, kept: 0 });
     });
 
@@ -350,7 +375,7 @@ describe('replayOps', () => {
 
       expect(mockMoveEmails).not.toHaveBeenCalled();
       expect(mockSetFlagOnServer).not.toHaveBeenCalled();
-      expect(mockClearOps).toHaveBeenCalledWith({ op: 'move', accountId: 'acct1', mailbox: 'INBOX', uids: [3], arg: { target: 'Archive' } });
+      expect(mockClearOps).toHaveBeenCalledWith({ id: 1, op: 'move', accountId: 'acct1', mailbox: 'INBOX', uids: [3], arg: { target: 'Archive' } });
     });
   });
 

@@ -1455,7 +1455,13 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
         const uids = new Set(args.uids || []);
         for (let index = journal.length - 1; index >= 0; index -= 1) {
           const entry = journal[index];
-          if (entry.op === args.op && entry.accountId === args.accountId && entry.mailbox === args.mailbox && entry.uids?.some(uid => uids.has(uid))) journal.splice(index, 1);
+          // An `id` names the one entry; without it, every entry of the op,
+          // account and folder (the daemon also matches the arg).
+          const named = args.id != null ? entry.id === args.id
+            : entry.op === args.op && entry.accountId === args.accountId && entry.mailbox === args.mailbox;
+          if (!named || !entry.uids?.some(uid => uids.has(uid))) continue;
+          entry.uids = entry.uids.filter(uid => !uids.has(uid));
+          if (!entry.uids.length) journal.splice(index, 1);
         }
         emit('demo:state', { type: 'journal' });
         return null;

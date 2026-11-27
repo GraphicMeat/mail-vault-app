@@ -38,12 +38,18 @@ export async function queueOp({ op, accountId, mailbox, uids, arg = {} }) {
  * per (flag, action), so a star and a mark-read on the same message are two
  * entries under one (op, account, mailbox, uid). Clearing without it emptied
  * both, and the one that had NOT been sent was silently dropped.
+ *
+ * `id` (what queueOp answered, or a read entry's own) names the one entry to
+ * clear. Pass it whenever it is known: two entries can share op, account,
+ * mailbox AND arg (a mark-read, its undo, the same mark-read again), and a
+ * clear by arg alone empties the later one's uids too, leaving a refused
+ * change nothing to retry.
  */
-export async function clearOps({ op, accountId, mailbox, uids, arg = {} }) {
+export async function clearOps({ id = null, op, accountId, mailbox, uids, arg = {} }) {
   if (!op || !accountId || !mailbox || !uids?.length) return;
   for (const uid of uids) _failures.delete(failureKey({ op, accountId, mailbox, uid }));
   try {
-    await send('op_journal_clear', { op, accountId, mailbox, uids, arg });
+    await send('op_journal_clear', { ...(id != null ? { id } : {}), op, accountId, mailbox, uids, arg });
   } catch (e) {
     console.warn('[db] Could not clear journal op:', op, e);
   }

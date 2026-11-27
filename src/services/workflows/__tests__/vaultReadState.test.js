@@ -105,6 +105,7 @@ vi.mock('../../safeStorage', () => ({
 const { useMailStore } = await import('../../../stores/mailStore');
 await import('../bindStoreActions');
 const { invalidateChatAndThreadCaches } = await import('../../../stores/slices/messageListSlice');
+const { flagTailsSettled } = await import('../messageMutations');
 import { _selKey, selectionKey } from '../../../stores/slices/unifiedHelpers';
 
 const ACCOUNT = { id: 'acct1', email: 'me@mock.test' };
@@ -219,6 +220,7 @@ describe('marking a vault-only row read from the unified list', () => {
     mockUpdateEmailFlags.mockRejectedValueOnce(new Error('no such message'));
 
     await useMailStore.getState().markSelectedAsRead();
+    await flagTailsSettled();
 
     expect(rowSeen()).toBe(true);
     expect(mockVaultApplyFlags).toHaveBeenCalled();

@@ -2504,7 +2504,9 @@ async function _persistVaultFlags(useMailStore, accountId, mailbox, uids, flag, 
     }
     if (!changes.length) return;
     const accountEmail = s.accounts?.find(a => a.id === accountId)?.email || null;
-    await api.vaultApplyFlags(accountId, mailbox, accountEmail, changes);
+    // Chained per folder, reserved now: a change and its undo write the same
+    // vault files, and the undo's must not land first.
+    await _chainOn(_vaultTails, [`${accountId}|${mailbox}`], () => api.vaultApplyFlags(accountId, mailbox, accountEmail, changes));
     // The index the views count from is patched with the vault copy, and the
     // count asked for at the repaint may have run before this landed.
     viewCountsStale();
@@ -2631,24 +2633,61 @@ async function _eachBounded(items, limit, run) {
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
 }
 
-// The server halves of flag changes, chained per (account, folder) so a
-// change and its undo land in the order asked, while a long bulk tail in one
-// folder never holds up a single toggle in another.
+// The three halves of a flag change that reach the daemon, each chained per
+// (account, folder) so a change and its undo land in the order asked, while a
+// long bulk tail in one folder never holds up a single toggle in another:
+// - `_flagTails`: the server writes.
+// - `_journalTails`: the journal writes. Replay sends the oldest entry first,
+//   so the undo's entry must be written after the change's.
+// - `_vaultTails`: the vault writes, so the undo's never lands under the
+//   change's.
+// A slot is reserved synchronously, before the call's first await, so an undo
+// pressed while the change is still writing always queues behind it.
 const _flagTails = new Map();
+const _journalTails = new Map();
+const _vaultTails = new Map();
 
-function _chainFlagTail(folderKeys, run) {
-  const tail = Promise.all(folderKeys.map(k => _flagTails.get(k))).then(run);
-  const settled = tail.catch(() => {});
-  for (const k of folderKeys) _flagTails.set(k, settled);
-  settled.then(() => {
-    for (const k of folderKeys) if (_flagTails.get(k) === settled) _flagTails.delete(k);
-  });
-  return tail;
+// Run `run` once every earlier link of `folderKeys` in `tails` has settled
+// (resolved or failed: one failure never stalls the folder). With nothing
+// ahead it starts at once, synchronously, as an unchained call would.
+function _startNow(run) {
+  try {
+    return Promise.resolve(run());
+  } catch (e) {
+    return Promise.reject(e);
+  }
 }
 
-/** Resolves once every flag server half started so far has finished. */
-export function flagTailsSettled() {
-  return Promise.all([..._flagTails.values()]);
+function _chainOn(tails, folderKeys, run) {
+  const ahead = folderKeys.map(k => tails.get(k)).filter(Boolean);
+  const link = ahead.length ? Promise.all(ahead).then(run) : _startNow(run);
+  const settled = link.catch(() => {});
+  for (const k of folderKeys) tails.set(k, settled);
+  settled.then(() => {
+    for (const k of folderKeys) if (tails.get(k) === settled) tails.delete(k);
+  });
+  return link;
+}
+
+const _chainFlagTail = (folderKeys, run) => _chainOn(_flagTails, folderKeys, run);
+
+/**
+ * Forget every chain, for tests only: a case that parks a daemon write for
+ * ever would otherwise hold every later case's writes to that folder.
+ */
+export function _resetFlagChains() {
+  _flagTails.clear();
+  _journalTails.clear();
+  _vaultTails.clear();
+}
+
+/** Resolves once every flag server half (and vault and journal write) started so far has finished. */
+export async function flagTailsSettled() {
+  // A server half waits on its journal write, so one pass can miss nothing
+  // started before this call; loop in case a settled link started another.
+  while (_flagTails.size || _journalTails.size || _vaultTails.size) {
+    await Promise.all([..._flagTails.values(), ..._journalTails.values(), ..._vaultTails.values()]);
+  }
 }
 
 // Send each group's flag change; clear what landed from the journal. Never
@@ -2674,7 +2713,7 @@ async function _sendFlagGroups(groups) {
         }
       });
       const landed = uids.filter((_, i) => landedAt.has(i));
-      if (landed.length) await db.clearOps({ op: 'flag', accountId, mailbox, uids: landed, arg });
+      if (landed.length) await db.clearOps({ id: g.journalId, op: 'flag', accountId, mailbox, uids: landed, arg });
       if (misses) failed.push({ count: misses, error, journalled: g.journalled });
       continue;
     }
@@ -2686,10 +2725,16 @@ async function _sendFlagGroups(groups) {
         const res = await api.updateEmailFlagsBatch(account, uids, arg.flags, arg.action, mailbox);
         if (res && res.success === false) throw new Error(res.error || 'flag batch refused');
         // `done` and `skipped` (import-range, never sent) are answered; a uid
-        // in neither stays owed.
+        // in neither stays owed, and is said as not changed yet.
         if (Array.isArray(res?.done)) answered = [...res.done, ...(res.skipped || [])];
       }
-      await db.clearOps({ op: 'flag', accountId, mailbox, uids: answered, arg });
+      if (answered.length) await db.clearOps({ id: g.journalId, op: 'flag', accountId, mailbox, uids: answered, arg });
+      const said = new Set(answered.map(Number));
+      const owed = uids.filter(uid => !said.has(Number(uid)));
+      if (owed.length) {
+        console.warn(`[applyFlag] ${arg.flags} ${arg.action}: ${owed.length} of ${uids.length} not confirmed for ${accountId}/${mailbox}, left in the journal`);
+        failed.push({ count: owed.length, error: new Error('errors.flagNotConfirmed'), journalled: g.journalled });
+      }
     } catch (e) {
       console.error(`[applyFlag] ${arg.flags} ${arg.action} failed for ${accountId}/${mailbox} (${uids.length}), left in the journal:`, e);
       failed.push({ count: uids.length, error: e, journalled: g.journalled });
@@ -2729,10 +2774,12 @@ function _reportFlagFailures(useMailStore, failed) {
  * reason, and says once that MailVault keeps trying. A Graph entry carries
  * `graph: true`, which is how replayOps knows to send it through Graph.
  *
- * A change to more than one message settles once the rows, the vault and the
- * journal are written; its server half runs behind it. Server halves of one
- * folder run one at a time, in order (flagTailsSettled), so a change and its
- * undo cannot reach the server in the wrong order.
+ * A change settles once the rows are painted and the journal is written; the
+ * vault write and the server half run behind it, and a server failure is still
+ * said in the error banner. Journal, vault and server writes of one folder each
+ * run one at a time, in order (flagTailsSettled), so a change and its undo
+ * cannot land in the wrong order anywhere, and a single toggle never waits on
+ * another call's bulk server half.
  *
  * `targets` are already-resolved locations: [{ account, accountId, mailbox, uid }].
  * A target with `named: true` names its folder from the vault itself (a Notes
@@ -2870,24 +2917,34 @@ export async function applyFlagToTargets(targets, flag, on, { undoable = true, d
     }
     if (!groups.size) return;
 
-    // The journal before the server, awaited here: a reload between the two
-    // must not lose the intent, and only success clears it (replayOps sends
-    // whatever is left, offline or refused).
-    for (const g of groups.values()) {
-      g.journalled = (await db.queueOp({ op: 'flag', accountId: g.accountId, mailbox: g.mailbox, uids: g.uids, arg: g.arg })) != null;
-    }
-
+    // Both slots are reserved here, before the first await, so an undo
+    // pressed while this change is still journalling queues behind it.
+    //
+    // The journal before the server: a reload between the two must not lose
+    // the intent, and only success clears it (replayOps sends whatever is
+    // left, offline or refused). Journal writes of one folder run one at a
+    // time, in order: replay sends the oldest entry first.
+    const keys = [...groups.keys()];
+    const journalled = _chainOn(_journalTails, keys, async () => {
+      for (const g of groups.values()) {
+        // The id names this entry to its clear: a later change with the same
+        // arg is another entry, and must keep its uids.
+        g.journalId = await db.queueOp({ op: 'flag', accountId: g.accountId, mailbox: g.mailbox, uids: g.uids, arg: g.arg });
+        g.journalled = g.journalId != null;
+      }
+    });
     // One server half per folder at a time, in the order they were asked for:
-    // a bulk mark still in flight and its undo must not race to the server.
-    const tail = _chainFlagTail([...groups.keys()], () => _sendFlagGroups([...groups.values()]));
+    // a change still in flight and its undo must not race to the server.
+    const tail = _chainFlagTail(keys, async () => {
+      await journalled;
+      return _sendFlagGroups([...groups.values()]);
+    });
     const report = (failed) => { if (!detachTail) _reportFlagFailures(useMailStore, failed); };
-    // A bulk change settles once its rows, vault and journal are written; the
-    // server half runs behind it and reports into the error banner.
-    if (targets.length > 1) {
-      tail.then(report).catch(e => console.warn('[applyFlag] server half failed:', e));
-      return;
-    }
-    report(await tail);
+    // The call settles once its rows are painted and its journal written; the
+    // server half runs behind it and reports into the error banner. A single
+    // toggle too: it must not wait on another call's bulk tail in its folder.
+    tail.then(report).catch(e => console.warn('[applyFlag] server half failed:', e));
+    await journalled;
   };
 
   if (!detachTail) return finish();
@@ -3189,7 +3246,8 @@ async function _nativePurge(originalScope, { onProgress, panel } = {}) {
   // Graph and vault-only folders are not journalled: replayOps cannot act on
   // either, so those keep the restore-on-failure contract below.
   const journal = _purgeJournal(targets.map(target => hintsById.get(_targetId(target))), live);
-  await Promise.all(journal.map(entry => db.queueOp(entry)));
+  // Each entry's id names it to its own clear (another purge can share its arg).
+  const journalIds = await Promise.all(journal.map(entry => db.queueOp(entry)));
   const journalled = new Set(journal.flatMap(entry => entry.uids.map(uid => _targetId({ ...entry, uid }))));
   const hidden = _hideDeleted(store, targets, { keys: consumedKeys });
   await pruneSearchResults(targets.map(({ accountId, mailbox, uid }) => ({ accountId, mailbox, uid })));
@@ -3312,10 +3370,10 @@ async function _nativePurge(originalScope, { onProgress, panel } = {}) {
   // Everything not still owed is answered: landed, or refused and put back.
   // A refused one keeps its reason (after the clear, which drops reasons) so
   // Settings does not list it among the deleted while the rest are owed.
-  await Promise.all(journal.map(async entry => {
+  await Promise.all(journal.map(async (entry, i) => {
     const answered = entry.uids.filter(uid => !queued.has(_targetId({ ...entry, uid })));
     if (!answered.length) return;
-    await db.clearOps({ ...entry, uids: answered });
+    await db.clearOps({ ...entry, id: journalIds[i], uids: answered });
     for (const uid of answered) {
       const outcome = outcomes.get(originalTargetId(hintsById.get(_targetId({ ...entry, uid }))));
       if (!_purgeLanded(outcome)) db.noteOpFailure({ op: 'purge', accountId: entry.accountId, mailbox: entry.mailbox, uid }, outcome?.lastError || 'errors.bulkIdentityUncertain');
@@ -3579,7 +3637,8 @@ export async function bulkDeleteFromServer(scope) {
       const generation = _hintedGeneration(hintsById, entry);
       return { ...entry, arg: { ..._queuedList(entry, live), mode: 'permanent', ...(generation ? { uidValidity: generation } : {}) } };
     });
-  await Promise.all(journal.map(entry => db.queueOp(entry)));
+  // Each entry's id names it to its own clear (another purge can share its arg).
+  const journalIds = await Promise.all(journal.map(entry => db.queueOp(entry)));
   _hideDeleted(store, targets, { keys: scope.keys });
   let operation;
   let failure;
@@ -3596,14 +3655,14 @@ export async function bulkDeleteFromServer(scope) {
     .flatMap(g => g.uids.map(uid => _targetId({ ...g, uid }))));
   const owedIds = new Set();
   const message = String(failure?.message || failure || run?.lastError || 'errors.bulkWorkerUnavailable');
-  await Promise.all(journal.map(entry => {
+  await Promise.all(journal.map((entry, i) => {
     const landed = clean ? entry.uids : entry.uids.filter(uid => removed.has(_targetId({ ...entry, uid })));
     for (const uid of entry.uids) {
       if (landed.includes(uid)) continue;
       owedIds.add(_targetId({ ...entry, uid }));
       db.noteOpFailure({ ...entry, uid }, message);
     }
-    return landed.length ? db.clearOps({ ...entry, uids: landed }) : null;
+    return landed.length ? db.clearOps({ ...entry, id: journalIds[i], uids: landed }) : null;
   }));
   // Owed rows keep their tombstones; everything else shows again from the
   // reload, which paints what the server kept.
@@ -3731,6 +3790,7 @@ export async function moveEmails(keys, targetMailbox) {
       ...extra,
     });
     let journalled = false;
+    let journalId = null;
     try {
       if (isGraphAccount(account)) {
         // Addressed by a per-session message id, not a replayable uid: a
@@ -3745,17 +3805,18 @@ export async function moveEmails(keys, targetMailbox) {
       // Same ordering as every other mutation: the journal is written before the
       // round trip (the rows are about to leave the list, so a reload or a quit
       // in between must not lose the intent) and cleared only after it.
-      journalled = (await db.queueOp({ op: 'move', accountId: group.accountId, mailbox: group.mailbox, uids: group.uids, arg: { target: targetMailbox } })) != null;
+      journalId = await db.queueOp({ op: 'move', accountId: group.accountId, mailbox: group.mailbox, uids: group.uids, arg: { target: targetMailbox } });
+      journalled = journalId != null;
       if (!useConnectivityStore.getState().online) {
         console.log(`[moveEmails] offline — ${group.mailbox} → ${targetMailbox} journalled, replayOps will finish it`);
-        records.push(record(null, { deferred: true }));
+        records.push(record(null, { deferred: true, journalId }));
         doneGroups.push(group);
         tally.completed += group.uids.length;
         paintMove(true);
         continue;
       }
       const res = await api.moveEmails(account, group.uids, group.mailbox, targetMailbox);
-      await db.clearOps({ op: 'move', accountId: group.accountId, mailbox: group.mailbox, uids: group.uids, arg: { target: targetMailbox } });
+      await db.clearOps({ id: journalId, op: 'move', accountId: group.accountId, mailbox: group.mailbox, uids: group.uids, arg: { target: targetMailbox } });
       // Moved, so the uid a follow-up reminder pinned on it names nothing now.
       void dismissFollowUpsAt(group.uids.map(uid => ({ accountId: group.accountId, mailbox: group.mailbox, uid }))).catch(() => {});
       // Null when the server reported no COPYUID (no UIDPLUS) — never a guess.
@@ -3899,7 +3960,7 @@ async function _undoMove(records) {
       // Never sent: forgetting the journal entry IS the undo. The rows come back
       // through the reload below — they were only hidden locally.
       if (r.deferred) {
-        await db.clearOps({ op: 'move', accountId: r.accountId, mailbox: r.from, uids: r.srcUids, arg: { target: r.to } });
+        await db.clearOps({ id: r.journalId, op: 'move', accountId: r.accountId, mailbox: r.from, uids: r.srcUids, arg: { target: r.to } });
         // The message never left: its uid is live again.
         _liftTombstones(useMailStore, r);
         continue;

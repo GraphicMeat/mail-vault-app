@@ -84,9 +84,11 @@ async function proveRecount({ cold }) {
     applySeenLocally(useMailStore, { accountId: 'acct-1', mailbox: 'INBOX', uid, read: true });
   }
   expect(useMailStore.getState().emails.map(row => row.flags)).toEqual([['\\Seen'], ['\\Seen']]);
-  expect(native.send.mock.calls.filter(([command]) => command === 'vault_apply_flags')).toEqual([
+  // Vault writes of one folder run one at a time, in order: the second waits
+  // for the first to finish.
+  const vaultWrites = () => native.send.mock.calls.filter(([command]) => command === 'vault_apply_flags');
+  expect(vaultWrites()).toEqual([
     ['vault_apply_flags', { accountId: 'acct-1', mailbox: 'INBOX', accountEmail: 'me@mock.test', changes: [{ uid: 1, flags: ['\\Seen'], on: true }] }],
-    ['vault_apply_flags', { accountId: 'acct-1', mailbox: 'INBOX', accountEmail: 'me@mock.test', changes: [{ uid: 2, flags: ['\\Seen'], on: true }] }],
   ]);
   await vi.dynamicImportSettled();
   if (cold) {
@@ -104,7 +106,13 @@ async function proveRecount({ cold }) {
 
   // The first count saw the old index. Completing the native writes must
   // request a fresh count, and the two completions must share one timer.
-  completeWrites.forEach(complete => complete());
+  completeWrites[0]();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(vaultWrites()).toEqual([
+    ['vault_apply_flags', { accountId: 'acct-1', mailbox: 'INBOX', accountEmail: 'me@mock.test', changes: [{ uid: 1, flags: ['\\Seen'], on: true }] }],
+    ['vault_apply_flags', { accountId: 'acct-1', mailbox: 'INBOX', accountEmail: 'me@mock.test', changes: [{ uid: 2, flags: ['\\Seen'], on: true }] }],
+  ]);
+  completeWrites[1]();
   await vi.dynamicImportSettled();
   expect([...persisted]).toEqual([1, 2]);
   await vi.advanceTimersByTimeAsync(599);

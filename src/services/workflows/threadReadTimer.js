@@ -83,10 +83,12 @@ export async function startThreadReadTimer(threadId, email) {
   };
   // Not undoable: setUndo replaces the one undo slot, so a message marking
   // itself would silently withdraw whatever offer was live (a delete's).
+  // Detached, like the single reader's (selectEmail): a mark nobody asked for
+  // keeps its server half off the click path and out of the error banner.
   const mark = async () => {
     if (!viewIsCurrent()) return;
     try {
-      await applyFlagToKeys([selKey], '\\Seen', true, { undoable: false });
+      await applyFlagToKeys([selKey], '\\Seen', true, { undoable: false, detachTail: true });
     } catch (e) {
       console.warn('[threadReadTimer] Mark as read failed:', e);
     }

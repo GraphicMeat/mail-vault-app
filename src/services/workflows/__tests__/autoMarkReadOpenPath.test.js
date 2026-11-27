@@ -189,6 +189,7 @@ const { useMailStore } = await import('../../../stores/mailStore');
 await import('../bindStoreActions');
 const { useSearchStore } = await import('../../../stores/searchStore');
 const { whenUnreadIdle } = await import('../../unreadCountsClient');
+const { _resetFlagChains } = await import('../messageMutations');
 
 const A = { id: 'acctA', email: 'a@mock.test', password: 'pw' };
 const B = { id: 'acctB', email: 'b@mock.test', password: 'pw' };
@@ -284,6 +285,9 @@ const storeFlags = (uid, accountId = null) => useMailStore.getState().emails
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // A case below parks the journal write for ever; its folder's chain must
+  // not hold the next case's.
+  _resetFlagChains();
   netOnline = true;
   relists = 0;
   for (const k of Object.keys(unreadPerAccount)) delete unreadPerAccount[k];

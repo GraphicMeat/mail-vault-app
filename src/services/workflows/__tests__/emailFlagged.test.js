@@ -205,6 +205,8 @@ function primeInbox(flags7 = ['\\Seen']) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockQueueOp.mockResolvedValue(1);
+  mockClearOps.mockResolvedValue(undefined);
   netOnline = true;
   graphId = null;
   mockUpdateEmailFlags.mockResolvedValue({ success: true, written: [] });
@@ -217,6 +219,7 @@ describe('toggleFlagged', () => {
     primeInbox();
 
     await toggleFlagged(7);
+    await flagTailsSettled();
 
     expect(flagsOf(7)).toContain('\\Flagged');
     expect(useMailStore.getState().selectedEmail.flags).toContain('\\Flagged');
@@ -227,7 +230,7 @@ describe('toggleFlagged', () => {
     });
     expect(mockUpdateEmailFlags).toHaveBeenCalledWith(ACCOUNT, 7, ['\\Flagged'], 'add', 'INBOX');
     expect(mockClearOps).toHaveBeenCalledWith({
-      op: 'flag', accountId: 'a1', mailbox: 'INBOX', uids: [7],
+      id: 1, op: 'flag', accountId: 'a1', mailbox: 'INBOX', uids: [7],
       // The arg is part of the entry's identity: without it this clear also
       // empties a \\Seen entry the same message is still owed.
       arg: { flags: ['\\Flagged'], action: 'add' },
@@ -251,6 +254,7 @@ describe('toggleFlagged', () => {
     primeInbox(['\\Seen', '\\Flagged']);
 
     await toggleFlagged(7);
+    await flagTailsSettled();
 
     expect(flagsOf(7)).toEqual(['\\Seen']);
     expect(mockQueueOp).toHaveBeenCalledWith({
@@ -381,6 +385,7 @@ describe('toggleFlagged', () => {
     graphId = 'gid';
 
     await toggleFlagged(7);
+    await flagTailsSettled();
 
     expect(mockGraphSetFlagged).toHaveBeenCalledWith(expect.objectContaining({ id: 'a1' }), 'gid', true);
     expect(mockUpdateEmailFlags).not.toHaveBeenCalled();
@@ -476,6 +481,7 @@ describe('mark read, through the same core', () => {
     });
 
     await useMailStore.getState().markSelectedAsRead();
+    await flagTailsSettled();
     await whenUnreadIdle();
 
     expect(flagsOf(7)).toContain('\\Seen');
@@ -579,7 +585,7 @@ describe('bulk flags: one journal entry and one batch per folder', () => {
     expect(mockUpdateEmailFlagsBatch).toHaveBeenCalledWith(ACCOUNT, [7, 8, 9], ['\\Flagged'], 'add', 'INBOX');
     expect(mockUpdateEmailFlags).not.toHaveBeenCalled();
     expect(mockClearOps).toHaveBeenCalledTimes(1);
-    expect(mockClearOps).toHaveBeenCalledWith({ op: 'flag', accountId: 'a1', mailbox: 'INBOX', uids: [7, 8, 9], arg });
+    expect(mockClearOps).toHaveBeenCalledWith({ id: 1, op: 'flag', accountId: 'a1', mailbox: 'INBOX', uids: [7, 8, 9], arg });
   });
 
   it('settles once the rows are painted and the journal written, before the server answers', async () => {
@@ -691,7 +697,7 @@ describe('bulk flags: one journal entry and one batch per folder', () => {
     expect(mockGraphSetFlagged).toHaveBeenCalledTimes(6);
     expect(peak).toBeGreaterThan(1);
     expect(peak).toBeLessThanOrEqual(4);
-    expect(mockClearOps).toHaveBeenCalledWith({ op: 'flag', accountId: 'a1', mailbox: 'INBOX', uids, arg });
+    expect(mockClearOps).toHaveBeenCalledWith({ id: 1, op: 'flag', accountId: 'a1', mailbox: 'INBOX', uids, arg });
     expect(mockUpdateEmailFlags).not.toHaveBeenCalled();
     expect(mockUpdateEmailFlagsBatch).not.toHaveBeenCalled();
   });
@@ -720,5 +726,139 @@ describe('bulk flags: one journal entry and one batch per folder', () => {
 
     expect(mockQueueOp).toHaveBeenCalledWith(expect.objectContaining({ uids: [7], arg: { flags: ['\\Flagged'], action: 'add', graph: true } }));
     expect(mockGraphSetFlagged).not.toHaveBeenCalled();
+  });
+});
+
+// A change and its undo, and two changes in a row, must reach the journal, the
+// vault and the server in the order asked. And a toggle never waits on another
+// call's server half.
+describe('flag ordering', () => {
+  const plain = (uid, extra = {}) => ({
+    uid, messageId: `m${uid}@mock`, subject: `m${uid}`, flags: [], from: { address: 'them@x' }, date: '2026-08-01T10:00:00Z', ...extra,
+  });
+  const tick = () => new Promise(r => setTimeout(r, 10));
+
+  // The change's journal write is slow; the undo is pressed before it returns.
+  // The undo's journal entry, and its server write, must still come after.
+  it('a fast undo lands after the change it reverses, in the journal and on the server', async () => {
+    primeStore({ emails: [plain(7), plain(8)], selected: [7, 8] });
+    useMailStore.setState({ undo: null });
+    let release;
+    mockQueueOp.mockImplementationOnce(() => new Promise(r => { release = () => r(1); }));
+
+    const change = useMailStore.getState().setSelectedFlagged(true);
+    await vi.waitFor(() => expect(useMailStore.getState().undo?.run).toBeTypeOf('function'));
+    const undo = useMailStore.getState().undo.run();
+    await tick();
+    expect(mockQueueOp).toHaveBeenCalledTimes(1);
+
+    release();
+    await change;
+    await undo;
+    await flagTailsSettled();
+
+    expect(mockQueueOp.mock.calls.map(c => c[0].arg.action)).toEqual(['add', 'remove']);
+    expect(mockUpdateEmailFlagsBatch.mock.calls.map(c => c[3])).toEqual(['add', 'remove']);
+  });
+
+  it('a second change\'s vault write starts only once the first one has finished', async () => {
+    primeInbox([]);
+    let release;
+    mockVaultApplyFlags.mockImplementationOnce(() => new Promise(r => { release = () => r({}); }));
+
+    await toggleFlagged(7);
+    await toggleFlagged(7);
+    await tick();
+    expect(mockVaultApplyFlags).toHaveBeenCalledTimes(1);
+
+    release();
+    await flagTailsSettled();
+    expect(mockVaultApplyFlags.mock.calls.map(c => c[3][0].on)).toEqual([true, false]);
+  });
+
+  it('a single toggle does not wait on a bulk change\'s server half, and still reaches the server after it', async () => {
+    primeStore({ emails: [plain(7), plain(8), plain(9)], selected: [7, 8] });
+    let land;
+    mockUpdateEmailFlagsBatch.mockImplementationOnce((_a, uids) => new Promise(r => { land = () => r({ success: true, done: uids, skipped: [] }); }));
+    await useMailStore.getState().setSelectedFlagged(true);
+    await vi.waitFor(() => expect(land).toBeTypeOf('function'));
+
+    const outcome = await Promise.race([
+      toggleFlagged(9).then(() => 'returned'),
+      new Promise(r => setTimeout(() => r('waiting'), 200)),
+    ]);
+    expect(outcome).toBe('returned');
+    expect(flagsOf(9)).toContain('\\Flagged');
+    expect(mockQueueOp).toHaveBeenCalledWith(expect.objectContaining({ uids: [9] }));
+    expect(mockUpdateEmailFlags).not.toHaveBeenCalled();
+
+    land();
+    await flagTailsSettled();
+    expect(mockUpdateEmailFlags).toHaveBeenCalledWith(ACCOUNT, 9, ['\\Flagged'], 'add', 'INBOX');
+  });
+
+  it('a detached single toggle still reports a server failure', async () => {
+    primeInbox();
+    useMailStore.setState({ error: null });
+    mockUpdateEmailFlags.mockRejectedValueOnce(new Error('NO busy'));
+
+    await toggleFlagged(7);
+    await flagTailsSettled();
+
+    expect(useMailStore.getState().error).toMatch(/busy/);
+  });
+
+  // A: mark read (its batch slow), B: the undo, C: mark read again (refused).
+  // A and C share op, account, folder and arg. A's clear must name A's entry
+  // only, or it empties C's and the refused change has nothing left to retry.
+  it('a change\'s clear leaves a later entry with the same arg journalled', async () => {
+    primeStore({ emails: [plain(7), plain(8)] });
+    const journal = [];
+    let nextId = 1;
+    mockQueueOp.mockImplementation(async (e) => { journal.push({ ...e, uids: [...e.uids], id: nextId }); return nextId++; });
+    // The daemon's two clears: by id, that entry only; without, every entry
+    // with the same op, account, folder and arg.
+    mockClearOps.mockImplementation(async ({ id, op, accountId, mailbox, uids, arg }) => {
+      for (const j of journal) {
+        const hit = id != null ? j.id === id
+          : j.op === op && j.accountId === accountId && j.mailbox === mailbox && JSON.stringify(j.arg) === JSON.stringify(arg);
+        if (hit) j.uids = j.uids.filter(u => !uids.includes(u));
+      }
+    });
+    let landA;
+    mockUpdateEmailFlagsBatch
+      .mockImplementationOnce((_a, uids) => new Promise(r => { landA = () => r({ success: true, done: uids, skipped: [] }); }))
+      .mockImplementationOnce(async (_a, uids) => ({ success: true, done: uids, skipped: [] }))
+      .mockImplementationOnce(async () => { throw new Error('NO busy'); });
+    const targets = [7, 8].map(uid => ({ account: ACCOUNT, accountId: 'a1', mailbox: 'INBOX', uid }));
+
+    await applyFlagToTargets(targets, '\\Seen', true, { undoable: false });
+    await applyFlagToTargets(targets, '\\Seen', false, { undoable: false });
+    await applyFlagToTargets(targets, '\\Seen', true, { undoable: false });
+    await vi.waitFor(() => expect(landA).toBeTypeOf('function'));
+    landA();
+    await flagTailsSettled();
+
+    expect(mockUpdateEmailFlagsBatch.mock.calls.map(c => c[3])).toEqual(['add', 'remove', 'add']);
+    const owed = journal.filter(j => j.uids.length);
+    expect(owed).toEqual([expect.objectContaining({ id: 3, uids: [7, 8], arg: { flags: ['\\Seen'], action: 'add' } })]);
+  });
+
+  // `done` and `skipped` are answered; a uid in neither did not land. It stays
+  // in the journal and the user hears it is not changed yet.
+  it('a batch that answers only some uids clears those and warns about the rest', async () => {
+    primeStore({ emails: [plain(7), plain(8), plain(9)], selected: [7, 8, 9] });
+    useMailStore.setState({ error: null });
+    mockUpdateEmailFlagsBatch.mockResolvedValueOnce({ success: true, done: [7], skipped: [] });
+
+    await useMailStore.getState().setSelectedFlagged(true);
+    await flagTailsSettled();
+
+    expect(mockClearOps).toHaveBeenCalledTimes(1);
+    expect(mockClearOps).toHaveBeenCalledWith(expect.objectContaining({ uids: [7] }));
+    const { error, errorType } = useMailStore.getState();
+    expect(error).toMatch(/^2 emails/);
+    expect(error).toMatch(/keeps trying/i);
+    expect(errorType).toBe('warning');
   });
 });

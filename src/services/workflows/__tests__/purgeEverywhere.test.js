@@ -700,7 +700,7 @@ it('bulk-tool delete journals the range, hides its rows for the run, then clears
   // replay sends what the user chose, not the folder's default, and only into
   // the folder generation the rows were read in.
   expect(mockQueueOp).toHaveBeenCalledWith({ op: 'delete', accountId: ACCOUNT.id, mailbox: 'INBOX.Spam', uids: [1], arg: { mode: 'permanent', uidValidity: 1 } });
-  expect(mockClearOps).toHaveBeenCalledWith({ op: 'delete', accountId: ACCOUNT.id, mailbox: 'INBOX.Spam', uids: [1], arg: { mode: 'permanent', uidValidity: 1 } });
+  expect(mockClearOps).toHaveBeenCalledWith({ id: 1, op: 'delete', accountId: ACCOUNT.id, mailbox: 'INBOX.Spam', uids: [1], arg: { mode: 'permanent', uidValidity: 1 } });
   expect(useMailStore.getState().deleteTombstones.size).toBe(0);
   expect(useMailStore.getState().loadEmails).toHaveBeenCalled();
 });
@@ -760,7 +760,7 @@ it('keeps the whole list on a partly owed purge and marks a refused message as n
   const queued = mockQueueOp.mock.calls[0][0];
   expect(queued.arg.total).toBe(2);
   expect(queued.arg.messages.map((m) => m.uid)).toEqual([1, 2]);
-  expect(mockClearOps).toHaveBeenCalledWith({ ...queued, uids: [1] });
+  expect(mockClearOps).toHaveBeenCalledWith({ ...queued, id: 1, uids: [1] });
   const notes = mockNoteOpFailure.mock.calls.map(([at]) => at.uid);
   expect(notes).toEqual(expect.arrayContaining([1, 2]));
   expect(mockClearOps.mock.invocationCallOrder[0])
@@ -829,7 +829,7 @@ it('bulk-tool delete with errors takes off only what the run removed and keeps t
   expect(queued.arg.messages.map((m) => m.uid)).toEqual([1, 2]);
   expect(queued.arg.messages.every((m) => typeof m.subject === 'string' && typeof m.from === 'string')).toBe(true);
   expect(mockClearOps).toHaveBeenCalledTimes(1);
-  expect(mockClearOps).toHaveBeenCalledWith({ ...queued, uids: [2] });
+  expect(mockClearOps).toHaveBeenCalledWith({ ...queued, id: 1, uids: [2] });
   expect(mockNoteOpFailure).toHaveBeenCalledTimes(1);
   expect(mockNoteOpFailure).toHaveBeenCalledWith(expect.objectContaining({ op: 'delete', uid: 1 }), 'NO server busy');
   expect(useMailStore.getState().deleteTombstones.has(`${ACCOUNT.id}|INBOX.Spam|1`)).toBe(true);
