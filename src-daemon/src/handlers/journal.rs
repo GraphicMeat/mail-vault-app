@@ -56,12 +56,20 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let mailbox = req!(str_arg(&id, params, "mailbox"));
             let uids = req!(vec_arg::<u32>(&id, params, "uids"));
             let arg = params.get("arg").cloned().unwrap_or(Value::Null);
+            // `id`: the entry the caller's own run queued. Clears the uids
+            // from that entry alone, never from another run's entry that
+            // matches the same op/account/mailbox/arg.
+            let entry_id = params.get("id").and_then(Value::as_u64);
             let state = Arc::clone(state);
             done(
                 id,
                 blocking(move || -> Result<Value, String> {
                     let _lock = state.journal.lock().unwrap_or_else(|p| p.into_inner());
-                    op_journal::clear(&state.app_dir, &op, &account_id, &mailbox, &uids, &arg).map(|_| Value::Null)
+                    match entry_id {
+                        Some(entry_id) => op_journal::clear_by_id(&state.app_dir, entry_id, &uids),
+                        None => op_journal::clear(&state.app_dir, &op, &account_id, &mailbox, &uids, &arg),
+                    }
+                    .map(|_| Value::Null)
                 })
                 .await
                 .and_then(|r| r),
@@ -361,5 +369,28 @@ mod tests {
     async fn another_domains_method_is_not_routed_here() {
         let (_t, s) = st();
         assert!(route(&s, "sync.now", &json!({}), json!(1)).await.is_none());
+    }
+
+    /// Two entries of one op/account/mailbox/arg can both owe a uid (two
+    /// bulk runs over overlapping selections). Clearing by `id` settles only
+    /// the entry the caller's run queued; the arg-matching clear would strip
+    /// the other run's claim on the uid as well.
+    #[tokio::test]
+    async fn op_journal_clear_with_an_id_clears_only_that_entry() {
+        let (_t, s) = st();
+        let flag = |uids: &[u32]| json!({"id": 0, "op": "flag", "accountId": "a", "mailbox": "INBOX", "uids": uids, "arg": {"flags": ["\\Seen"], "action": "add"}, "at": 0});
+        let a = call(&s, "op_journal_queue", json!({"entry": flag(&[5, 6])})).await.result.unwrap().as_u64().unwrap();
+        let b = call(&s, "op_journal_queue", json!({"entry": flag(&[5])})).await.result.unwrap().as_u64().unwrap();
+        assert_ne!(a, b);
+        let resp = call(&s, "op_journal_clear", json!({
+            "id": a, "op": "flag", "accountId": "a", "mailbox": "INBOX", "uids": [5],
+            "arg": {"flags": ["\\Seen"], "action": "add"}
+        }))
+        .await;
+        assert!(resp.error.is_none(), "{:?}", resp.error.map(|e| e.message));
+        let entries = op_journal::read(&s.app_dir);
+        let uids_of = |id: u64| entries.iter().find(|e| e.id == id).map(|e| e.uids.clone());
+        assert_eq!(uids_of(a), Some(vec![6]), "entry A lost uid 5: {entries:?}");
+        assert_eq!(uids_of(b), Some(vec![5]), "entry B keeps its claim on uid 5: {entries:?}");
     }
 }

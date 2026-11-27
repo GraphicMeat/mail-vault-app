@@ -587,7 +587,10 @@ fn messages_of(
 
 /// One message a view finds, named the way its rendered row is
 /// (`stamp_local_row`'s `_accountId` / `_mailbox`), with the Message-ID the
-/// index holds: the evidence a selection snapshot carries for it.
+/// index holds: the evidence a selection snapshot carries for it. It carries
+/// the custody stamp its row would (`source`, `serverDeleted`,
+/// `serverAbsent`, ...), so a member past the rendered rows that the server
+/// has lost reads as `local-only` exactly as its row does.
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct Member {
@@ -595,6 +598,16 @@ struct Member {
     mailbox: String,
     uid: u32,
     message_id: Option<String>,
+    source: String,
+    is_archived: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    server_deleted: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    server_absent: Option<Value>,
+    #[serde(rename = "_origin", skip_serializing_if = "Option::is_none")]
+    origin: Option<Value>,
+    #[serde(rename = "_localOnlyFolder", skip_serializing_if = "std::ops::Not::not")]
+    local_only_folder: bool,
 }
 
 /// Every message a view finds, walked page by page past the index's
@@ -614,21 +627,50 @@ fn members_of(
     let mut seen = std::collections::HashSet::new();
     for account in accounts.iter().filter(|account| def.accounts.is_empty() || def.accounts.contains(&account.account_id)) {
         let mut request = SearchRequest { limit: Some(MAX_LIMIT), ..request_for(def, account, keys, now) };
+        // The custody proof `evaluate` stamps rows with, read once per
+        // account and never under the index lock.
+        let mut custody: Option<HashMap<(String, u32), Value>> = None;
         loop {
             let page = match crate::search_index::search_page_reply(&state.search_index, &request)? {
                 Ok(reply) => reply.page,
                 Err(reason) => return Ok(Err(reason.to_string())),
             };
+            if custody.is_none() && !page.hits.is_empty() {
+                custody = Some(
+                    crate::custody::with_conn(state, |conn| {
+                        mailvault_core::custody::entries::entries_for_account(conn, &account.account_id)
+                    })
+                    .map(crate::handlers::mail_search::custody_by_vault_uid)
+                    .unwrap_or_default(),
+                );
+            }
+            let empty = HashMap::new();
+            let custody_ref = custody.as_ref().unwrap_or(&empty);
             for hit in &page.hits {
-                let (mailbox, local_only, _) =
-                    crate::handlers::mail_search::mailbox_for_vault_dir(&hit.vault_dir, &account.known_mailboxes);
-                let mailbox = if local_only { hit.vault_dir.clone() } else { mailbox };
+                let is_archived = mailvault_core::message_store::flags_in_name(&hit.filename).iter().any(|f| f == "archived");
+                let mut row = serde_json::json!({ "uid": hit.uid, "isArchived": is_archived });
+                crate::handlers::mail_search::stamp_local_row(
+                    &mut row,
+                    &account.account_id,
+                    &hit.vault_dir,
+                    &account.known_mailboxes,
+                    false,
+                    custody_ref,
+                );
+                let field = |key: &str| row.get(key).cloned();
+                let mailbox = row.get("_mailbox").and_then(Value::as_str).unwrap_or_default().to_owned();
                 if seen.insert((account.account_id.clone(), mailbox.clone(), hit.uid)) {
                     out.push(Member {
                         account_id: account.account_id.clone(),
                         mailbox,
                         uid: hit.uid,
                         message_id: hit.message_id.clone(),
+                        source: row.get("source").and_then(Value::as_str).unwrap_or("local").to_owned(),
+                        is_archived,
+                        server_deleted: field("serverDeleted"),
+                        server_absent: field("serverAbsent"),
+                        origin: field("_origin"),
+                        local_only_folder: row.get("_localOnlyFolder").and_then(Value::as_bool) == Some(true),
                     });
                 }
             }
@@ -2339,5 +2381,39 @@ mod tests {
         }
         let seventh = members.iter().find(|m| m["uid"] == 7).unwrap();
         assert_eq!(seventh["messageId"], "<m7@x.test>");
+    }
+
+    /// A member past the rendered rows carries the same custody stamp its row
+    /// would: an archived copy the server lost is `local-only`, so "Delete
+    /// from server" over a select-all does not read it as server mail.
+    #[tokio::test]
+    async fn a_member_past_the_render_window_carries_its_custody_stamp() {
+        let s = st();
+        {
+            let conn = index_db::open(&s.data_dir).unwrap();
+            let p = mailvault_core::maildir::INFO_PREFIX;
+            seed(&conn, 4, &format!("4{p}AS.eml"), "Deleted upstream", false, "<four@x.test>");
+            seed(&conn, 5, &format!("5{p}S.eml"), "On the server", false, "<five@x.test>");
+            conn.execute("UPDATE messages SET date_utc = date_utc + 60 WHERE uid = 5", []).unwrap();
+            index_db::meta_set(&conn, index_db::FIRST_PASS_DONE, "1").unwrap();
+            *lock(&s.search_index.db) = Some(conn);
+        }
+        crate::custody::open_into(&s).unwrap();
+        crate::custody::with_conn(&s, |conn| {
+            mailvault_core::custody::entries::upsert(conn, "a", "INBOX", &[json!({"uid": 4, "source": "local", "serverDeleted": true})]).map(|_| ())
+        })
+        .unwrap();
+        let shown = call(&s, "views.evaluate", json!({ "def": {}, "accounts": accounts(), "limit": 1 })).await;
+        assert_eq!(shown["rows"].as_array().unwrap().len(), 1);
+        assert_eq!(shown["rows"][0]["uid"], 5, "uid 4 is past the render window");
+
+        let out = call(&s, "views.evaluate", json!({ "def": {}, "accounts": accounts(), "members": true })).await;
+        let members = out["members"].as_array().unwrap_or_else(|| panic!("no members: {out}"));
+        let of = |uid: u64| members.iter().find(|m| m["uid"] == uid).unwrap_or_else(|| panic!("no member {uid}: {out}"));
+        assert_eq!(of(4)["source"], "local-only", "{out}");
+        assert_eq!(of(4)["serverDeleted"], true, "{out}");
+        assert_eq!(of(4)["isArchived"], true, "{out}");
+        assert_eq!(of(5)["source"], "local", "{out}");
+        assert!(of(5).get("serverDeleted").is_none(), "{out}");
     }
 }

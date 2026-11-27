@@ -111,20 +111,34 @@ fn twin_switches(changes: &[FlagChange]) -> Vec<(u32, Vec<String>, bool)> {
 
 /// Every mailbox path the account's custody store names, to read an index
 /// row's vault directory back as the folder custody and the header cache key
-/// by ("_Google_Mail__Bin" is "[Google Mail]/Bin").
+/// by ("_Google_Mail__Bin" is "[Google Mail]/Bin"): the header cache's
+/// per-folder rows and the cached folder listing, one row per folder and one
+/// row in all. Never a scan of every cached header or custody entry: this
+/// runs on every flag change. A directory neither names (a folder gone from
+/// the server with no header cache) reads back as itself.
 fn known_mailboxes(state: &Arc<DaemonState>, account_id: &str) -> Vec<String> {
     daemon_custody::with_conn(state, |c| {
         let mut stmt = c
-            .prepare(
-                "SELECT mailbox_path FROM header_cache_meta WHERE account_id=?1
-                 UNION SELECT DISTINCT mailbox_path FROM header_cache WHERE account_id=?1
-                 UNION SELECT DISTINCT mailbox_path FROM vault_entries WHERE account_id=?1",
-            )
+            .prepare_cached("SELECT mailbox_path FROM header_cache_meta WHERE account_id=?1")
             .map_err(|e| e.to_string())?;
         let rows = stmt.query_map([account_id], |r| r.get::<_, String>(0)).map_err(|e| e.to_string())?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+        let mut paths = rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
+        if let Some(listing) = cache::load_mailboxes(c, account_id)? {
+            paths.extend(mailvault_core::takeout::folder_refs_from_listing(&listing).into_iter().map(|f| f.path));
+        }
+        Ok(paths)
     })
     .unwrap_or_default()
+}
+
+/// Whether the account's server keeps one message under every label it has
+/// (Gmail), so its vault copies in other folders share its read and starred
+/// state. Read from `accounts.json`; an account it does not list is not
+/// assumed to be Gmail: on any other server a copy in Sent or another folder
+/// is its own message with its own flags.
+fn shares_flags_across_folders(state: &Arc<DaemonState>, account_id: &str) -> bool {
+    crate::ai_gate::listed_record(&state.app_dir, account_id)
+        .is_some_and(|record| mailvault_core::provider::Provider::Google.owns_account(&record))
 }
 
 /// Carry a flag change on `mailbox`'s messages to their other copies in the
@@ -134,7 +148,8 @@ fn known_mailboxes(state: &Arc<DaemonState>, account_id: &str) -> Vec<String> {
 /// no lock of it is held here, and each twin folder takes its own in turn.
 /// Found through the search index; with the index closed nothing is carried
 /// (logged), never an error for the change the caller asked for. Returns how
-/// many twin copies were changed.
+/// many twin copies were changed. Gmail accounts only
+/// (`shares_flags_across_folders`).
 pub(crate) fn apply_to_twins(
     state: &Arc<DaemonState>,
     account_id: &str,
@@ -147,7 +162,7 @@ pub(crate) fn apply_to_twins(
     use mailvault_core::search_index::text::{mailboxes_from_vault_dirs, vault_dir_name};
     use std::collections::{BTreeMap, BTreeSet, HashMap};
     let switches = twin_switches(changes);
-    if switches.is_empty() {
+    if switches.is_empty() || !shares_flags_across_folders(state, account_id) {
         return 0;
     }
     let uids: Vec<u32> = switches.iter().map(|(uid, _, _)| *uid).collect::<BTreeSet<_>>().into_iter().collect();
@@ -582,6 +597,7 @@ mod tests {
     async fn a_flag_change_reaches_the_same_message_in_the_accounts_other_folders() {
         use mailvault_core::search_index::{db as index_db, lock};
         let (vault, s) = st();
+        list_accounts(&s, serde_json::json!([{"id": "acc", "imapHost": "imap.gmail.com"}, {"id": "other", "imapHost": "imap.gmail.com"}]));
         let bin = "[Google Mail]/Bin";
         seed_file(vault.path(), "acc", "INBOX", 1, &["archived"]);
         seed_file(vault.path(), "acc", bin, 7, &["archived"]);
@@ -637,6 +653,43 @@ mod tests {
         assert_eq!(file_names(&inbox), vec![format!("1{INFO_PREFIX}A.eml")]);
         assert_eq!(file_names(&bin_cur), vec![format!("7{INFO_PREFIX}A.eml"), format!("8{INFO_PREFIX}A.eml")]);
         assert_eq!(header_flags(bin, 7), serde_json::json!([]));
+    }
+
+    fn list_accounts(s: &Arc<DaemonState>, accounts: Value) {
+        fs::write(s.app_dir.join("accounts.json"), accounts.to_string()).unwrap();
+    }
+
+    /// Only Gmail's label folders are one message under one Message-ID. A
+    /// plain IMAP server's INBOX and Sent copies are two messages with their
+    /// own flags: reading the INBOX copy must leave the Sent copy unread.
+    #[tokio::test]
+    async fn a_flag_change_stays_in_its_folder_on_an_account_that_is_not_gmail() {
+        use mailvault_core::search_index::{db as index_db, lock};
+        let (vault, s) = st();
+        list_accounts(&s, serde_json::json!([{"id": "acc", "authType": "password", "imapHost": "imap.fastmail.com"}]));
+        seed_file(vault.path(), "acc", "INBOX", 1, &["archived"]);
+        seed_file(vault.path(), "acc", "Sent", 9, &["archived"]);
+        daemon_custody::with_conn(&s, |c| {
+            cache::save_headers(c, "acc", "INBOX", &serde_json::json!({"emails": [{"uid": 1, "flags": [], "messageId": "<x@y>"}]}).to_string())?;
+            cache::save_headers(c, "acc", "Sent", &serde_json::json!({"emails": [{"uid": 9, "flags": [], "messageId": "<x@y>"}]}).to_string())
+        })
+        .unwrap();
+        let conn = index_db::open(&s.data_dir).unwrap();
+        for (mailbox, uid) in [("INBOX", 1u32), ("Sent", 9)] {
+            conn.execute(
+                "INSERT INTO messages (account_id, vault_dir, uid, filename, size, mtime_ns, message_id, date_utc) VALUES ('acc',?1,?2,?3,0,0,'<x@y>',0)",
+                rusqlite::params![mailvault_core::search_index::text::vault_dir_name(mailbox), uid, format!("{uid}{INFO_PREFIX}A.eml")],
+            )
+            .unwrap();
+        }
+        *lock(&s.search_index.db) = Some(conn);
+
+        let params = serde_json::json!({"accountId": "acc", "mailbox": "INBOX", "accountEmail": null, "changes": [{"uid": 1, "flags": ["\\Seen"], "on": true}]});
+        let resp = route(&s, "vault_apply_flags", &params, serde_json::json!(1)).await.unwrap();
+        let result = resp.result.unwrap_or_else(|| panic!("{:?}", resp.error.map(|e| e.message)));
+        assert_eq!(result["twins"], serde_json::json!(0), "{result}");
+        assert_eq!(file_names(&vault_files::cur_path(vault.path(), "acc", "INBOX")), vec![format!("1{INFO_PREFIX}AS.eml")]);
+        assert_eq!(file_names(&vault_files::cur_path(vault.path(), "acc", "Sent")), vec![format!("9{INFO_PREFIX}A.eml")], "the Sent copy is untouched");
     }
 
     #[test]

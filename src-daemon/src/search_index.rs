@@ -124,6 +124,10 @@ pub struct SearchIndexState {
     pub(crate) open_before_install_hook: Mutex<Option<std::sync::Arc<dyn Fn() + Send + Sync>>>,
     #[cfg(test)]
     pub(crate) worker_passes: AtomicUsize,
+    /// Test-only: index lock holds the Message-ID lookups take, to prove they
+    /// release the lock between chunks.
+    #[cfg(test)]
+    pub(crate) lookup_holds: AtomicUsize,
 }
 
 impl SearchIndexState {
@@ -166,6 +170,8 @@ impl SearchIndexState {
             open_before_install_hook: Mutex::new(None),
             #[cfg(test)]
             worker_passes: AtomicUsize::new(0),
+            #[cfg(test)]
+            lookup_holds: AtomicUsize::new(0),
         })
     }
 }
@@ -874,6 +880,10 @@ pub fn prune_metadata(st: &SearchIndexState, account_id: &str, removed_keys: &[S
     mailvault_core::app_db::with(&st.app_dir, |conn| mailvault_core::app_db::metadata::prune(conn, account_id, &gone))
 }
 
+/// Lookups per index lock hold in `known_message_ids` and `message_id_twins`:
+/// a foreground read waits at most one chunk behind a whole selection's.
+pub(crate) const LOOKUP_UNIT: usize = 200;
+
 /// What the index holds for `uids` of one folder: the row's `Message-ID`, or
 /// `None` for a row that has none. A uid absent from the map is one the index
 /// has no row for at all — the caller must not invent a key for it.
@@ -886,20 +896,28 @@ pub fn known_message_ids(
     mailbox: &str,
     uids: &[u32],
 ) -> Result<std::collections::HashMap<u32, Option<String>>, String> {
-    let guard = lock(&st.db);
-    let Some(conn) = guard.as_ref() else { return Err("search index is not open".into()) };
+    if uids.is_empty() && lock(&st.db).is_none() {
+        return Err("search index is not open".into());
+    }
     let vault_dir = core::text::vault_dir_name(mailbox);
-    let mut stmt = conn
-        .prepare_cached("SELECT message_id FROM messages WHERE account_id = ?1 AND vault_dir = ?2 AND uid = ?3")
-        .map_err(|e| e.to_string())?;
     let mut out = std::collections::HashMap::new();
-    for uid in uids {
-        let found: Option<Option<String>> = stmt
-            .query_row((account_id, vault_dir.as_str(), *uid), |r| r.get::<_, Option<String>>(0))
-            .optional()
+    // One chunk per lock hold, released between chunks.
+    for chunk in uids.chunks(LOOKUP_UNIT) {
+        let guard = lock(&st.db);
+        let Some(conn) = guard.as_ref() else { return Err("search index is not open".into()) };
+        #[cfg(test)]
+        st.lookup_holds.fetch_add(1, SeqCst);
+        let mut stmt = conn
+            .prepare_cached("SELECT message_id FROM messages WHERE account_id = ?1 AND vault_dir = ?2 AND uid = ?3")
             .map_err(|e| e.to_string())?;
-        if let Some(message_id) = found {
-            out.insert(*uid, message_id);
+        for uid in chunk {
+            let found: Option<Option<String>> = stmt
+                .query_row((account_id, vault_dir.as_str(), *uid), |r| r.get::<_, Option<String>>(0))
+                .optional()
+                .map_err(|e| e.to_string())?;
+            if let Some(message_id) = found {
+                out.insert(*uid, message_id);
+            }
         }
     }
     Ok(out)
@@ -917,19 +935,28 @@ pub fn message_id_twins(
     except_dir: &str,
     message_ids: &[String],
 ) -> Result<Vec<(String, u32, String)>, String> {
-    let guard = lock(&st.db);
-    let Some(conn) = guard.as_ref() else { return Err("search index is not open".into()) };
-    let mut stmt = conn
-        .prepare_cached("SELECT vault_dir, uid FROM messages WHERE account_id = ?1 AND message_id = ?2 AND vault_dir <> ?3")
-        .map_err(|e| e.to_string())?;
+    let ids: Vec<&String> = message_ids.iter().filter(|id| !id.trim().is_empty()).collect();
+    if ids.is_empty() && lock(&st.db).is_none() {
+        return Err("search index is not open".into());
+    }
     let mut out = Vec::new();
-    for id in message_ids.iter().filter(|id| !id.trim().is_empty()) {
-        let rows = stmt
-            .query_map((account_id, id.as_str(), except_dir), |r| Ok((r.get::<_, String>(0)?, r.get::<_, u32>(1)?)))
+    // One chunk per lock hold, released between chunks.
+    for chunk in ids.chunks(LOOKUP_UNIT) {
+        let guard = lock(&st.db);
+        let Some(conn) = guard.as_ref() else { return Err("search index is not open".into()) };
+        #[cfg(test)]
+        st.lookup_holds.fetch_add(1, SeqCst);
+        let mut stmt = conn
+            .prepare_cached("SELECT vault_dir, uid FROM messages WHERE account_id = ?1 AND message_id = ?2 AND vault_dir <> ?3")
             .map_err(|e| e.to_string())?;
-        for row in rows {
-            let (dir, uid) = row.map_err(|e| e.to_string())?;
-            out.push((dir, uid, id.clone()));
+        for id in chunk {
+            let rows = stmt
+                .query_map((account_id, id.as_str(), except_dir), |r| Ok((r.get::<_, String>(0)?, r.get::<_, u32>(1)?)))
+                .map_err(|e| e.to_string())?;
+            for row in rows {
+                let (dir, uid) = row.map_err(|e| e.to_string())?;
+                out.push((dir, uid, (*id).clone()));
+            }
         }
     }
     Ok(out)
@@ -3933,5 +3960,43 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
         assert!(index_file(tmp.path()).exists(), "off keeps the file; only destroy deletes it");
+    }
+
+    /// Flag twins look up a whole selection's Message-IDs. The lookups take
+    /// the index lock a chunk at a time, so a foreground read waits at most
+    /// one chunk, and every uid past a chunk boundary is still answered.
+    #[test]
+    fn message_id_lookups_answer_a_thousand_uids_a_chunk_per_lock_hold() {
+        use crate::search_index::{known_message_ids, message_id_twins, LOOKUP_UNIT};
+        use std::sync::atomic::Ordering::SeqCst;
+        let tmp = tempfile::tempdir().unwrap();
+        let st = crate::search_index::SearchIndexState::new(tmp.path().to_path_buf(), tmp.path().to_path_buf(), true, crate::events::EventBus::new(16));
+        let conn = mailvault_core::search_index::db::open(tmp.path()).unwrap();
+        for uid in 1..=1000u32 {
+            for dir in ["INBOX", "_Google_Mail__All_Mail"] {
+                conn.execute(
+                    "INSERT INTO messages (account_id, vault_dir, uid, filename, size, mtime_ns, message_id, date_utc) VALUES ('acc',?1,?2,?3,0,0,?4,0)",
+                    rusqlite::params![dir, uid, format!("{uid}{INFO_PREFIX}A.eml"), format!("<m{uid}@x>")],
+                )
+                .unwrap();
+            }
+        }
+        *mailvault_core::search_index::lock(&st.db) = Some(conn);
+        let uids: Vec<u32> = (1..=1000).collect();
+        let chunks = 1000usize.div_ceil(LOOKUP_UNIT);
+        assert!(chunks > 1, "the test crosses a chunk boundary");
+
+        st.lookup_holds.store(0, SeqCst);
+        let ids = known_message_ids(&st, "acc", "INBOX", &uids).unwrap();
+        assert_eq!(ids.len(), 1000);
+        assert_eq!(ids[&1000], Some("<m1000@x>".to_owned()));
+        assert_eq!(st.lookup_holds.load(SeqCst), chunks, "one lock hold per chunk");
+
+        st.lookup_holds.store(0, SeqCst);
+        let wanted: Vec<String> = (1..=1000).map(|uid| format!("<m{uid}@x>")).collect();
+        let twins = message_id_twins(&st, "acc", "INBOX", &wanted).unwrap();
+        assert_eq!(twins.len(), 1000);
+        assert!(twins.iter().all(|(dir, _, _)| dir == "_Google_Mail__All_Mail"));
+        assert_eq!(st.lookup_holds.load(SeqCst), chunks, "one lock hold per chunk");
     }
 }
