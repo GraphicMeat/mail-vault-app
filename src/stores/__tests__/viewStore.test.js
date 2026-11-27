@@ -66,6 +66,46 @@ describe('saved views', () => {
     expect(useSearchStore.getState().searchResults.map(email => email.uid)).toEqual([1]);
   });
 
+  // The list renders the newest 500 of a view; select-all means every message
+  // its badge counts, so the selection asks the daemon for all of them.
+  it('selects every member of the open view, past what the list renders', async () => {
+    const setSelection = vi.fn();
+    harness.mailState.setSelection = setSelection;
+    harness.mailState.activeMailbox = 'Archive';
+    harness.mailState.deleteTombstones = new Set(['acct-1|INBOX|3']);
+    const members = [1, 2, 3, 4].map(uid => ({ accountId: 'acct-1', mailbox: 'INBOX', uid, messageId: `<${uid}@x.test>` }));
+    harness.daemonCall.mockImplementation(async (method, params) => {
+      if (method !== 'views.evaluate') return {};
+      return params.members ? { available: true, total: 4, members } : { available: true, rows: [row(1)], total: 4 };
+    });
+    await useViewStore.getState().openView(STARRED);
+    expect(await useViewStore.getState().selectAllInView()).toBe(3);
+    const asked = harness.daemonCall.mock.calls.filter(([, params]) => params?.members);
+    expect(asked).toHaveLength(1);
+    expect(asked[0][1]).toMatchObject({ viewId: STARRED.id, members: true });
+    const [keys, rows] = setSelection.mock.calls[0];
+    // Keyed the way the rendered row is, and never a message deleted this session.
+    expect(keys).toEqual(['acct-1:INBOX:1', 'acct-1:INBOX:2', 'acct-1:INBOX:4']);
+    expect(rows.map(r => r.messageId)).toEqual(['<1@x.test>', '<2@x.test>', '<4@x.test>']);
+  });
+
+  it('selects nothing from a members answer that lands after the view changed', async () => {
+    const setSelection = vi.fn();
+    harness.mailState.setSelection = setSelection;
+    let answer;
+    const late = new Promise(resolve => { answer = resolve; });
+    harness.daemonCall.mockImplementation(async (method, params) => {
+      if (method !== 'views.evaluate') return {};
+      return params.members ? late : { available: true, rows: [], total: 1 };
+    });
+    await useViewStore.getState().openView(STARRED);
+    const pending = useViewStore.getState().selectAllInView();
+    useViewStore.getState().closeView();
+    answer({ available: true, total: 1, members: [{ accountId: 'acct-1', mailbox: 'INBOX', uid: 1 }] });
+    expect(await pending).toBe(null);
+    expect(setSelection).not.toHaveBeenCalled();
+  });
+
   it('loads the views the daemon keeps', async () => {
     harness.daemonCall.mockResolvedValueOnce([STARRED, MINE]);
     await useViewStore.getState().loadViews();

@@ -93,6 +93,7 @@ vi.mock('../../stores/searchStore', () => ({
 
 import { SelectionActionBar } from '../SelectionActionBar';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useTagStore } from '../../stores/tagStore';
 import { DEFAULT_QUICK_ACTIONS } from '../../utils/quickActions';
 
 function quickAction(title) {
@@ -500,11 +501,94 @@ describe('SelectionActionBar export', () => {
     expect(sent[0]._mailbox).toBe('INBOX');
   });
 
-  it('opens nothing when no selected key resolves to a loaded row', () => {
-    useMailStoreMock.setState({ selectedEmailIds: new Set([99]), sortedEmails: [row(1), row(2)] });
+  // A button that does nothing reads as broken: the bar says why.
+  it('opens nothing and says so when no selected key resolves to a loaded row', () => {
+    useMailStoreMock.setState({ selectedEmailIds: new Set([99]), sortedEmails: [row(1), row(2)], error: null });
     render(<SelectionActionBar />);
     fireEvent.click(quickAction('Export selected'));
     expect(openExport).not.toHaveBeenCalled();
+    expect(useMailStoreMock.getState().error).toBe(tr('selection.exportNothing'));
+  });
+
+  // A saved view's rows live in the search pool, not the folder's list: the
+  // export filtered `sortedEmails` alone and found none of them.
+  it('exports the rows of a saved view, which no folder list holds', () => {
+    searchResultRows = [row(7, 'acct-1', 'Archive'), row(8, 'acct-1', 'Archive')];
+    useMailStoreMock.setState({ sortedEmails: [row(1), row(2)], selectedEmailIds: new Set(['acct-1:Archive:7', 'acct-1:Archive:8']) });
+    try {
+      render(<SelectionActionBar />);
+      fireEvent.click(quickAction('Export selected'));
+      expect(openExport).toHaveBeenCalledTimes(1);
+      expect(openExport.mock.calls[0][0].messages.map(m => m.uid)).toEqual([7, 8]);
+    } finally {
+      searchResultRows = [];
+    }
+  });
+});
+
+// Tagging a selection tags every selected message, the ones no loaded list
+// holds as well (the bulk modal's range, a view selected past what it
+// renders), and a refused tag says so.
+describe('SelectionActionBar tag', () => {
+  const TAG = { id: 't1', name: 'Receipts', color: '' };
+  const loaded = { uid: 1, _accountId: 'acct-1', _mailbox: 'INBOX', source: 'server', flags: [], messageId: '<1@x>' };
+  const savedQuickActions = useSettingsStore.getState().quickActions;
+  const savedTags = useTagStore.getState();
+  let applyTagToRows;
+
+  beforeEach(() => {
+    const { defaults } = DEFAULT_QUICK_ACTIONS;
+    const entries = [{ id: 'tag:t1', action: 'tag', params: { tagId: 't1' } }, ...defaults.selection.entries];
+    useSettingsStore.setState({ quickActions: { ...DEFAULT_QUICK_ACTIONS, defaults: { ...defaults, selection: { ...defaults.selection, entries } } } });
+    applyTagToRows = vi.fn().mockResolvedValue(true);
+    useTagStore.setState({ tags: [TAG], applyTagToRows });
+    useMailStoreMock.setState({
+      activeAccountId: 'acct-1', activeMailbox: 'INBOX', accounts: [{ id: 'acct-1' }], mailboxes: [],
+      emails: [loaded], sortedEmails: [loaded], localEmails: [], sentEmails: [],
+      selectedEmailIds: new Set([1, 2, 3]),
+      // Keys 2 and 3 were never rendered: only their snapshots name them.
+      selectedEmailSnapshots: new Map([
+        [2, { accountId: 'acct-1', mailbox: 'INBOX', uid: 2, messageId: '<2@x>' }],
+        [3, { accountId: 'acct-1', mailbox: 'INBOX', uid: 3, messageId: '<3@x>' }],
+      ]),
+      archivedEmailIds: new Set(),
+      error: null,
+      getSelectionSummary: vi.fn(() => ({ threads: 3, emails: 3 })),
+    });
+  });
+  afterEach(() => {
+    cleanup();
+    useSettingsStore.setState({ quickActions: savedQuickActions });
+    useTagStore.setState({ tags: savedTags.tags, applyTagToRows: savedTags.applyTagToRows });
+    useMailStoreMock.setState({ selectedEmailSnapshots: undefined });
+  });
+
+  it('tags every selected key, loaded or not', async () => {
+    render(<SelectionActionBar />);
+    fireEvent.click(quickAction('Receipts'));
+    await waitFor(() => expect(applyTagToRows).toHaveBeenCalledTimes(1));
+    const [rows, tagId] = applyTagToRows.mock.calls[0];
+    expect(tagId).toBe('t1');
+    expect(rows.map(r => [r.location.accountId, r.location.mailbox, r.email.uid])).toEqual([
+      ['acct-1', 'INBOX', 1], ['acct-1', 'INBOX', 2], ['acct-1', 'INBOX', 3],
+    ]);
+    expect(rows[1].email.messageId).toBe('<2@x>');
+    expect(rows.map(r => r.offScreen)).toEqual([undefined, true, true]);
+  });
+
+  // A key with no row and no snapshot is no evidence of what it names: the
+  // bar keeps treating the selection as unresolved there.
+  it('keeps the tag off for a key nothing else names', () => {
+    useMailStoreMock.setState({ selectedEmailIds: new Set([1, 4]) });
+    render(<SelectionActionBar />);
+    expect(quickAction('Receipts').disabled).toBe(true);
+  });
+
+  it('says so when the tag is refused', async () => {
+    applyTagToRows.mockResolvedValue(false);
+    render(<SelectionActionBar />);
+    fireEvent.click(quickAction('Receipts'));
+    await waitFor(() => expect(useMailStoreMock.getState().error).toBe(tr('selection.tagFailed')));
   });
 });
 

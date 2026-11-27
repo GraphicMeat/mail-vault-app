@@ -19,6 +19,7 @@ import {
   selectionKey,
 } from "../stores/slices/unifiedHelpers";
 import { isRowArchived, savedMailboxes, selectionFacts } from "../utils/quickActionFacts";
+import { resolveSelection } from "../stores/selectionRows";
 import { describeQuickAction } from "../utils/quickActionCatalog";
 import { runMessageAction } from "../utils/messageActions";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
@@ -28,6 +29,19 @@ import { t, useT } from "../i18n/index.js";
 import { DockSlot } from "./ui/ToastDock";
 
 const EMPTY_ARRAY = Object.freeze([]);
+
+// The lists the bar already reads, ahead of the registry's pool: the mail
+// store's own containers register where the store is created.
+function loadedRows() {
+  const s = useMailStore.getState();
+  return [
+    ...(s.sortedEmails || []),
+    ...(s.emails || []),
+    ...(s.localEmails || []),
+    ...(s.sentEmails || []),
+    ...(useSearchStore.getState().searchResults || []),
+  ];
+}
 
 export function SelectionActionBar() {
   const t = useT();
@@ -86,17 +100,34 @@ export function SelectionActionBar() {
   }, [hasSelection, selectedEmailIds, getSelectionSummary]);
 
   // The bar holds selection KEYS, not messages, so the rows are resolved back
-  // out of the store — by the same key the checkbox wrote. Matching on uid
-  // alone would pull a second account's message into a unified selection.
-  // A key the render window cannot resolve is simply not in the list, and the
-  // dialog's own heading counts what it is actually about to export.
+  // by the same key the checkbox wrote (resolveSelection), over every pool a
+  // row lives in: a saved view's or a search's rows are in no folder list.
+  // Matching on uid alone would pull a second account's message into a
+  // unified selection. A key no row holds cannot be exported (the exporter
+  // needs the row), and the dialog's own heading counts what it is actually
+  // about to export. Nothing at all says so rather than doing nothing.
   const exportSelected = () => {
     const state = useMailStore.getState();
-    const { sortedEmails = [] } = state;
-    const messages = sortedEmails.filter((e) =>
-      selectedEmailIds.has(selectionKey(e, state))
-    );
+    const messages = resolveSelection(selectedEmailIds, state, { rows: loadedRows() })
+      .resolved.filter((row) => !row.offScreen).map((row) => row.email);
     if (messages.length) useExportStore.getState().openExport({ messages });
+    else useMailStore.setState({ error: t("selection.exportNothing") });
+  };
+
+  // Every selected key, loaded or not: a tag needs only where the message is.
+  const tagSelected = async (tagId) => {
+    const state = useMailStore.getState();
+    const { resolved } = resolveSelection(selectedEmailIds, state, { rows: loadedRows() });
+    let tagged = false;
+    try {
+      tagged = await applyTagToRows(
+        resolved.map(({ email, location, offScreen }) => (offScreen ? { email, location, offScreen } : { email, location })),
+        tagId,
+      );
+    } catch (e) {
+      console.error("Selection tag failed:", e);
+    }
+    if (!tagged) useMailStore.setState({ error: t("selection.tagFailed") });
   };
 
   // `report` (the catalog key of the failure text) for the actions that
@@ -215,22 +246,22 @@ export function SelectionActionBar() {
       count: summary.threads,
     });
 
+  // The messages behind the selection, in selection order: the rows a pool
+  // holds, and the ones only the selection's snapshot names (a view selected
+  // past the rows it renders, the bulk modal's range), so the bar's actions
+  // stay live over a selection the list never rendered. A key with no
+  // evidence behind it leaves the selection unresolved, as before.
   const selectedRows = useMemo(() => {
     const state = useMailStore.getState();
-    const allRows = [
+    const rows = [
       ...(sortedEmails || []),
       ...(serverEmails || []),
       ...(localEmails || []),
       ...(sentEmails || []),
       ...(searchResults || []),
     ];
-    const seen = new Set();
-    return allRows.filter((email) => {
-      const key = selectionKey(email, state);
-      if (!selectedEmailIds.has(key) || seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
+    return resolveSelection(selectedEmailIds, state, { rows })
+      .resolved.filter((row) => !row.keyOnly).map((row) => row.email);
   }, [selectedEmailIds, sortedEmails, serverEmails, localEmails, sentEmails, searchResults]);
   const allSelectionRows = useMemo(
     () => [
@@ -280,10 +311,7 @@ export function SelectionActionBar() {
     pickFolder: toggleMoveDropdown,
     spam: () => handleAction(() => useMailStore.getState().moveEmails(selectionKeys, selectionJunkPath), { report: "list.spamFailed" }),
     setFlagged: flagged => handleAction(() => useMailStore.getState().setSelectedFlagged(flagged)),
-    tag: tagId => applyTagToRows(
-      selectedRows.map((email, index) => ({ email, location: locations[index] })),
-      tagId,
-    ),
+    tag: tagSelected,
   };
   const runAction = (entry, event) => runMessageAction(entry, actionCtx, event);
 

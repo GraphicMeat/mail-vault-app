@@ -78,6 +78,7 @@ import { useRowMenuState } from '../hooks/emailList/useRowMenuState';
 import { useSenderAccordion } from '../hooks/emailList/useSenderAccordion';
 import { useListHeaderMetrics } from '../hooks/emailList/useListHeaderMetrics';
 import { useRowSelection } from '../hooks/emailList/useRowSelection';
+import { useSelectAll } from '../hooks/emailList/useSelectAll';
 import { useSenderVirtualizer } from '../hooks/emailList/useSenderVirtualizer';
 import { useListScrollEffects } from '../hooks/emailList/useListScrollEffects';
 import { usePullToRefresh } from '../hooks/emailList/usePullToRefresh';
@@ -565,7 +566,7 @@ function EmailListComponent({ stacked = false }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [emailRowHighlight, selectedEmailId, deferredThreads]);
 
-  const allSelected = displayEmails.length > 0 && selectedEmailIds.size === displayEmails.length;
+  const { allSelected, selectAllShown } = useSelectAll({ displayEmails, selectedEmailIds, activeViewId, selKey, setEmailsSelected });
 
   const rowCount = threadedDisplay.length;
 
@@ -736,7 +737,7 @@ function EmailListComponent({ stacked = false }) {
           title={allSelected ? t('workspace.clearSelection') : t('workspace.selectMessages')}
           aria-label={allSelected ? t('workspace.clearSelection') : t('workspace.selectMessages')}
           onClick={() => allSelected ? clearSelection()
-            : searchActive ? setEmailsSelected(displayEmails, true)
+            : searchActive ? selectAllShown()
             : openBulkModal()}>
           {allSelected ? <CheckSquare size={18} className="text-mail-accent-text" /> : <Square size={18} />}
         </Button>

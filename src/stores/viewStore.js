@@ -7,7 +7,7 @@ import { useSettingsStore } from './settingsStore';
 import { useViewHideStore } from './viewHideStore';
 import { ownAddresses } from '../utils/ownAddresses';
 import { getAccountCacheMailboxes } from '../services/cacheManager';
-import { flattenMailboxes, resolveEmailLocation, rowIdentity } from './slices/unifiedHelpers.js';
+import { flattenMailboxes, resolveEmailLocation, rowIdentity, selectionKey, emailKey } from './slices/unifiedHelpers.js';
 import { parseSearchQuery } from '../utils/searchQuery';
 import { normalizeSender } from '../utils/senderRules';
 import { appendTerms, parseGroups, serializeGroups } from '../utils/queryGroups';
@@ -261,6 +261,39 @@ export const useViewStore = create((set, get) => ({
     // opening one is the moment a person looks at them.
     void get().refreshCounts();
     return true;
+  },
+
+  /// Select every message the open view finds: what its badge counts, not
+  /// the rows the list renders (the newest 500). The daemon names each one
+  /// (`members`) with its Message-ID, so the selection's snapshots carry the
+  /// evidence an action on a row never rendered needs. Resolves the number
+  /// selected, or null when the view changed (or could not answer) first.
+  selectAllInView: async () => {
+    const id = get().activeViewId;
+    if (!id) return null;
+    const mine = runGeneration;
+    let reply;
+    try {
+      reply = await daemonCall('views.evaluate', { viewId: id, accounts: accountsPayload(), members: true });
+    } catch (error) {
+      console.warn('[views] could not list the view to select it:', error?.message || error);
+      return null;
+    }
+    if (mine !== runGeneration || get().activeViewId !== id || !reply?.available) return null;
+    const mail = useMailStore.getState();
+    // A message deleted this session is still in the vault the index reads;
+    // openView leaves it out of the rows, and the selection does too.
+    // (searchStore.showRows, by the same `emailKey`)
+    const tombstones = mail.deleteTombstones;
+    const rows = (reply.members || [])
+      .filter(m => m?.accountId && m.mailbox && m.uid != null)
+      .map(m => ({
+        uid: m.uid, _accountId: m.accountId, _mailbox: m.mailbox,
+        ...(m.messageId ? { messageId: m.messageId } : {}),
+      }))
+      .filter(row => !tombstones?.size || !tombstones.has(emailKey(row)));
+    mail.setSelection(rows.map(row => selectionKey(row, mail)), rows);
+    return rows.length;
   },
 
   closeView: () => {

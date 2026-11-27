@@ -23,7 +23,9 @@ import { daemonCall } from '../daemonClient';
 import { isGraphAccount } from '../graphConfig';
 import { moveEmails, reloadListInView } from './messageMutations';
 import { forceMailboxRefetch } from './helpers/mailboxRefetch';
-import { resolveEmailLocation, selectionKey, inLocalFolder } from '../../stores/slices/unifiedHelpers';
+import { resolveEmailLocation, inLocalFolder } from '../../stores/slices/unifiedHelpers';
+import { resolveSelection } from '../../stores/selectionRows';
+import { isImportUid } from '../../utils/importUid';
 import { useConnectivityStore } from '../../stores/connectivityStore';
 import { useSnoozeStore } from '../../stores/snoozeStore';
 import { t as tr } from '../../i18n/index.js';
@@ -35,6 +37,8 @@ const FOLDER_REFUSED = 'E_SNOOZE_FOLDER_REFUSED:';
 /** Whether `email` can be snoozed at all (see the header). */
 export function canSnooze(email, state) {
   if (!email?.messageId || email.source === 'local-only' || email._insightsReadOnly || email._insightsNoServerActions) return false;
+  // An mbox import re-filed after a Graph->IMAP switch: no server holds it.
+  if (isImportUid(email.uid)) return false;
   // A snooze is a server move, and a vault-only folder is on no server.
   if (inLocalFolder(email, state)) return false;
   const location = resolveEmailLocation(email, state);
@@ -52,8 +56,11 @@ export async function snoozeEmails(keys, wakeAt) {
   if (!useConnectivityStore.getState().online) throw new Error(tr('snooze.offline'));
 
   const state = get();
-  const rows = new Map([...state.emails, ...state.sentEmails, ...(state.localEmails || [])]
-    .map(e => [selectionKey(e, state), e]));
+  // Every key, through the one selection resolver: a saved view's rows sit in
+  // the search pool, and a view selected past what it renders is named by
+  // the selection's snapshots alone. Reading three lists dropped all of those.
+  const lists = [...(state.emails || []), ...(state.sentEmails || []), ...(state.localEmails || [])];
+  const rows = new Map(resolveSelection(keys, state, { rows: lists }).resolved.map(r => [r.key, r.email]));
   const groups = new Map();
   for (const key of keys) {
     const email = rows.get(key);

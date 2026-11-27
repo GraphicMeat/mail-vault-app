@@ -25,7 +25,7 @@ function itemOf(email, location) {
 /// Rows the caller handed over that can actually be keyed, with their items.
 function resolve(rows) {
   return rows
-    .map(({ email, location }) => ({ key: rowKeyOf(email, location), email, location }))
+    .map(({ email, location, offScreen }) => ({ key: rowKeyOf(email, location), email, location, offScreen: !!offScreen }))
     .filter(row => row.key)
     .map(row => ({ ...row, item: itemOf(row.email, row.location) }));
 }
@@ -134,12 +134,15 @@ export const useTagStore = create((set, get) => ({
   },
 
   /// Tag a whole selection in one call. The chips appear immediately and go
-  /// back if the daemon refuses.
+  /// back if the daemon refuses. A row marked `offScreen` (selected, never
+  /// rendered) gets a chip only where its tags are already cached: a guessed
+  /// entry would stop its fetch when it renders and hide its other tags.
+  /// Resolves false when nothing was tagged.
   applyTagToRows: async (rows, tagId) => {
     const resolved = resolve(rows);
     if (!resolved.length) return false;
-    const keys = resolved.map(row => row.key);
     const before = get().byRow;
+    const keys = resolved.filter(row => !row.offScreen || before[row.key]).map(row => row.key);
     set(state => ({ byRow: withTag(state.byRow, keys, tagId) }));
     try {
       await daemonCall('tags.assign', { tagId, items: resolved.map(row => row.item) });

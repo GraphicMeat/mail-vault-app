@@ -36,7 +36,8 @@ vi.mock('../../../stores/mailStore', () => ({
   useMailStore: { getState: () => state, setState: (...a) => mockSetState(...a) },
 }));
 
-const { snoozeEmails, unsnooze } = await import('../snooze');
+const { snoozeEmails, unsnooze, canSnooze } = await import('../snooze');
+const { registerRows, unregisterRows } = await import('../../../stores/messageRows');
 const { useSnoozeStore } = await import('../../../stores/snoozeStore');
 
 const WAKE = Date.UTC(2026, 9, 1, 8);
@@ -174,6 +175,43 @@ describe('snoozeEmails', () => {
     expect(mockMove).toHaveBeenCalledTimes(1);
     expect(mockMove.mock.calls[0][0]).toEqual([key(state.emails[0])]);
     expect(result).toEqual({ snoozed: 1, skipped: 2 });
+  });
+
+  // A saved view's rows sit in the search pool, which no folder list holds:
+  // looked up in emails/sentEmails/localEmails alone, every one was dropped
+  // and the snooze threw "unavailable".
+  it('snoozes a saved view\'s row, which only the search pool holds', async () => {
+    const hit = { uid: 9, messageId: '<9@x>', flags: [], _accountId: 'a1', _mailbox: 'Archive' };
+    const pool = { getState: () => ({ searchResults: [hit] }) };
+    registerRows({ name: 'testSearchPool', store: pool, rank: 50, rows: s => s.searchResults });
+    try {
+      mockMove.mockResolvedValue({
+        moved: [{ account, accountId: 'a1', from: 'Archive', to: 'Snoozed', srcUids: [9], dstUids: [49], messageIds: ['<9@x>'] }],
+      });
+      const result = await snoozeEmails(['a1:Archive:9'], WAKE);
+      expect(mockMove).toHaveBeenCalledWith(['a1:Archive:9'], 'Snoozed');
+      expect(result).toEqual({ snoozed: 1, skipped: 0 });
+    } finally {
+      unregisterRows('testSearchPool');
+    }
+  });
+
+  // Selected past what the list renders: only the selection's snapshot names
+  // the message, and that is enough to snooze it.
+  it('snoozes a selected message no list holds from its snapshot', async () => {
+    state.selectedEmailSnapshots = new Map([['a1:Archive:12', { accountId: 'a1', mailbox: 'Archive', uid: 12, messageId: '<12@x>' }]]);
+    mockMove.mockResolvedValue({ moved: [] });
+    const result = await snoozeEmails(['a1:Archive:12'], WAKE);
+    expect(mockMove).toHaveBeenCalledWith(['a1:Archive:12'], 'Snoozed');
+    expect(result).toEqual({ snoozed: 0, skipped: 0 });
+  });
+
+  // An mbox import re-filed after a Graph->IMAP switch gets a uid in the
+  // import range: no server holds it, so there is nothing to move.
+  it('never offers to snooze an imported message no server holds', () => {
+    const imported = { uid: 0xC000_0001, messageId: '<imp@x>', flags: [], _accountId: 'a1', _mailbox: 'INBOX' };
+    expect(canSnooze(imported, state)).toBe(false);
+    expect(canSnooze({ ...imported, uid: 5 }, state)).toBe(true);
   });
 
   it('records a server without UIDPLUS with no uid', async () => {

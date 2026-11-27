@@ -143,6 +143,17 @@ fn run(state: &Arc<DaemonState>, method: &str, params: &Value) -> Result<Value, 
                 let def = definition(conn, params)?;
                 Ok((def.clone(), filter_keys(conn, &def, &accounts)?))
             })?;
+            // `members`: every message the view finds, past the rows the list
+            // renders, for select-all. Named, never rendered.
+            if params.get("members").and_then(Value::as_bool) == Some(true) {
+                return match members_of(state, &def, &accounts, &keys)? {
+                    Err(reason) => Ok(serde_json::json!({ "available": false, "reason": reason, "members": [] })),
+                    Ok(members) => {
+                        let total = members.len();
+                        Ok(serde_json::json!({ "available": true, "members": members, "total": total }))
+                    }
+                };
+            }
             evaluate(state, &def, &accounts, &keys, limit)
         }
         // Who sends what the view's words find, for the builder's "keep these
@@ -570,6 +581,31 @@ fn messages_of(
     accounts: &[Account],
     keys: &HashMap<String, Vec<String>>,
 ) -> Result<Vec<(String, String, u32)>, String> {
+    let members = members_of(state, def, accounts, keys)?.map_err(|reason| format!("search index unavailable: {reason}"))?;
+    Ok(members.into_iter().map(|m| (m.account_id, m.mailbox, m.uid)).collect())
+}
+
+/// One message a view finds, named the way its rendered row is
+/// (`stamp_local_row`'s `_accountId` / `_mailbox`), with the Message-ID the
+/// index holds: the evidence a selection snapshot carries for it.
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Member {
+    account_id: String,
+    mailbox: String,
+    uid: u32,
+    message_id: Option<String>,
+}
+
+/// Every message a view finds, walked page by page past the index's
+/// per-query cap. The inner error is an index that could not answer. The
+/// index lock is taken per page and released before any file is read.
+fn members_of(
+    state: &DaemonState,
+    def: &ViewDef,
+    accounts: &[Account],
+    keys: &HashMap<String, Vec<String>>,
+) -> Result<Result<Vec<Member>, String>, String> {
     use mailvault_core::search_index::query::MAX_LIMIT;
     let now = mailvault_core::clock::now_secs();
     let mut out = Vec::new();
@@ -579,16 +615,21 @@ fn messages_of(
     for account in accounts.iter().filter(|account| def.accounts.is_empty() || def.accounts.contains(&account.account_id)) {
         let mut request = SearchRequest { limit: Some(MAX_LIMIT), ..request_for(def, account, keys, now) };
         loop {
-            let page = crate::search_index::search_page_reply(&state.search_index, &request)?
-                .map_err(|reason| format!("search index unavailable: {reason}"))?
-                .page;
+            let page = match crate::search_index::search_page_reply(&state.search_index, &request)? {
+                Ok(reply) => reply.page,
+                Err(reason) => return Ok(Err(reason.to_string())),
+            };
             for hit in &page.hits {
                 let (mailbox, local_only, _) =
                     crate::handlers::mail_search::mailbox_for_vault_dir(&hit.vault_dir, &account.known_mailboxes);
                 let mailbox = if local_only { hit.vault_dir.clone() } else { mailbox };
-                let message = (account.account_id.clone(), mailbox, hit.uid);
-                if seen.insert(message.clone()) {
-                    out.push(message);
+                if seen.insert((account.account_id.clone(), mailbox.clone(), hit.uid)) {
+                    out.push(Member {
+                        account_id: account.account_id.clone(),
+                        mailbox,
+                        uid: hit.uid,
+                        message_id: hit.message_id.clone(),
+                    });
                 }
             }
             if page.hits.len() < MAX_LIMIT {
@@ -597,7 +638,7 @@ fn messages_of(
             request.offset += page.hits.len();
         }
     }
-    Ok(out)
+    Ok(Ok(out))
 }
 
 /// Uids per custody lock hold in `hidden_members`.
@@ -2261,5 +2302,42 @@ mod tests {
         let s = st();
         let out = call(&s, "views.suggest_terms", json!({ "prefix": "sta", "accounts": ["a"] })).await;
         assert_eq!(out, json!([]));
+    }
+
+    /// Select-all in a view selects what its badge counts, not the 500 rows
+    /// the list renders: `members` walks every page past the index's cap and
+    /// names each message the way the rendered rows do, Message-ID included.
+    #[tokio::test]
+    async fn a_views_members_are_every_message_its_badge_counts() {
+        let s = st();
+        let conn = index_db::open(&s.data_dir).unwrap();
+        let p = mailvault_core::maildir::INFO_PREFIX;
+        let n = mailvault_core::search_index::query::MAX_LIMIT as u32 + 600;
+        for uid in 1..=n {
+            seed(&conn, uid, &format!("{uid}{p}S.eml"), "Bulk", false, &format!("<m{uid}@x.test>"));
+        }
+        index_db::meta_set(&conn, index_db::FIRST_PASS_DONE, "1").unwrap();
+        *lock(&s.search_index.db) = Some(conn);
+
+        let shown = evaluate(&s, json!({})).await;
+        assert_eq!(shown["total"], n, "the badge");
+        assert_eq!(shown["rows"].as_array().unwrap().len(), 500, "rendering stays capped");
+
+        let out = call(&s, "views.evaluate", json!({ "def": {}, "accounts": accounts(), "members": true })).await;
+        assert_eq!(out["available"], true, "{out}");
+        let members = out["members"].as_array().unwrap_or_else(|| panic!("no members: {out}"));
+        assert_eq!(members.len() as u32, n);
+        assert_eq!(out["total"], n);
+        let named: std::collections::HashSet<(String, String, u64)> = members
+            .iter()
+            .map(|m| (m["accountId"].as_str().unwrap().to_owned(), m["mailbox"].as_str().unwrap().to_owned(), m["uid"].as_u64().unwrap()))
+            .collect();
+        assert_eq!(named.len() as u32, n, "no message twice");
+        for row in shown["rows"].as_array().unwrap() {
+            let key = (row["_accountId"].as_str().unwrap().to_owned(), row["_mailbox"].as_str().unwrap().to_owned(), row["uid"].as_u64().unwrap());
+            assert!(named.contains(&key), "a rendered row the members miss: {key:?}");
+        }
+        let seventh = members.iter().find(|m| m["uid"] == 7).unwrap();
+        assert_eq!(seventh["messageId"], "<m7@x.test>");
     }
 }

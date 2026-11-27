@@ -103,6 +103,26 @@ describe('tagStore', () => {
     expect(useTagStore.getState().tagIdsFor(rows[1].email, location)).toEqual(['t1']);
   });
 
+  // A row the selection holds but the list never rendered has no tags
+  // cached. A guessed `[t1]` there would stop its fetch when it does render,
+  // and hide whatever other tags it carries.
+  it('tags a row it never rendered without guessing its chips', async () => {
+    useTagStore.setState({ tags: [RECEIPTS], byRow: { [tagRowKey('a', 'INBOX', 8)]: ['t2'] } });
+    mockDaemonCall.mockResolvedValueOnce({ count: 3 });
+    const rows = [
+      { email: { uid: 7, messageId: '<one@x>' }, location },
+      { email: { uid: 8, messageId: '<two@x>' }, location, offScreen: true },
+      { email: { uid: 9, messageId: '<three@x>' }, location, offScreen: true },
+    ];
+    expect(await useTagStore.getState().applyTagToRows(rows, 't1')).toBe(true);
+    const assigns = mockDaemonCall.mock.calls.filter(([method]) => method === 'tags.assign');
+    expect(assigns[0][1].items.map(item => item.uid)).toEqual([7, 8, 9]);
+    expect(useTagStore.getState().byRow).toEqual({
+      [tagRowKey('a', 'INBOX', 7)]: ['t1'],
+      [tagRowKey('a', 'INBOX', 8)]: ['t2', 't1'],
+    });
+  });
+
   it('a deleted tag leaves no chip behind on any row', async () => {
     useTagStore.setState({
       tags: [RECEIPTS, CLIENTS],
