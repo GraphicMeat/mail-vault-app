@@ -3,6 +3,11 @@
 ## [Unreleased]
 
 - Added: the "Let your mail look after itself" note now shows the Premium price in your currency, with the standard price struck beside it, as a limited-time early access offer for you, your family and friends. Once early access sells the standard price, it shows the price without calling it an offer. The note disappears once you have Premium or sign in to billing.
+- Fixed: marking many emails read or unread, or starring them, sent one request per email and waited for each, with failures never shown. It now sends one request per folder in the background, says when the server has not taken the change yet, and keeps trying. On Gmail, the copies of an email in Bin and All Mail change with it.
+- Fixed: an email kept only on this computer after moving an Outlook account to IMAP made mark read, star and move fail and retry forever, and could make a whole folder's move fail. Such emails are now left out of server changes.
+- Fixed: when a move across several folders failed partway, the emails that did move stayed in the list and could not be undone.
+- Fixed: in a saved view or search, Export did nothing, Tag and Snooze skipped emails not on screen, and Select all stopped at 500 emails. They now cover the whole selection.
+- Fixed: undoing a change right away could reach the server before the change itself, leaving the server in the wrong state.
 - Fixed: Delete everywhere on many emails took many minutes, because it asked the server about each email on a new connection. It now checks and deletes a whole folder at once, so a few hundred emails take seconds, and a chip in the corner shows how far it is while it runs.
 - Fixed: on Gmail, Delete everywhere left the All Mail copy of every email on the server, so the emails came back. A copy in a folder MailVault does not sync is now deleted when the server holds the same email at that place.
 - Fixed: after moving an Outlook account from Microsoft Graph to IMAP, deleting an email kept only on this computer failed with "The specified message set is invalid" and was retried forever. Such an email has no server copy, so the delete now goes through at once.
