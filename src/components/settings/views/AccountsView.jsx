@@ -4,13 +4,14 @@
 // from its engine (src/mobile/settings/Accounts.jsx). Whatever only one app can do arrives as a
 // node (desktop's rich signature editor, account group, Microsoft transport and Google sign-in
 // switches, download mode; the phone's server form) or is left out when its callback is absent.
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   User, Mail, FileText, Shield, Check, Trash2, Loader, RefreshCw, Key, AlertCircle, Plus, Eye, EyeOff, Server, HardDrive, Send,
-  ChevronUp, ChevronDown,
+  GripVertical,
 } from 'lucide-react';
-import { groupAccounts, moveGroup, reorderWithinGroup } from '../../../utils/groupAccounts';
+import { groupAccounts, moveGroup, placeGroup, reorderWithinGroup } from '../../../utils/groupAccounts';
 import { Button } from '../../ui/Button';
 import { SettingsTabs } from '../../ui/SettingsTabs';
 import { ReorderListView } from './ReorderListView';
@@ -42,10 +43,72 @@ function SavedBadge({ visible }) {
 }
 
 /**
+ * Dragging a group by its header grip: the pointer picks the named group it is dropped before
+ * (null: last), measured from each `section[data-group-name]` in the account list. Ungrouped
+ * accounts never move, so they are no target. `onDrop(name, beforeName)` runs on release.
+ */
+function useGroupDrag(onDrop) {
+  const pointerRef = useRef(null);
+  const [drag, setDrag] = useState(null);
+  const cancel = () => {
+    pointerRef.current = null;
+    setDrag(null);
+  };
+  useEffect(() => {
+    const onKeyDown = event => {
+      if (event.key === 'Escape' && pointerRef.current) {
+        event.preventDefault();
+        event.stopPropagation();
+        cancel();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    window.addEventListener('blur', cancel);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown, true);
+      window.removeEventListener('blur', cancel);
+    };
+  }, []);
+  const start = (event, name) => {
+    if (event.button !== 0 || event.isPrimary === false || pointerRef.current) return;
+    event.preventDefault();
+    event.currentTarget.focus({ preventScroll: true });
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    pointerRef.current = {
+      name, pointerId: event.pointerId, list: event.currentTarget.closest('.account-settings-list'),
+      startX: event.clientX, startY: event.clientY, x: event.clientX, y: event.clientY,
+    };
+  };
+  const move = event => {
+    const pointer = pointerRef.current;
+    if (!pointer || pointer.pointerId !== event.pointerId) return;
+    pointer.x = event.clientX;
+    pointer.y = event.clientY;
+    pointer.active ||= Math.hypot(pointer.x - pointer.startX, pointer.y - pointer.startY) >= 5;
+    if (!pointer.active || !pointer.list) return;
+    const box = pointer.list.getBoundingClientRect();
+    pointer.overList = pointer.x >= box.left && pointer.x <= box.right && pointer.y >= box.top && pointer.y <= box.bottom;
+    pointer.beforeName = [...pointer.list.querySelectorAll('section[data-group-name]')].find(section => {
+      const rect = section.getBoundingClientRect();
+      return pointer.y < rect.top + rect.height / 2;
+    })?.dataset.groupName ?? null;
+    setDrag({ name: pointer.name, x: pointer.x, y: pointer.y, overList: pointer.overList, beforeName: pointer.beforeName });
+  };
+  const finish = event => {
+    const pointer = pointerRef.current;
+    if (!pointer || pointer.pointerId !== event.pointerId) return;
+    move(event);
+    if (pointer.active && pointer.overList) onDrop(pointer.name, pointer.beforeName);
+    cancel();
+  };
+  return { drag, start, move, finish, cancel };
+}
+
+/**
  * The left column: every account (`{ id, email, name, initial, color, hidden, oauth, group }`),
  * the selected one pressed, in the sidebar's groups (ungrouped first, each group under its name).
  * `onReorder(ids)` makes the list orderable (desktop): accounts move within their group and a
- * group moves up or down past its neighbour. `onAdd` shows "Add account"; `footer` sits under it
+ * group moves by dragging its header grip (or its arrow keys). `onAdd` shows "Add account"; `footer` sits under it
  * (desktop's phone setup and move to another computer); `style` and `listRef` reach the column.
  */
 export function AccountListView({ accounts, selectedId, onSelect, onReorder, onAdd, footer = null, style, listRef }) {
@@ -59,6 +122,11 @@ export function AccountListView({ accounts, selectedId, onSelect, onReorder, onA
     const ids = moveGroup(accounts, groupOf, name, delta);
     if (ids) onReorder(ids);
   };
+  const groupDrag = useGroupDrag((name, beforeName) => {
+    const ids = placeGroup(accounts, groupOf, name, beforeName);
+    if (ids) onReorder(ids);
+  });
+  const drag = groupDrag.drag;
   const row = account => (
     <button type="button" className="account-settings-account-button"
       aria-pressed={account.id === selectedId} onClick={() => onSelect(account.id)}>
@@ -97,21 +165,23 @@ export function AccountListView({ accounts, selectedId, onSelect, onReorder, onA
           </div>
         ) : sections.map((section, index) => {
           const label = section.name === null ? t('settings.accounts.accounts') : pa(section.name, 'name');
-          return <section key={section.name ?? ''} className="account-settings-group">
+          return <section key={section.name ?? ''} className={`account-settings-group${drag?.name === section.name ? ' is-dragging' : ''}`}
+            data-group-name={section.name ?? undefined}
+            data-group-drop-before={drag?.overList && section.name !== null && drag.beforeName === section.name || undefined}
+            data-group-drop-end={drag?.overList && drag.beforeName === null && index === sections.length - 1 || undefined}>
             {section.name !== null && <div className="account-settings-group-header">
+              {onReorder && sections.filter(other => other.name !== null).length > 1 && <button type="button" className="account-settings-drag-handle account-settings-group-grip"
+                aria-label={t('settings.accounts.reorderGroup', { name: label })} title={t('settings.accounts.reorderGroupInstructions')}
+                onPointerDown={event => groupDrag.start(event, section.name)} onPointerMove={groupDrag.move}
+                onPointerUp={groupDrag.finish} onPointerCancel={groupDrag.cancel} onLostPointerCapture={groupDrag.cancel}
+                onKeyDown={event => {
+                  if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+                  event.preventDefault();
+                  shiftGroup(section.name, event.key === 'ArrowUp' ? -1 : 1);
+                }}>
+                <GripVertical size={14} aria-hidden="true" />
+              </button>}
               <span><Private kind="name">{section.name}</Private></span>
-              {onReorder && <>
-                <button type="button" className="account-settings-group-move" disabled={sections[index - 1]?.name == null}
-                  aria-label={t('settings.accounts.moveGroupUp', { name: label })} title={t('settings.accounts.moveGroupUp', { name: label })}
-                  onClick={() => shiftGroup(section.name, -1)}>
-                  <ChevronUp size={14} aria-hidden="true" />
-                </button>
-                <button type="button" className="account-settings-group-move" disabled={index === sections.length - 1}
-                  aria-label={t('settings.accounts.moveGroupDown', { name: label })} title={t('settings.accounts.moveGroupDown', { name: label })}
-                  onClick={() => shiftGroup(section.name, 1)}>
-                  <ChevronDown size={14} aria-hidden="true" />
-                </button>
-              </>}
             </div>}
             {onReorder ? (
               <ReorderListView accounts={section.accounts} selectedAccountId={selectedId} onReorder={reorderable(section)}
@@ -130,6 +200,10 @@ export function AccountListView({ accounts, selectedId, onSelect, onReorder, onA
             )}
           </section>;
         })}
+        {drag && createPortal(<div className="account-settings-drag-preview" aria-hidden="true"
+          style={{ left: drag.x + 12, top: drag.y + 12 }}>
+          <GripVertical size={16} /><span><Private kind="name">{drag.name}</Private></span>
+        </div>, document.body)}
         {onAdd && (
           <button
             onClick={onAdd}

@@ -231,9 +231,13 @@ body.is-resizing-columns { cursor: col-resize; user-select: none; }
 .account-settings-group + .account-settings-group { margin-top: 12px; }
 .account-settings-group-header { display: flex; align-items: center; gap: 2px; padding: 0 4px 4px 8px; font-size: 11px; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; color: var(--mail-text-muted); }
 .account-settings-group-header > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.account-settings-group-move { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 6px; color: var(--mail-text-muted); }
-.account-settings-group-move:hover:not(:disabled) { background: var(--mail-surface-hover); color: var(--mail-text); }
-.account-settings-group-move:disabled { opacity: .3; cursor: default; }
+.account-settings-group { position: relative; }
+.account-settings-group-header:has(.account-settings-group-grip) { padding-left: 0; }
+.account-settings-group-grip { min-height: 24px; }
+.account-settings-group.is-dragging > * { opacity: .45; }
+.account-settings-group[data-group-drop-before]::before, .account-settings-group[data-group-drop-end]::after { content: ''; position: absolute; left: 0; right: 0; height: 2px; border-radius: 1px; background: var(--mail-accent); pointer-events: none; }
+.account-settings-group[data-group-drop-before]::before { top: -7px; }
+.account-settings-group[data-group-drop-end]::after { bottom: -7px; }
 @container (max-width: 520px) {
   .settings-form { padding: 20px 16px; }
   .settings-section { padding: 16px; }

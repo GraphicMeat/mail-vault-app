@@ -32,16 +32,47 @@ it('lists accounts in their sidebar groups, each group a labelled list', () => {
   expect(within(listEl()).getByRole('list', { name: t('settings.accounts.accounts') })).toBeTruthy();
 });
 
-it('moves a group up and down and the sidebar order follows', () => {
+const groupGrip = name => screen.getByRole('button', { name: t('settings.accounts.reorderGroup', { name }) });
+
+it('has no up and down arrows on group headers', () => {
+  render(<AccountSettings accounts={accounts} />);
+  expect(document.querySelector('.account-settings-group-move')).toBeNull();
+  expect(screen.queryByRole('button', { name: /move .* (up|down)/i })).toBeNull();
+});
+
+it('drags a group by its header grip and the sidebar order follows', () => {
+  vi.stubGlobal('PointerEvent', class extends MouseEvent {
+    constructor(type, options = {}) { super(type, options); this.pointerId = options.pointerId ?? 1; this.isPrimary = options.isPrimary ?? true; }
+  });
+  // Three stacked sections, 100px each: ungrouped, Work, Personal.
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+    if (!this.matches('section')) return { left: 0, right: 260, top: 0, bottom: 300, width: 260, height: 300 };
+    const index = [...this.parentElement.children].filter(el => el.matches('section')).indexOf(this);
+    return { left: 0, right: 260, top: index * 100, bottom: (index + 1) * 100, width: 260, height: 100 };
+  });
   render(<AccountSettings accounts={accounts} />);
   expect(sectionNames()).toEqual([null, 'Work', 'Personal']);
-  const up = name => screen.getByRole('button', { name: t('settings.accounts.moveGroupUp', { name }) });
-  const down = name => screen.getByRole('button', { name: t('settings.accounts.moveGroupDown', { name }) });
-  expect(up('Work').disabled).toBe(true);
-  expect(down('Personal').disabled).toBe(true);
-  fireEvent.click(down('Work'));
+  const drag = (name, y) => {
+    const grip = groupGrip(name);
+    fireEvent.pointerDown(grip, { button: 0, clientX: 20, clientY: 110 });
+    fireEvent.pointerMove(grip, { clientX: 20, clientY: y });
+    expect(document.querySelector('[data-group-drop-before], [data-group-drop-end]')).toBeTruthy();
+    fireEvent.pointerUp(grip, { clientX: 20, clientY: y });
+  };
+  drag('Work', 290);
   expect(sectionNames()).toEqual([null, 'Personal', 'Work']);
-  fireEvent.click(up('Work'));
+  drag('Work', 20);
+  expect(sectionNames()).toEqual([null, 'Work', 'Personal']);
+  expect(document.querySelector('[data-group-drop-before], [data-group-drop-end]')).toBeNull();
+});
+
+it('moves a group with the arrow keys on its grip', () => {
+  render(<AccountSettings accounts={accounts} />);
+  fireEvent.keyDown(groupGrip('Work'), { key: 'ArrowDown' });
+  expect(sectionNames()).toEqual([null, 'Personal', 'Work']);
+  fireEvent.keyDown(groupGrip('Work'), { key: 'ArrowUp' });
+  expect(sectionNames()).toEqual([null, 'Work', 'Personal']);
+  fireEvent.keyDown(groupGrip('Work'), { key: 'ArrowUp' });
   expect(sectionNames()).toEqual([null, 'Work', 'Personal']);
 });
 
@@ -56,7 +87,7 @@ it('shows no group headers when nobody has a group', () => {
   useSettingsStore.setState({ accountGroups: {} });
   render(<AccountSettings accounts={accounts} />);
   expect(within(listEl()).getAllByRole('list')).toHaveLength(1);
-  expect(screen.queryByRole('button', { name: /move .* up/i })).toBeNull();
+  expect(screen.queryByRole('button', { name: /reorder group/i })).toBeNull();
 });
 
 it('resizes the account list from its separator, never below 260px, and keeps the width', () => {

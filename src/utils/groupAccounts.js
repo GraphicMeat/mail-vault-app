@@ -30,6 +30,20 @@ export function moveGroup(orderedAccounts, groupOf, name, delta) {
   return flatIds(sections);
 }
 
+// The account order with group `name` dropped before group `beforeName` (null: last). Ungrouped
+// stays first; null when the group is unknown or the drop changes nothing.
+export function placeGroup(orderedAccounts, groupOf, name, beforeName) {
+  const sections = groupAccounts(orderedAccounts, groupOf);
+  const names = sections.map(section => section.name);
+  const from = sections.findIndex(section => section.name !== null && section.name === name);
+  if (from < 0) return null;
+  const [moved] = sections.splice(from, 1);
+  const to = beforeName === null ? sections.length : sections.findIndex(section => section.name === beforeName);
+  if (to < 0) return null;
+  sections.splice(to, 0, moved);
+  return sections.every((section, index) => section.name === names[index]) ? null : flatIds(sections);
+}
+
 // The account order with section `name` (null: ungrouped) in the order `ids`.
 export function reorderWithinGroup(orderedAccounts, groupOf, name, ids) {
   return groupAccounts(orderedAccounts, groupOf).flatMap(section => section.name === name
