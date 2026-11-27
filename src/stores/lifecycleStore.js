@@ -31,13 +31,15 @@ export function lifecycleKeys(kind) {
   return KEYS[kind] || null;
 }
 
-/** The four facts the daemon decides on, and nothing else of the settings. */
+/** The facts the daemon decides on, and nothing else of the settings. */
 export function lifecycleState(settings) {
   const p = settings.billingProfile;
   return {
     lifecycleMessages: settings.lifecycleMessages !== false,
     onboardingComplete: !!settings.onboardingComplete,
     lifecycleCheckoutAt: settings.lifecycleCheckoutAt ?? null,
+    // Signed in to billing: a boolean, never the address.
+    signedIn: !!settings.billingEmail,
     billingProfile: p
       ? { premiumAccess: p.premiumAccess, hasSubscription: p.hasSubscription, status: p.status, currentPeriodEnd: p.currentPeriodEnd }
       : null,

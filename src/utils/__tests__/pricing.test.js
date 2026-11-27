@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { detectRegion, currencyForRegion, formatAmount, priceBlurb, blurbFromAmounts, pricingRecord } from '../pricing';
+import { detectRegion, currencyForRegion, formatAmount, priceBlurb, blurbFromAmounts, pricingRecord, premiumOffer, PREMIUM_PRICE_BLURB } from '../pricing';
 
 describe('detectRegion', () => {
   it('takes the region off the first tag that carries one', () => {
@@ -90,5 +90,45 @@ describe('pricingRecord', () => {
     expect(pricingRecord({ currency: 'eur', plans: [] })).toBeNull();
     expect(pricingRecord({ plans: response.plans })).toBeNull();
     expect(pricingRecord({ currency: 'eur', plans: [response.plans[0]] })).toBeNull();
+  });
+});
+
+describe('pricingRecord standard price', () => {
+  it('keeps the standard price after early access when the server sends it', () => {
+    const res = {
+      currency: 'gbp', pricingMode: 'manual',
+      plans: [{ interval: 'month', amount: 350 }, { interval: 'year', amount: 2100 }],
+      standard: { monthly: 500, yearly: 3300 },
+    };
+    expect(pricingRecord(res)).toEqual({
+      currency: 'gbp', monthly: 350, yearly: 2100, pricingMode: 'manual', standardMonthly: 500, standardYearly: 3300,
+    });
+  });
+});
+
+describe('premiumOffer', () => {
+  const gbp = { currency: 'gbp', monthly: 350, yearly: 2100, pricingMode: 'manual', standardMonthly: 500, standardYearly: 3300 };
+
+  it('quotes the early access price beside the standard one it undercuts', () => {
+    expect(premiumOffer(gbp)).toEqual({
+      price: blurbFromAmounts(350, 2100, 'gbp'),
+      standard: blurbFromAmounts(500, 3300, 'gbp'),
+      limited: true,
+    });
+    expect(premiumOffer(gbp).price).toContain('£3.50');
+  });
+
+  it('once early access sells the standard price, nothing is called limited', () => {
+    const full = { ...gbp, monthly: 500, yearly: 3300 };
+    expect(premiumOffer(full)).toEqual({ price: blurbFromAmounts(500, 3300, 'gbp'), standard: null, limited: false });
+  });
+
+  it('a cached answer from before the standard price was kept quotes the plan price alone', () => {
+    const old = { currency: 'eur', monthly: 400, yearly: 2500, pricingMode: 'manual' };
+    expect(premiumOffer(old)).toEqual({ price: blurbFromAmounts(400, 2500, 'eur'), standard: null, limited: true });
+  });
+
+  it('before the server answers, the locale guess stands in', () => {
+    expect(premiumOffer(null)).toEqual({ price: PREMIUM_PRICE_BLURB, standard: null, limited: true });
   });
 });

@@ -8,17 +8,18 @@ export const FOCUS_GAP_MS = 10 * 60 * 1000;
 
 /**
  * Keeps the lifecycle messages current: asks the daemon when the app starts,
- * when billing, onboarding or the on/off switch changes (those decide most
+ * when billing, the billing sign-in, onboarding or the on/off switch changes (those decide most
  * messages), and when the window regains focus after a while. Opening a real
  * email closes an open message, so the reader never shows both.
  */
 export function useLifecycleMail() {
   const billingProfile = useSettingsStore((s) => s.billingProfile);
+  const signedIn = useSettingsStore((s) => !!s.billingEmail);
   const enabled = useSettingsStore((s) => s.lifecycleMessages);
   const onboardingComplete = useSettingsStore((s) => s.onboardingComplete);
   const selectedEmailId = useMailStore((s) => s.selectedEmailId);
 
-  useEffect(() => { useLifecycleStore.getState().sync(); }, [billingProfile, enabled, onboardingComplete]);
+  useEffect(() => { useLifecycleStore.getState().sync(); }, [billingProfile, signedIn, enabled, onboardingComplete]);
 
   useEffect(() => {
     const onFocus = () => {

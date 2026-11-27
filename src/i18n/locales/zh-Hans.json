@@ -1419,6 +1419,8 @@
   "lifecycle.freeNudge.star.title": "还不想升级 Premium？点个星也很有帮助",
   "lifecycle.freeNudge.star.blurb": "在 GitHub 上给 MailVault 点星只需一次点击，不花一分钱，却意义重大。星标是人们发现这样一个小型独立应用的方式，每一颗都在告诉我们继续做下去。",
   "lifecycle.freeNudge.star.link": "在 GitHub 上给 MailVault 点星",
+  "lifecycle.freeNudge.offer.title": "限时优惠，仅限你和你的家人朋友",
+  "lifecycle.freeNudge.offer.blurb": "MailVault 正处于抢先体验阶段，此价格仅向早期用户及其分享的人开放。现在锁定，只要订阅持续有效，即使日后涨价，你的价格也保持不变。",
   "lifecycle.setting.label": "在收件箱中显示有关 Premium 的通知",
   "lifecycle.setting.hint": "来自 MailVault 的简短通知，例如试用即将结束。在这台电脑上生成，不会通过电子邮件发送。",
   "onboarding.afterDeleteNext": "下一封邮件",

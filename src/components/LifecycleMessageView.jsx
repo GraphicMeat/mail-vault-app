@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Sparkles, Star, X } from 'lucide-react';
 import { useT } from '../i18n/index.js';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useLifecycleStore, lifecycleKeys } from '../stores/lifecycleStore';
 import { formatDateLong, formatEmailDate } from '../utils/dateFormat';
 import { Button } from './ui/Button';
+import { ensurePremiumPricing } from '../hooks/usePremiumPricing.js';
+import { premiumOffer } from '../utils/pricing';
 import backupsArt from '../assets/lifecycle/backups.webp';
 import cleanupArt from '../assets/lifecycle/cleanup.webp';
 import privacyArt from '../assets/lifecycle/privacy.webp';
@@ -32,6 +34,45 @@ function Scene({ id, art, hero }) {
         <p className="mt-1 text-xs text-mail-text-muted leading-relaxed">{t(`lifecycle.freeNudge.scene.${id}.blurb`)}</p>
       </div>
     </li>
+  );
+}
+
+/**
+ * The price, in the currency checkout bills. While early access sells it below
+ * the standard price, it is told as what it is: a limited offer for early users
+ * and the people close to them, the standard price struck beside it.
+ */
+function Offer() {
+  const t = useT();
+  const pricing = useSettingsStore((s) => s.premiumPricing);
+  useEffect(() => { ensurePremiumPricing(); }, []);
+  const { price, standard, limited } = premiumOffer(pricing);
+  // Same words as the Billing tab: outside USD, GBP and EUR the price is the
+  // EUR base, converted (adaptive) or charged as is (fallback).
+  const mode = pricing?.pricingMode;
+  const currencyNote = mode === 'adaptive'
+    ? t('settings.billing.pricesShownCheckoutConvertLocal', { pricing: pricing.currency.toUpperCase() })
+    : mode === 'fallback'
+      ? t('settings.billing.charged', { pricing: pricing.currency.toUpperCase() })
+      : null;
+  return (
+    <div data-testid="lifecycle-offer" className="mt-5 p-4 rounded-xl border border-mail-accent/30 bg-mail-accent-tint">
+      {limited && (
+        <p className="text-sm font-semibold text-mail-text">{t('lifecycle.freeNudge.offer.title')}</p>
+      )}
+      <p className="mt-1 flex flex-wrap items-baseline gap-x-2 text-mail-text">
+        <span data-testid="lifecycle-offer-price" className="text-base font-semibold text-mail-accent-text">{price}</span>
+        {standard && (
+          <s data-testid="lifecycle-offer-standard" className="text-xs text-mail-text-muted">{standard}</s>
+        )}
+      </p>
+      {currencyNote && (
+        <p data-testid="lifecycle-offer-currency" className="mt-1 text-xs text-mail-text-muted">{currencyNote}</p>
+      )}
+      {limited && (
+        <p className="mt-2 text-xs text-mail-text-muted leading-relaxed">{t('lifecycle.freeNudge.offer.blurb')}</p>
+      )}
+    </div>
   );
 }
 
@@ -97,6 +138,8 @@ export function LifecycleMessageView({ onOpenBilling }) {
             </div>
           </>
         )}
+
+        {keys.vision && <Offer />}
 
         {keys.outroKey && (
           <p data-testid="lifecycle-message-outro" className="mt-5 text-sm text-mail-text leading-relaxed">{t(keys.outroKey)}</p>

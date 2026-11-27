@@ -46,7 +46,7 @@ describe('lifecycleState', () => {
       },
     });
     expect(state).toEqual({
-      lifecycleMessages: true, onboardingComplete: true, lifecycleCheckoutAt: 5,
+      lifecycleMessages: true, onboardingComplete: true, lifecycleCheckoutAt: 5, signedIn: true,
       billingProfile: { premiumAccess: true, hasSubscription: true, status: 'trialing', currentPeriodEnd: '2026-11-05T10:00:00Z' },
     });
   });
@@ -62,7 +62,7 @@ describe('sync', () => {
     useSettingsStore.setState({ onboardingComplete: true, lifecycleCheckoutAt: 7, billingProfile: { premiumAccess: false, hasSubscription: false, status: null } });
     await useLifecycleStore.getState().sync();
     expect(api.lifecycleSync).toHaveBeenCalledWith({
-      lifecycleMessages: true, onboardingComplete: true, lifecycleCheckoutAt: 7,
+      lifecycleMessages: true, onboardingComplete: true, lifecycleCheckoutAt: 7, signedIn: false,
       billingProfile: { premiumAccess: false, hasSubscription: false, status: null, currentPeriodEnd: undefined },
     });
     expect(useLifecycleStore.getState().rows).toEqual([ROW]);

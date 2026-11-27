@@ -4,12 +4,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { setLocale, t } from '../../i18n/index.js';
 import { formatDateLong } from '../../utils/dateFormat';
+import { blurbFromAmounts } from '../../utils/pricing';
 
 vi.mock('../../services/api', async (importOriginal) => ({
   ...(await importOriginal()),
   lifecycleSync: vi.fn().mockResolvedValue({ rows: [] }),
   lifecycleMarkSeen: vi.fn().mockResolvedValue({ rows: [] }),
   lifecycleDismiss: vi.fn().mockResolvedValue({ rows: [] }),
+}));
+
+vi.mock('../../services/billingApi', async (importOriginal) => ({
+  ...(await importOriginal()),
+  fetchPricing: vi.fn().mockRejectedValue(new Error('offline')),
 }));
 
 const { useSettingsStore } = await import('../../stores/settingsStore');
@@ -123,5 +129,52 @@ describe('LifecycleMessageView', () => {
     useLifecycleStore.setState({ rows: [row('x', 'from-the-future')], openId: 'x' });
     const { container } = render(<LifecycleMessageView onOpenBilling={() => {}} />);
     expect(container.firstChild).toBeNull();
+  });
+
+  describe('the offer in the free note', () => {
+    const gbp = { currency: 'gbp', monthly: 350, yearly: 2100, pricingMode: 'manual', standardMonthly: 500, standardYearly: 3300 };
+    const open = (kind = 'free-nudge') => {
+      useLifecycleStore.setState({ rows: [row(kind, kind)], openId: kind });
+      render(<LifecycleMessageView onOpenBilling={() => {}} />);
+    };
+
+    it('quotes the price in the local currency, the standard price struck, as a limited offer for family and friends', () => {
+      useSettingsStore.setState({ premiumPricing: { ...gbp, fetchedAt: Date.now() } });
+      open();
+      const offer = screen.getByTestId('lifecycle-offer');
+      expect(offer.textContent).toContain(t('lifecycle.freeNudge.offer.title'));
+      expect(offer.textContent).toContain(t('lifecycle.freeNudge.offer.blurb'));
+      expect(screen.getByTestId('lifecycle-offer-price').textContent).toBe(blurbFromAmounts(350, 2100, 'gbp'));
+      const standard = screen.getByTestId('lifecycle-offer-standard');
+      expect(standard.textContent).toBe(blurbFromAmounts(500, 3300, 'gbp'));
+      expect(standard.tagName).toBe('S');
+    });
+
+    it('once early access is over it quotes the price without calling it limited', () => {
+      useSettingsStore.setState({ premiumPricing: { ...gbp, monthly: 500, yearly: 3300, fetchedAt: Date.now() } });
+      open();
+      expect(screen.getByTestId('lifecycle-offer-price').textContent).toBe(blurbFromAmounts(500, 3300, 'gbp'));
+      expect(screen.getByTestId('lifecycle-offer').textContent).not.toContain(t('lifecycle.freeNudge.offer.title'));
+      expect(screen.queryByTestId('lifecycle-offer-standard')).toBeNull();
+    });
+
+    it('where checkout converts the currency, it says so under the price', () => {
+      useSettingsStore.setState({ premiumPricing: { ...gbp, currency: 'eur', pricingMode: 'adaptive', fetchedAt: Date.now() } });
+      open();
+      expect(screen.getByTestId('lifecycle-offer-currency').textContent)
+        .toBe(t('settings.billing.pricesShownCheckoutConvertLocal', { pricing: 'EUR' }));
+    });
+
+    it('a price in the local currency needs no currency note', () => {
+      useSettingsStore.setState({ premiumPricing: { ...gbp, fetchedAt: Date.now() } });
+      open();
+      expect(screen.queryByTestId('lifecycle-offer-currency')).toBeNull();
+    });
+
+    it.each(['trial-ending', 'checkout-left', 'plan-ended'])('the %s note quotes no price', (kind) => {
+      useSettingsStore.setState({ premiumPricing: { ...gbp, fetchedAt: Date.now() } });
+      open(kind);
+      expect(screen.queryByTestId('lifecycle-offer')).toBeNull();
+    });
   });
 });

@@ -1419,6 +1419,8 @@
   "lifecycle.freeNudge.star.title": "Pas encore prêt pour Premium ? Une étoile aide aussi",
   "lifecycle.freeNudge.star.blurb": "Mettre une étoile à MailVault sur GitHub prend un clic et ne coûte rien, mais cela compte énormément. C’est grâce aux étoiles qu’on découvre une petite app indépendante comme celle-ci, et chacune nous pousse à continuer.",
   "lifecycle.freeNudge.star.link": "Mettre une étoile à MailVault sur GitHub",
+  "lifecycle.freeNudge.offer.title": "Offre à durée limitée, rien que pour vous, votre famille et vos amis",
+  "lifecycle.freeNudge.offer.blurb": "MailVault est en accès anticipé : ce prix est réservé aux premiers utilisateurs et aux personnes avec qui ils le partagent. Bloquez-le maintenant et il reste le vôtre tant que votre abonnement est actif, même après la hausse des prix.",
   "lifecycle.setting.label": "Afficher dans ma boîte de réception des notes sur Premium",
   "lifecycle.setting.hint": "Courtes notes de MailVault, par exemple un essai qui se termine bientôt. Écrites sur cet ordinateur, jamais envoyées par e-mail.",
   "onboarding.afterDeleteNext": "E-mail suivant",

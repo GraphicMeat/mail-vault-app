@@ -1419,6 +1419,8 @@
   "lifecycle.freeNudge.star.title": "Not ready for Premium? A star helps too",
   "lifecycle.freeNudge.star.blurb": "Starring MailVault on GitHub takes one click and costs nothing, but it goes a long way. Stars are how people find a small independent app like this one, and every one tells us to keep building it.",
   "lifecycle.freeNudge.star.link": "Star MailVault on GitHub",
+  "lifecycle.freeNudge.offer.title": "Limited time offer, just for you, family & friends",
+  "lifecycle.freeNudge.offer.blurb": "MailVault is in early access, so this price is only open to early users and the people they share it with. Lock it in now and it stays yours for as long as your subscription runs, even after prices go up.",
   "lifecycle.setting.label": "Show notes about Premium in my inbox",
   "lifecycle.setting.hint": "Short notes from MailVault, such as a trial ending soon. Written on this computer, never sent by email.",
   "onboarding.afterDeleteNext": "Next email",

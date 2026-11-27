@@ -1419,6 +1419,8 @@
   "lifecycle.freeNudge.star.title": "Premiumはまだという方へ。スターも力になります",
   "lifecycle.freeNudge.star.blurb": "GitHubでMailVaultにスターを付けるのはワンクリック、無料です。それでも大きな力になります。スターは、このような小さな独立系アプリが見つけてもらうきっかけになり、ひとつひとつが開発を続ける励みになります。",
   "lifecycle.freeNudge.star.link": "GitHubでMailVaultにスターを付ける",
+  "lifecycle.freeNudge.offer.title": "期間限定オファー：あなたとご家族、ご友人だけに",
+  "lifecycle.freeNudge.offer.blurb": "MailVault はアーリーアクセス中のため、この価格は初期ユーザーとその方が共有した人だけが利用できます。今お申し込みいただくと、価格が上がった後も、サブスクリプションが続く限りこの価格のままです。",
   "lifecycle.setting.label": "Premiumについてのお知らせを受信トレイに表示する",
   "lifecycle.setting.hint": "試用期間の終了間近など、MailVaultからの短いお知らせです。このコンピュータ上で作成され、メールでは送信されません。",
   "onboarding.afterDeleteNext": "次のメール",

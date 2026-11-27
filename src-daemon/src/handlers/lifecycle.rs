@@ -5,7 +5,8 @@
 //!
 //! - `lifecycle.sync {state}` reads the settings facts the app hands over
 //!   (`state`, see `Inputs::from_state`), delivers at most one message that is
-//!   due, and answers `{rows}`: every message not dismissed, newest first. With
+//!   due, and answers `{rows}`: every message not dismissed, newest first (the
+//!   free note left out once Premium is on or the user signed in). With
 //!   `lifecycleMessages: false` it answers no rows and delivers nothing.
 //! - `lifecycle.mark_seen {id}` and `lifecycle.dismiss {id}` record what the
 //!   user did and answer `{ok}`. A dismissed message stays on file, so the same
@@ -58,7 +59,7 @@ fn run(app_dir: &Path, method: &str, params: &Value, now_ms: i64) -> Value {
         SYNC => {
             let inputs = Inputs::from_state(params.get("state").unwrap_or(&Value::Null));
             lifecycle_mail::evaluate(&inputs, &mut store, now_ms);
-            json!({ "rows": if inputs.enabled { store.visible() } else { Vec::new() } })
+            json!({ "rows": if inputs.enabled { store.visible_for(&inputs) } else { Vec::new() } })
         }
         MARK_SEEN => {
             if let Some(id) = params.get("id").and_then(Value::as_str) {

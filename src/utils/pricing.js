@@ -95,6 +95,27 @@ export function pricingRecord(response) {
     monthly: monthly.amount,
     yearly: yearly.amount,
     pricingMode: response.pricingMode || null,
+    ...(response.standard?.monthly && response.standard?.yearly
+      ? { standardMonthly: response.standard.monthly, standardYearly: response.standard.yearly }
+      : {}),
+  };
+}
+
+/**
+ * What the free note quotes: the plan price, and while early access sells it
+ * below the standard price, that standard price too. `limited` is false once
+ * checkout charges the standard price, so nothing is called an offer then.
+ * Before the server answers, the locale guess stands in (early access prices).
+ */
+export function premiumOffer(record) {
+  if (!record) return { price: PREMIUM_PRICE_BLURB, standard: null, limited: true };
+  const price = blurbFromAmounts(record.monthly, record.yearly, record.currency);
+  if (!record.standardMonthly || !record.standardYearly) return { price, standard: null, limited: true };
+  const limited = record.monthly < record.standardMonthly || record.yearly < record.standardYearly;
+  return {
+    price,
+    standard: limited ? blurbFromAmounts(record.standardMonthly, record.standardYearly, record.currency) : null,
+    limited,
   };
 }
 

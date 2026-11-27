@@ -12,8 +12,8 @@
 //!   * `checkout-left`: a checkout was opened a day to a week ago and no plan
 //!     came of it (once per attempt).
 //!   * `plan-ended`: a plan ended a day to a month ago and Premium is off.
-//!   * `free-nudge`: the user finished onboarding, is free, never opened a
-//!     checkout, and four days have passed since the daemon first saw that
+//!   * `free-nudge`: the user finished onboarding, is free, not signed in to
+//!     billing, never opened a checkout, and four days have passed since the daemon first saw that
 //!     (once ever).
 //!
 //! At most one message is delivered per call, and never within a day of the
@@ -70,6 +70,8 @@ pub struct Inputs {
     pub status: Option<String>,
     pub period_end_ms: Option<i64>,
     pub checkout_started_ms: Option<i64>,
+    /// The user is signed in to billing (`signedIn`, the app's billing email).
+    pub signed_in: bool,
 }
 
 impl Inputs {
@@ -88,6 +90,7 @@ impl Inputs {
             status: profile.and_then(|p| p.get("status")).and_then(Value::as_str).map(str::to_owned),
             period_end_ms: profile.and_then(|p| p.get("currentPeriodEnd")).and_then(parse_time_ms),
             checkout_started_ms: state.get("lifecycleCheckoutAt").and_then(parse_time_ms),
+            signed_in: flag(state.get("signedIn")),
         }
     }
 }
@@ -142,6 +145,14 @@ impl Store {
         let mut rows: Vec<Row> = self.rows.iter().filter(|r| !r.dismissed).cloned().collect();
         rows.sort_by(|a, b| b.at_ms.cmp(&a.at_ms));
         rows
+    }
+
+    /// The rows to list for these facts. The free note pitches Premium, so it
+    /// is withdrawn once Premium is on, a plan is on file or the user has
+    /// signed in to billing; the row stays on file, so it never comes back.
+    pub fn visible_for(&self, inputs: &Inputs) -> Vec<Row> {
+        let pitched = inputs.premium_access || inputs.has_subscription || inputs.signed_in;
+        self.visible().into_iter().filter(|r| !(pitched && r.kind == FREE_NUDGE)).collect()
     }
 
     /// True when `id` named a row that changed.
@@ -214,6 +225,7 @@ fn due(inputs: &Inputs, store: &Store, now_ms: i64, free: bool) -> Option<(&'sta
     }
     if inputs.onboarding_complete
         && free
+        && !inputs.signed_in
         && inputs.checkout_started_ms.is_none()
         && store.free_since_ms.is_some_and(|since| now_ms - since >= FREE_WAIT_MS)
     {
@@ -429,6 +441,7 @@ mod tests {
             "lifecycleMessages": true,
             "onboardingComplete": true,
             "lifecycleCheckoutAt": 1_793_000_000_000_i64,
+            "signedIn": true,
             "billingProfile": {
                 "premiumAccess": true, "hasSubscription": true, "status": "trialing",
                 "currentPeriodEnd": "2026-11-05T10:00:00.000Z",
@@ -442,6 +455,7 @@ mod tests {
             status: Some("trialing".into()),
             period_end_ms: Some(1_793_872_800_000),
             checkout_started_ms: Some(1_793_000_000_000),
+            signed_in: true,
         });
     }
 
@@ -491,6 +505,38 @@ mod tests {
         assert!(!store.dismiss("c"), "already dismissed");
         assert!(!store.dismiss("nope"));
         assert_eq!(store.visible().iter().map(|r| r.id.as_str()).collect::<Vec<_>>(), ["b", "a"]);
+    }
+
+    #[test]
+    fn the_free_note_is_withdrawn_once_premium_is_bought_or_the_user_signs_in() {
+        let store = Store { free_since_ms: Some(NOW), rows: vec![row("free-nudge", FREE_NUDGE, 30), row("a", PLAN_ENDED, 10)] };
+        let ids = |inputs: &Inputs| store.visible_for(inputs).iter().map(|r| r.id.clone()).collect::<Vec<_>>();
+        assert_eq!(ids(&free()), ["free-nudge", "a"], "a free user who is not signed in still sees it");
+
+        let premium = Inputs { premium_access: true, signed_in: true, ..free() };
+        assert_eq!(ids(&premium), ["a"], "premium bought");
+        let subscribed = Inputs { has_subscription: true, ..free() };
+        assert_eq!(ids(&subscribed), ["a"], "a subscription on file");
+        let signed_in = Inputs { signed_in: true, ..free() };
+        assert_eq!(ids(&signed_in), ["a"], "signed in, even on the free plan");
+        assert_eq!(store.rows.len(), 2, "kept on file so it is never delivered again");
+    }
+
+    #[test]
+    fn signed_in_is_the_flag_the_app_sends_not_a_left_over_profile() {
+        assert!(!Inputs::from_state(&json!({})).signed_in);
+        assert!(!Inputs::from_state(&json!({ "signedIn": "yes" })).signed_in);
+        // A sign-in that granted nothing keeps its profile but stays signed out.
+        assert!(!Inputs::from_state(&json!({ "signedIn": false, "billingProfile": { "premiumAccess": false } })).signed_in);
+        assert!(Inputs::from_state(&json!({ "signedIn": true })).signed_in);
+    }
+
+    #[test]
+    fn a_signed_in_user_is_never_delivered_the_free_note() {
+        let mut store = Store { free_since_ms: Some(NOW - 10 * DAY_MS), rows: vec![] };
+        let inputs = Inputs { signed_in: true, ..free() };
+        assert!(evaluate(&inputs, &mut store, NOW).is_none());
+        assert!(store.rows.is_empty(), "nothing on file to resurface after a sign-out");
     }
 
     #[test]
