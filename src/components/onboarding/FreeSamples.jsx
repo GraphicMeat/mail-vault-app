@@ -23,21 +23,26 @@ import { SampleConversation } from '../ui/SampleConversation';
 
 const Frame = ({ id, children }) => (
   <div data-testid={`free-sample-${id}`}
-       className="rounded-lg border border-mail-border bg-mail-bg p-3 text-xs leading-relaxed select-none">
+       className="onboarding-free-frame text-xs leading-relaxed select-none">
     {children}
   </div>
 );
 
-/** Vault: the three state glyphs and the backup dot, each with its caption. */
+/**
+ * Vault: each state glyph on a message row, captioned the way the list's
+ * legend names it, so the mark is seen where it will be met.
+ */
 export function VaultSample() {
+  const rows = previewRows();
   return (
     <Frame id="vault">
-      <div className="grid grid-cols-2 gap-x-2 gap-y-2">
-        {LEGEND_ENTRIES().map(entry => (
-          <div key={entry.id} data-testid={`free-legend-${entry.id}`}
-               className="flex items-center gap-1.5 text-mail-text-muted min-w-0">
+      <div className="onboarding-free-rows">
+        {LEGEND_ENTRIES().map((entry, i) => (
+          <div key={entry.id} data-testid={`free-legend-${entry.id}`} className="onboarding-free-row">
             <span className="flex-shrink-0 flex items-center justify-center w-3">{entry.glyph}</span>
-            <span title={entry.detail}>{entry.text}</span>
+            <span className="font-medium text-mail-text flex-shrink-0">{rows[i].sender}</span>
+            <span className="truncate text-mail-text-muted flex-1 min-w-0">{rows[i].subject}</span>
+            <span className="onboarding-free-tag" title={entry.detail}>{entry.text}</span>
           </div>
         ))}
       </div>
@@ -62,15 +67,16 @@ export function SearchSample() {
 
   return (
     <Frame id="search">
-      <div className="flex items-center gap-1.5 rounded border border-mail-border bg-mail-surface px-1.5 py-1 mb-1.5">
+      <div className="onboarding-free-search">
         <Search size={14} className="text-mail-text-muted flex-shrink-0" />
         <span className="text-mail-text">{SEARCH_TERM}</span>
       </div>
-      <div className="space-y-1">
+      <div className="onboarding-free-rows">
         {hits.map(r => (
-          <div key={r.id} className="flex items-baseline gap-1 min-w-0">
+          <div key={r.id} className="onboarding-free-row">
             <mark className="bg-mail-accent-tint text-mail-accent-text rounded px-0.5 flex-shrink-0">{r.sender}</mark>
-            <span className="truncate text-mail-text-muted">{r.subject}</span>
+            <span className="truncate text-mail-text-muted flex-1 min-w-0">{r.subject}</span>
+            <span className="text-mail-text-muted flex-shrink-0">{r.time}</span>
           </div>
         ))}
       </div>

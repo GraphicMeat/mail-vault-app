@@ -7,6 +7,7 @@ import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import { FreeFeatures } from '../FreeFeatures';
 import { LEGEND_ENTRIES } from '../../email/stateLegend.jsx';
 import { SAFETY_ALERTS } from '../../../data/safetyAlerts.js';
+import { previewRows } from '../../../data/previewMail.js';
 
 afterEach(cleanup);
 
@@ -34,6 +35,18 @@ describe('free features step', () => {
     expect(ids.length).toBe(4);
     for (const id of ids) {
       expect(screen.getByTestId(`free-legend-${id}`), id).toBeTruthy();
+    }
+  });
+
+  // A legend of four glyphs floating in an empty box taught nothing; each mark
+  // now sits on a message row, the way the list shows it.
+  it('puts every vault mark on a message row', () => {
+    render(<FreeFeatures onContinue={() => {}} />);
+    const senders = previewRows().map(r => r.sender);
+    for (const e of LEGEND_ENTRIES()) {
+      const row = screen.getByTestId(`free-legend-${e.id}`);
+      expect(senders.some(s => row.textContent.includes(s)), e.id).toBe(true);
+      expect(row.textContent, e.id).toContain(e.text);
     }
   });
 

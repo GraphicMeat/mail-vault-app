@@ -231,4 +231,19 @@ describe('appearance step', () => {
       expect(sidebar().dataset.layout).toBe(value);
     }
   });
+
+  // The demo window is the same box on every tab: Quick actions draws its
+  // live rows inside it instead of swapping the window for a bare strip.
+  it('keeps the demo window on the quick actions tab, with the live rows inside it', () => {
+    render(<AppearanceStep onContinue={() => {}} />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Quick actions' }));
+    const preview = screen.getByTestId('appearance-preview');
+    expect(within(preview).getByTestId('preview-pane-sidebar')).toBeTruthy();
+    const sample = preview.querySelector('[data-quick-actions-preview]');
+    expect(sample).toBeTruthy();
+    const layout = within(screen.getByTestId('appearance-control-quick-layout')).getByRole('radiogroup', { name: 'Layout' });
+    fireEvent.click(within(layout).getByRole('radio', { name: 'Menu' }));
+    expect(screen.getByTestId('appearance-preview').querySelector('[data-quick-actions-preview]')).toBeTruthy();
+    expect(useSettingsStore.getState().quickActions.defaults.row.mode).toBe('menu');
+  });
 });

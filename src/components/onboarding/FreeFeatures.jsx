@@ -33,8 +33,8 @@ export function FreeFeatures({ onContinue }) {
           const Sample = FREE_SAMPLES[f.id];
           return (
             <div key={f.id} data-testid={`free-feature-${f.id}`}
-                 className="p-3 rounded-lg border border-mail-border bg-mail-surface flex flex-col gap-2 min-h-0 overflow-hidden">
-              <div>
+                 className="onboarding-free-card rounded-lg border border-mail-border bg-mail-surface min-h-0 overflow-hidden">
+              <div className="onboarding-free-head">
                 <div className="flex items-center gap-2 mb-1">
                   <div className="w-7 h-7 rounded bg-mail-accent-tint flex items-center justify-center flex-shrink-0">
                     <Icon size={14} className="text-mail-accent-text" />
@@ -43,9 +43,10 @@ export function FreeFeatures({ onContinue }) {
                 </div>
                 <p className="text-xs text-mail-text-muted leading-snug">{f.blurb}</p>
               </div>
-              {/* Pushed to the bottom so the four samples line up across the
-                  grid even though the blurbs are different lengths. */}
-              <div className="mt-auto onboarding-free-sample"><Sample /></div>
+              {/* The card's second grid row: the samples of a row share one top
+                  and one height whatever the blurbs' lengths, and each sample
+                  fills its frame, content centred. */}
+              <div className="onboarding-free-sample"><Sample /></div>
             </div>
           );
         })}

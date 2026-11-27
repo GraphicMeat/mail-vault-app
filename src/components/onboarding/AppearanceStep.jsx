@@ -22,7 +22,7 @@ import { refreshFonts, useFontStore } from '../../services/fontService';
 // and whose set to start from. Each action is fine-tuned later in Settings.
 // The sample is read when this tab opens, the last one, so a first run's new
 // account has had the longest to cache some mail.
-function QuickActionsSection() {
+function QuickActionsSection({ preview }) {
   const t = useT();
   const quickActions = useSettingsStore(state => state.quickActions);
   const setStyle = useSettingsStore(state => state.setQuickActionStyle);
@@ -40,7 +40,7 @@ function QuickActionsSection() {
       <p className="onboarding-choice-hint">{t('onboarding.quick-actionsHint')}</p>
     </div>
     <div className="onboarding-appearance-example">
-      <QuickActionSample surface="row" config={config} rows={rows} />
+      {preview(<QuickActionSample surface="row" config={config} rows={rows} />)}
     </div>
   </div>;
 }
@@ -118,13 +118,19 @@ export function AppearanceStep({ onContinue }) {
     });
   };
 
+  // One demo window on every tab, in one place; Quick actions fills its list.
+  const preview = (listSlot = null) => <AppearancePreview layoutMode={settings.layoutMode} sidebarStyle={settings.sidebarStyle} sidebarLayout={settings.sidebarLayout}
+    viewStyle={settings.viewStyle} emailListStyle={settings.emailListStyle} threadMode={settings.threadMode}
+    theme={theme} palette={palette} emailViewerTheme={settings.emailViewerTheme}
+    highlight={settings.emailRowHighlight} actionButtonDisplay={settings.actionButtonDisplay} appFont={settings.appFont} listSlot={listSlot} />;
+
   return <OnboardingScreen className="onboarding-appearance" title={t('onboarding.appearanceTitle')} subtitle={t('onboarding.appearanceSubtitle')}
     secondary={<Button variant="ghost" size="sm" onClick={applyRecommended} data-testid="appearance-recommended">{t('onboarding.recommended')}</Button>}
     primary={nextSection
       ? <Button variant="primary" size="lg" onClick={() => setSection(nextSection)} data-testid="appearance-next">{t('common.next')}<ArrowRight size={14} /></Button>
       : <Button variant="primary" size="lg" onClick={onContinue} data-testid="onboarding-continue">{t('common.continue')}<ArrowRight size={14} /></Button>}>
     <SettingsTabs tabs={tabs} value={section} onChange={setSection} label={t('onboarding.appearanceTitle')}>
-      {section === 'quick-actions' ? <QuickActionsSection /> : <div className="onboarding-appearance-grid">
+      {section === 'quick-actions' ? <QuickActionsSection preview={preview} /> : <div className="onboarding-appearance-grid">
         <div className="onboarding-appearance-controls">
           {section === 'colors' && <>
             <fieldset data-testid="appearance-control-theme">
@@ -183,12 +189,7 @@ export function AppearanceStep({ onContinue }) {
           </fieldset>}
           {chat && ['layout', 'reading'].includes(section) && <p className="onboarding-choice-hint">{t('workspace.emailViewOnly')}</p>}
         </div>
-        <div className="onboarding-appearance-example">
-          <AppearancePreview layoutMode={settings.layoutMode} sidebarStyle={settings.sidebarStyle} sidebarLayout={settings.sidebarLayout}
-            viewStyle={settings.viewStyle} emailListStyle={settings.emailListStyle} threadMode={settings.threadMode}
-            theme={theme} palette={palette} emailViewerTheme={settings.emailViewerTheme}
-            highlight={settings.emailRowHighlight} actionButtonDisplay={settings.actionButtonDisplay} appFont={settings.appFont} />
-        </div>
+        <div className="onboarding-appearance-example">{preview()}</div>
       </div>}
     </SettingsTabs>
   </OnboardingScreen>;

@@ -14,7 +14,8 @@ export function OnboardingScreen({ title, subtitle, aside = null, secondary = nu
         <header className="onboarding-screen-heading">
           {title && <div className="onboarding-screen-title">
             <h2>{title}</h2>
-            {subtitle && <p>{subtitle}</p>}
+            {/* Always one line tall, so every step's content starts at one y. */}
+            <p aria-hidden={subtitle ? undefined : 'true'}>{subtitle}</p>
           </div>}
           {aside}
         </header>

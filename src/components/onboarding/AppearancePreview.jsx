@@ -8,8 +8,8 @@ import { SampleConversation } from '../ui/SampleConversation';
 import { fontStack } from '../../utils/appFont';
 
 // An isolated illustration. Never mount live readers or seed the mail store.
-// (The quick actions tab is not drawn here: it shows the real, inert
-// components of settings/QuickActionSamples.jsx.)
+// The quick actions tab passes `listSlot`: the real, inert rows of
+// settings/QuickActionSamples.jsx, in this same window.
 // The list's row gutter (RowGutter in EmailRow.jsx), same classes: an
 // expandable list reserves the disclosure slot on every row, so the text
 // starts at one x whether a row has a chevron or not.
@@ -68,7 +68,7 @@ function SampleSidebarNav({ layout }) {
   return <>{accounts}{heading}{folderNav}</>;
 }
 
-export function AppearancePreview({ layoutMode, sidebarStyle, viewStyle, emailListStyle, threadMode = 'grouped', sidebarLayout = 'stacked', theme = 'dark', palette = 'indigo', emailViewerTheme = 'system', highlight = 'hover', actionButtonDisplay = 'icon-label', appFont }) {
+export function AppearancePreview({ layoutMode, sidebarStyle, viewStyle, emailListStyle, threadMode = 'grouped', sidebarLayout = 'stacked', theme = 'dark', palette = 'indigo', emailViewerTheme = 'system', highlight = 'hover', actionButtonDisplay = 'icon-label', appFont, listSlot = null }) {
   const t = useT();
   const rows = previewRows();
   const replies = previewConversation();
@@ -87,8 +87,10 @@ export function AppearancePreview({ layoutMode, sidebarStyle, viewStyle, emailLi
         <span className="onboarding-sample-compose"><PenSquare size={13} aria-hidden="true" />{t('sidebar.compose')}</span>
         <SampleSidebarNav layout={sidebarLayout} />
       </div>
-      <div data-testid="preview-panes" data-layout={chat ? 'chat' : layoutMode} className={`onboarding-sample-panes flex ${!chat && threeColumn ? 'flex-row' : 'flex-col'}`}>
-        {chat ? <div data-testid="preview-chat" className="onboarding-sample-chat"><SampleConversation /></div> : <>
+      <div data-testid="preview-panes" data-layout={listSlot ? 'list' : chat ? 'chat' : layoutMode} className={`onboarding-sample-panes flex ${!listSlot && !chat && threeColumn ? 'flex-row' : 'flex-col'}`}>
+        {listSlot ? <div data-testid="preview-list" data-view="quick-actions" className="onboarding-sample-list onboarding-sample-list-wide">
+          <strong className="onboarding-sample-list-heading">{t('sidebar.inbox')}</strong>{listSlot}
+        </div> : chat ? <div data-testid="preview-chat" className="onboarding-sample-chat"><SampleConversation /></div> : <>
           <div data-testid="preview-list" data-view="list" data-density={emailListStyle} data-threads={threadMode} className="onboarding-sample-list">
             <strong className="onboarding-sample-list-heading">{t('sidebar.inbox')}</strong>
             <SampleRow row={rows[0]} selected highlight={highlight} singleLine={singleLine} threadSlot={threadSlot} />
