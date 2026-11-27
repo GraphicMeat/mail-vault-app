@@ -1337,6 +1337,14 @@ impl SyncEngine {
         }
         let owed = self.owed_uids(&account.id, mailbox).await?;
         holes.retain(|uid| !owed.contains(uid));
+        // A uid the server lists but never serves is the backfill's to retry.
+        let (dead, _, dead_at) = cache_io(io, |io| Ok(io.unfetchable())).await?;
+        let dead: HashSet<u32> = if (now_ms() as i64).saturating_sub(dead_at) < UNFETCHABLE_RETRY_MS {
+            dead.into_iter().collect()
+        } else {
+            HashSet::new()
+        };
+        holes.retain(|uid| !dead.contains(uid));
         holes.sort_unstable_by(|a, b| b.cmp(a));
         holes.truncate(HEAL_MAX_PER_SYNC);
         if holes.is_empty() {
@@ -1416,14 +1424,14 @@ impl SyncEngine {
     pub async fn sidecar_shortfall(&self, account_id: &str, mailbox: &str, total: u32) -> usize {
         let io = self.cache_ctx(account_id, mailbox);
         // A directory listing: never on the caller's worker thread.
-        let cached = cache_io(&io, |io| Ok(io.sidecar_count())).await.unwrap_or(0);
+        let cached = cache_io(&io, |io| Ok(io.sidecar_count() + io.unfetchable_count())).await.unwrap_or(0);
         (total as usize).saturating_sub(cached)
     }
 
     pub(crate) async fn sidecar_shortfall_with_stamp(&self, stamp: &crate::account_lifecycle::AccountStamp,
         mailbox: &str, total: u32) -> Result<usize, String> {
         let io = self.cache_ctx_with_stamp(stamp.id(), mailbox, Ok(stamp.clone()));
-        let cached = cache_io(&io, |io| Ok(io.sidecar_count())).await?;
+        let cached = cache_io(&io, |io| Ok(io.sidecar_count() + io.unfetchable_count())).await?;
         Ok((total as usize).saturating_sub(cached))
     }
 
@@ -1622,13 +1630,41 @@ impl SyncEngine {
         if server_uids.is_empty() {
             return Ok(0);
         }
+        // UIDs an earlier pass asked for and the server never served are not
+        // asked for again (a launch used to repeat them every time), until
+        // they are a day old: a server that was only having a bad moment gets
+        // another chance. A strict Refresh Complete asks for everything.
+        let (dead_before, dead_validity, dead_at) = cache_io(&io, |io| Ok(io.unfetchable())).await?;
+        let now = now_ms() as i64;
+        let skip: HashSet<u32> = if !strict && dead_validity.is_some() && dead_validity == listed_validity
+            && now.saturating_sub(dead_at) < UNFETCHABLE_RETRY_MS {
+            dead_before.iter().copied().collect()
+        } else {
+            HashSet::new()
+        };
+        let listed_set: HashSet<u32> = server_uids.iter().copied().collect();
         // Newest first — the user is looking at the top of the list.
         let mut missing: Vec<u32> = server_uids
             .into_iter()
-            .filter(|u| !have.contains(u))
+            .filter(|u| !have.contains(u) && !skip.contains(u))
             .collect();
         missing.sort_unstable_by(|a, b| b.cmp(a));
+        let mut returned: HashSet<u32> = HashSet::new();
+        // Every exit records what is still unfetchable: the skipped UIDs the
+        // server still lists, plus what this pass asked for and never got.
+        let remember = |returned: &HashSet<u32>| {
+            let mut dead: Vec<u32> = skip.iter().copied().filter(|u| listed_set.contains(u)).collect();
+            dead.extend(missing.iter().copied().filter(|u| !returned.contains(u)));
+            dead.sort_unstable();
+            let mut before = dead_before.clone();
+            before.sort_unstable();
+            let at = if skip.is_empty() { now } else { dead_at };
+            (dead != before || (at != dead_at && !dead.is_empty())).then_some((dead, at))
+        };
         if missing.is_empty() {
+            if let (Some((dead, at)), Some(validity)) = (remember(&returned), listed_validity) {
+                cache_io(&io, move |io| io.write_unfetchable(validity, &dead, at)).await?;
+            }
             return Ok(0);
         }
 
@@ -1644,9 +1680,12 @@ impl SyncEngine {
                 imap::fetch_headers_by_uids_bound(session, mailbox, chunk).await?;
             if validity != listed_validity { return Err("errors.bulkIdentityChanged".into()); }
             if headers.is_empty() {
-                warn!("[backfill] Empty response for a {}-UID chunk — stopping", chunk.len());
-                break;
+                // One chunk the server answers with nothing says nothing about
+                // the older chunks: stopping here left them unasked for good.
+                warn!("[backfill] Empty response for a {}-UID chunk — going on to the next", chunk.len());
+                continue;
             }
+            returned.extend(headers.iter().map(|h| h.uid));
             let chunk_len = headers.len();
             cache_io(&io, move |io| io.write_bound_headers(&headers, &seed, validity)).await?;
             written += chunk_len;
@@ -1656,6 +1695,13 @@ impl SyncEngine {
             );
             #[cfg(test)]
             self.pause_backfill_at(tests::BackfillPausePoint::AfterChunk).await;
+        }
+
+        if let (Some((dead, at)), Some(validity)) = (remember(&returned), listed_validity) {
+            if !dead.is_empty() {
+                info!("[backfill] {} ({}): {} listed UIDs never served — not asking again for a day", account.email, mailbox, dead.len());
+            }
+            cache_io(&io, move |io| io.write_unfetchable(validity, &dead, at)).await?;
         }
 
         if let Some(expected_uids) = expected_uids {
@@ -1884,6 +1930,30 @@ impl CacheCtx {
             .ok()
             .flatten()
             .unwrap_or_default()
+    }
+
+    /// The UIDs the server lists but never served, as `cache::unfetchable`.
+    fn unfetchable(&self) -> (Vec<u32>, Option<u32>, i64) {
+        self.with_db(|conn| mailvault_core::custody::cache::unfetchable(conn, &self.account, &self.mailbox))
+            .ok()
+            .flatten()
+            .unwrap_or((Vec::new(), None, 0))
+    }
+
+    /// The unfetchable uids still accounted for, as `cache::unfetchable_count`.
+    fn unfetchable_count(&self) -> usize {
+        self.with_db(|conn| mailvault_core::custody::cache::unfetchable_count(conn, &self.account, &self.mailbox))
+            .ok()
+            .flatten()
+            .unwrap_or(0)
+    }
+
+    fn write_unfetchable(&self, validity: u32, uids: &[u32], at: i64) -> Result<(), String> {
+        let _permit = self.commit()?;
+        self.vault_open()?;
+        self.require_db(|conn| {
+            mailvault_core::custody::cache::save_unfetchable(conn, &self.account, &self.mailbox, validity, uids, at)
+        })
     }
 
     fn sidecar_count(&self) -> usize {
@@ -2159,6 +2229,7 @@ const FLAG_REFRESH_WINDOW: u32 = 1000;
 /// UIDs per backfill fetch. Sidecars are written after each chunk so the app's
 /// cache-drain can consume them while the rest is still downloading.
 const BACKFILL_CHUNK: usize = 1000;
+use mailvault_core::custody::cache::UNFETCHABLE_RETRY_MS;
 
 /// Most rows one sync puts back into holes in the header cache (see
 /// `heal_holes`), newest first; the rest wait for the next listing. One
@@ -4278,6 +4349,87 @@ mod tests {
             engine.backfill_gave_up.lock().await.contains_key(&format!("acc1\u{1}INBOX")),
             "a dropped connection is not a poisoned page — it must still give up"
         );
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// A UID the server lists but never serves a header for used to keep the
+    /// mailbox "partial" for good: the give-up lived in memory, so every
+    /// launch listed the whole mailbox and asked for the dead UIDs again, and
+    /// the probe never trusted the cache (`partial-cache`). It is remembered
+    /// in the cache's own metadata now, counted as accounted for, and never
+    /// asked for again by the backfill.
+    #[tokio::test]
+    async fn an_unfetchable_uid_is_remembered_across_a_restart_and_not_asked_for_again() {
+        let dir = scratch_dir("backfill_dead_uid_restart");
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 3)));
+        {
+            let engine = engine_for(&dir);
+            engine.sync_account(&account_for(&server), "INBOX").await;
+            assert_eq!(cached_count(&engine, "INBOX"), 3, "precondition: a fully cached mailbox");
+            drop_cached(&engine, "INBOX", &[1, 3]);
+            server.reset_scenario(
+                Scenario::new()
+                    .mailbox(synthetic_mailbox("INBOX", 3))
+                    .fault(Trigger::with("FETCH", "BODYSTRUCTURE"), Action::PoisonFetchUid(2)),
+            );
+            engine.backfill_mailbox(&account_for(&server), "INBOX").await;
+            assert_eq!(cached_count(&engine, "INBOX"), 2, "uid 2 is the poison");
+
+            let meta = with_store(&engine, |c| mailvault_core::custody::cache::load_meta(c, "acc1", "INBOX").unwrap().unwrap());
+            let meta: serde_json::Value = serde_json::from_str(&meta).unwrap();
+            assert_eq!(meta["unfetchable"], serde_json::json!(1), "the dead uid is counted: {meta}");
+            assert_eq!(meta["totalCached"], serde_json::json!(2), "totalCached stays the exact row count: {meta}");
+            assert!(meta.get("unfetchableUids").is_none(), "the uid list stays inside the daemon: {meta}");
+            assert_eq!(mailvault_core::sync_policy::cache_preflight(Some(&meta)), None,
+                "every message the server can serve is cached: not partial");
+            assert_eq!(engine.sidecar_shortfall("acc1", "INBOX", 3).await, 0, "nothing left to backfill");
+        }
+
+        // A restart: a new engine over the same store, nothing in memory.
+        let engine = engine_for(&dir);
+        let before = server.commands().len();
+        engine.backfill_mailbox(&account_for(&server), "INBOX").await;
+        let refetched: Vec<_> = server.commands()[before..].iter()
+            .filter(|line| line.contains("BODY.PEEK[HEADER.FIELDS")).cloned().collect();
+        assert!(refetched.is_empty(), "the dead uid is not asked for again after a restart: {refetched:?}");
+        assert_eq!(cached_count(&engine, "INBOX"), 2);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// One backfill chunk the server answers with nothing used to end the
+    /// walk (`break`), so every older chunk was never asked for and the cache
+    /// stayed short however many times the backfill ran.
+    #[tokio::test]
+    async fn an_empty_backfill_chunk_does_not_stop_the_older_chunks() {
+        let dir = scratch_dir("backfill_empty_chunk");
+        let n = BACKFILL_CHUNK as u32 + 100;
+        let mut scenario = Scenario::new().mailbox(synthetic_mailbox("INBOX", n));
+        // uid n is cached, so the newest missing chunk is 100..=n-1; it comes
+        // back empty, sub-fetch by sub-fetch. The older chunk is 1..=99.
+        let floor = n - BACKFILL_CHUNK as u32;
+        let mut top = n - 1;
+        while top >= floor {
+            let low = top.saturating_sub(199).max(floor);
+            scenario = scenario.fault(
+                Trigger::with("FETCH", &format!("{low}:{top} ")),
+                Action::Respond("OK".into(), "FETCH completed".into()),
+            );
+            top = low - 1;
+        }
+        let server = MockImap::start(scenario);
+        let account = account_for(&server);
+        let engine = engine_for(&dir);
+        app_fetched_headers(&engine, &account, "INBOX", &[n], serde_json::json!({
+            "totalEmails": n, "uidValidity": 1, "uidNext": n + 1,
+        })).await;
+
+        engine.backfill_mailbox(&account, "INBOX").await;
+
+        let cached = cached_uid_set(&engine, "INBOX");
+        assert!((1..floor).all(|uid| cached.contains(&uid)),
+            "the older chunk is still fetched after an empty one: {} cached", cached.len());
 
         let _ = fs::remove_dir_all(&dir);
     }

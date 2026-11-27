@@ -80,6 +80,15 @@ export async function _drainCache(accountId, mailbox, loadedUids) {
 }
 
 
+async function _cacheIsComplete(accountId, mailbox) {
+  try {
+    const meta = await db.getEmailHeadersMeta(accountId, mailbox);
+    return !!meta?.totalEmails && (meta.totalCached || 0) >= meta.totalEmails;
+  } catch {
+    return false;
+  }
+}
+
 const _waitKey = (accountId, mailbox) => `${accountId}${mailbox}`;
 
 /**
@@ -270,6 +279,14 @@ export async function loadMoreEmails() {
     // migrated mailbox can hold 500 sidecars out of 15,000 — the daemon fills
     // the rest in the background, and paginating the server in parallel would
     // just re-download what it is already writing.
+    // A complete cache with nothing left to drain IS the whole mailbox: what
+    // it lacks the server cannot serve. Paging the server again re-downloads
+    // headers already on disk, every launch.
+    if (await _cacheIsComplete(activeAccountId, activeMailbox)) {
+      useMailStore.setState({ loadingMore: false, hasMoreEmails: false });
+      return;
+    }
+
     if (await _daemonIsBackfilling(activeAccountId, activeMailbox)) {
       useMailStore.setState({ loadingMore: false });
       const timer = getLoadMoreTimer();

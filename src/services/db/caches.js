@@ -162,6 +162,11 @@ export async function clearMailboxCache(accountId, mailbox) {
   }
 }
 
+// Rows on disk plus the UIDs the daemon found the server lists but never
+// serves (`unfetchable`): every message the cache can ever hold. Compared
+// against `totalEmails`, a cache holding all of them reads as complete.
+const accountedFor = (entry) => (entry.totalCached ?? 0) + (entry.unfetchable ?? 0);
+
 export async function getEmailHeadersPartial(accountId, mailbox, limit = 200) {
   if (invoke) {
     try {
@@ -173,7 +178,7 @@ export async function getEmailHeadersPartial(accountId, mailbox, limit = 200) {
           nativeIdentity: entry.nativeIdentity ?? null,
           emails: ownRows(bindNativeBatch(entry, accountId, mailbox).emails, accountId, mailbox),
           totalEmails: entry.totalEmails,
-          totalCached: entry.totalCached,
+          totalCached: accountedFor(entry),
           uidValidity: entry.uidValidity ?? null,
           uidNext: entry.uidNext ?? null,
           highestModseq: entry.highestModseq ?? null,
@@ -204,7 +209,7 @@ export async function getEmailHeadersWindow(accountId, mailbox, sinceMs, minRows
         return {
           emails: ownRows(bindNativeBatch(entry, accountId, mailbox).emails, accountId, mailbox),
           totalEmails: entry.totalEmails,
-          totalCached: entry.totalCached ?? 0,
+          totalCached: accountedFor(entry),
         };
       }
     } catch (error) {
@@ -272,7 +277,7 @@ export async function getEmailHeadersMeta(accountId, mailbox) {
         return {
           totalEmails: entry.totalEmails,
           nativeIdentity: entry.nativeIdentity ?? null,
-          totalCached: entry.totalCached ?? 0,
+          totalCached: accountedFor(entry),
           uidValidity: entry.uidValidity ?? null,
           uidNext: entry.uidNext ?? null,
           highestModseq: entry.highestModseq ?? null,

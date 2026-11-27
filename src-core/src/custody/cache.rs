@@ -18,6 +18,68 @@ pub(crate) fn sort_ms(row: &Value) -> i64 {
         .unwrap_or(i64::MIN + row.get("uid").and_then(Value::as_i64).unwrap_or(0))
 }
 
+/// UIDs the server lists but never served a header for, kept in the cache's
+/// metadata with the UIDVALIDITY they were measured under and when. The
+/// backfill skips them, and every count of what the cache holds counts them
+/// as accounted for: a mailbox short only by them is complete.
+pub const UNFETCHABLE_UIDS: &str = "unfetchableUids";
+pub const UNFETCHABLE_VALIDITY: &str = "unfetchableValidity";
+pub const UNFETCHABLE_AT: &str = "unfetchableAt";
+/// How long a uid the server never served is left alone before it is owed
+/// another try (and stops counting as accounted for).
+pub const UNFETCHABLE_RETRY_MS: i64 = 24 * 60 * 60 * 1000;
+
+/// The remembered unfetchable UIDs, their UIDVALIDITY and when they were
+/// measured. Empty when none were, or the cache's UIDVALIDITY moved since.
+pub fn unfetchable_in(meta: &Value) -> (Vec<u32>, Option<u32>, i64) {
+    let validity = meta.get(UNFETCHABLE_VALIDITY).and_then(Value::as_u64).and_then(|v| u32::try_from(v).ok());
+    let current = meta.get("uidValidity").and_then(Value::as_u64).and_then(|v| u32::try_from(v).ok());
+    if validity.is_none() || validity != current { return (Vec::new(), None, 0); }
+    let uids = meta.get(UNFETCHABLE_UIDS).and_then(Value::as_array)
+        .map(|uids| uids.iter().filter_map(Value::as_u64).filter_map(|u| u32::try_from(u).ok()).collect())
+        .unwrap_or_default();
+    (uids, validity, meta.get(UNFETCHABLE_AT).and_then(Value::as_i64).unwrap_or(0))
+}
+
+pub fn unfetchable(conn: &Connection, account: &str, mailbox: &str) -> Result<(Vec<u32>, Option<u32>, i64), String> {
+    let meta: Option<String> = conn.query_row(
+        "SELECT meta_json FROM header_cache_meta WHERE account_id=?1 AND mailbox_path=?2",
+        params![account, mailbox], |r| r.get(0),
+    ).optional().map_err(err)?;
+    let meta = match meta { Some(text) => serde_json::from_str::<Value>(&text).map_err(|e| format!("stored cache metadata: {e}"))?, None => return Ok((Vec::new(), None, 0)) };
+    Ok(unfetchable_in(&meta))
+}
+
+pub fn save_unfetchable(conn: &Connection, account: &str, mailbox: &str, validity: u32, uids: &[u32], at: i64) -> Result<(), String> {
+    let mut uids = uids.to_vec();
+    uids.sort_unstable();
+    uids.dedup();
+    save_headers(conn, account, mailbox, &json!({
+        UNFETCHABLE_UIDS: uids, UNFETCHABLE_VALIDITY: validity, UNFETCHABLE_AT: at,
+    }).to_string())
+}
+
+/// How many remembered unfetchable uids are accounted for: fresh ones that
+/// still have no row.
+fn live_unfetchable(conn: &Connection, account: &str, mailbox: &str, uids: &[u32], at: i64) -> Result<usize, String> {
+    if uids.is_empty() || now_ms().saturating_sub(at) >= UNFETCHABLE_RETRY_MS { return Ok(0); }
+    let rows = uid_set(conn, account, mailbox)?;
+    Ok(uids.iter().filter(|uid| !rows.contains(uid)).count())
+}
+
+pub fn unfetchable_count(conn: &Connection, account: &str, mailbox: &str) -> Result<usize, String> {
+    let (uids, _, at) = unfetchable(conn, account, mailbox)?;
+    live_unfetchable(conn, account, mailbox, &uids, at)
+}
+
+/// What a header read hands out: the count of unfetchable UIDs, never the list.
+fn publish_unfetchable(conn: &Connection, account: &str, mailbox: &str, map: &mut serde_json::Map<String, Value>) -> Result<(), String> {
+    let (uids, _, at) = unfetchable_in(&Value::Object(map.clone()));
+    for key in [UNFETCHABLE_UIDS, UNFETCHABLE_VALIDITY, UNFETCHABLE_AT] { map.remove(key); }
+    map.insert("unfetchable".into(), json!(live_unfetchable(conn, account, mailbox, &uids, at)?));
+    Ok(())
+}
+
 pub fn save_headers(conn: &Connection, account: &str, mailbox: &str, data: &str) -> Result<(), String> {
     save_headers_at(conn, account, mailbox, data, now_ms())
 }
@@ -201,6 +263,7 @@ pub fn load_headers(conn: &Connection, account: &str, mailbox: &str, limit: Opti
     let map = out.as_object_mut().ok_or("stored cache metadata is not an object")?;
     map.insert("emails".into(), Value::Array(emails));
     map.insert("totalCached".into(), json!(count));
+    publish_unfetchable(conn, account, mailbox, map)?;
     serde_json::to_string(&out).map(Some).map_err(|e| e.to_string())
 }
 
@@ -232,6 +295,7 @@ pub fn load_headers_window(conn: &Connection, account: &str, mailbox: &str, sinc
     let map = out.as_object_mut().ok_or("stored cache metadata is not an object")?;
     map.insert("emails".into(), Value::Array(emails));
     map.insert("totalCached".into(), json!(count));
+    publish_unfetchable(conn, account, mailbox, map)?;
     serde_json::to_string(&out).map(Some).map_err(|e| e.to_string())
 }
 
@@ -1402,6 +1466,32 @@ mod tests {
             "INSERT INTO header_cache(account_id,mailbox_path,uid,sort_ms,updated_ms,header_json) VALUES (?1,?2,?3,?4,?5,?6)",
             params![account, mailbox, uid, sort_ms, 0i64, "{}"],
         ).unwrap();
+    }
+
+    /// A remembered unfetchable uid is accounted for only while it is fresh
+    /// and still has no row: one that later arrived is counted once, as its
+    /// row, and after a day the whole set is owed another try, so the cache
+    /// reads as short again and the backfill runs (and prunes the set).
+    #[test]
+    fn unfetchable_counts_only_fresh_uids_still_without_a_row() {
+        let (_t, c) = store();
+        save_headers(&c, "a", "INBOX", r#"{"totalEmails":4,"uidValidity":7}"#).unwrap();
+        insert(&c, "a", "INBOX", 1, 1);
+        let published = |c: &Connection| -> Value {
+            serde_json::from_str(&load_meta(c, "a", "INBOX").unwrap().unwrap()).unwrap()
+        };
+
+        save_unfetchable(&c, "a", "INBOX", 7, &[1, 2, 3], now_ms()).unwrap();
+        assert_eq!(published(&c)["unfetchable"], json!(2), "uid 1 has a row: counted once, as the row");
+        assert_eq!(unfetchable_count(&c, "a", "INBOX").unwrap(), 2);
+        assert!(published(&c).get(UNFETCHABLE_UIDS).is_none(), "the list stays in the daemon");
+
+        save_unfetchable(&c, "a", "INBOX", 7, &[1, 2, 3], now_ms() - UNFETCHABLE_RETRY_MS - 1).unwrap();
+        assert_eq!(published(&c)["unfetchable"], json!(0), "a day on, they are owed another try");
+        assert_eq!(unfetchable_count(&c, "a", "INBOX").unwrap(), 0);
+
+        save_unfetchable(&c, "a", "INBOX", 6, &[2, 3], now_ms()).unwrap();
+        assert_eq!(unfetchable_count(&c, "a", "INBOX").unwrap(), 0, "measured under another UIDVALIDITY");
     }
 
     #[test]

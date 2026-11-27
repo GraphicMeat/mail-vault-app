@@ -71,9 +71,11 @@ pub fn cache_preflight(meta: Option<&Value>) -> Option<ProbeDecision> {
     let zero = Value::from(0);
     let cached = cached.unwrap_or(&zero);
     let total = total.expect("truthy total exists");
+    // UIDs the server lists but never serves are accounted for, not missing.
+    let dead = meta.and_then(|meta| meta.get("unfetchable")).and_then(Value::as_f64).unwrap_or(0.0);
     let short = match (cached, total) {
-        (Value::String(a), Value::String(b)) => a < b,
-        _ => js_number(Some(cached)) < js_number(Some(total)),
+        (Value::String(a), Value::String(b)) if dead == 0.0 => a < b,
+        _ => js_number(Some(cached)) + dead < js_number(Some(total)),
     };
     short.then_some(ProbeDecision::new(false, "partial-cache"))
 }
