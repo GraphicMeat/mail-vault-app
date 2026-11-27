@@ -203,6 +203,8 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
       ? Promise.resolve('')
       : settingsFor(accountId).then((s) => (s ? signatureFor(s) : ''));
   }
+  /** The signature of `id`, the account the message is from: the opening account's read, else that account's own. */
+  const signatureOf = (id) => (id === accountId ? signature.current : settingsFor(id).then((s) => (s ? signatureFor(s) : '')));
   const [shownMode, setShownMode] = useState(mode);
   const modeRef = useRef(mode);
   modeRef.current = shownMode;
@@ -411,7 +413,8 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
   useEffect(() => {
     if (mode !== 'new' || openDraft) return;
     signature.current.then((sig) => {
-      if (!sig || !live.current || touched.current.has('text')) return;
+      // A From pick moved the compose already: the new account's signature is its own to place.
+      if (!sig || !live.current || touched.current.has('text') || acctRef.current !== accountId) return;
       sigBlock.current = withSignature('', sig);
       setText((cur) => (cur ? cur : sigBlock.current));
     });
@@ -452,8 +455,11 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
       fill('cc', { entries: ccEntries, text: '' }, setCc);
       if (ccEntries.length) setShowCc(true);
       fill('subject', p.subject || '', setSubject);
-      // Room to write, the signature, then the quote.
-      const sig = await signature.current;
+      // Room to write, the signature of the account the message is from now (a From pick may have
+      // moved it while this was out), then the quote.
+      let sig = await signatureOf(acctRef.current);
+      if (!live.current) return;
+      if (acctRef.current !== accountId) sig = await signatureOf(acctRef.current);
       if (!live.current) return;
       if (sig) sigBlock.current = withSignature('', sig);
       fill('text', `${starter}${sig ? `${withSignature('', sig)}${p.quoteText ? `\n\n${p.quoteText}` : ''}` : initialText(p.quoteText || '')}`, setText);
@@ -694,7 +700,7 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
   const closeFrom = useCallback(() => setFromOpen(false), []);
   const closeFollow = useCallback(() => setFollowOpen(false), []);
 
-  useBackLayer(!confirming && !attaching && !later && !picking && !reminding && !aiPicking && !fromOpen && !followOpen, requestLeave);
+  useBackLayer(!confirming && !attaching && !later && !picking && !reminding && !aiPicking && !fromOpen && !followOpen, requestLeave, '.mv-compose');
   useBackLayer(fromOpen, closeFrom);
   useBackLayer(followOpen, closeFollow);
   useBackLayer(picking, closePicking);

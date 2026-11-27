@@ -71,7 +71,7 @@ export const RetryIcon = glyph(RefreshCw, 20);
 /** All Inboxes: desktop's sidebar glyph for it. */
 export const AllInboxesIcon = glyph(Inbox, 18);
 /** Follow-up reminders. */
-export const BellIcon = glyph(Bell, 16);
+export const BellIcon = glyph(Bell);
 /** Compose templates: desktop compose's glyph for them. */
 export const TemplateIcon = glyph(BookTemplate);
 /** Compose's AI actions: desktop's AiComposeActions glyph. */
