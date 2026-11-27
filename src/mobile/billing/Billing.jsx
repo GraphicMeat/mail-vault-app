@@ -29,7 +29,7 @@ import Devices from './Devices.jsx';
 
 export { seenAgo } from './Devices.jsx';
 
-export default function Billing({ feature = null, signIn = false }) {
+export default function Billing({ feature = null }) {
   const t = useT();
   const premium = useMobileStore((s) => s.premium);
   const lost = useMobileStore((s) => s.premiumLost);
@@ -63,7 +63,7 @@ export default function Billing({ feature = null, signIn = false }) {
 
   return (
     <MobileViewEnv>
-      <SettingsPageLayout data-mv-billing data-mv-sign-in={signIn ? 'true' : undefined}>
+      <SettingsPageLayout data-mv-billing>
         <BillingPlanView isPremium={active}
           statusLabel={active ? <span role="status">{premiumSummary(premium)}</span> : t('mobile.premium.free')}
           lines={<>
@@ -85,7 +85,7 @@ export default function Billing({ feature = null, signIn = false }) {
             </Button>
           )}
           {problem && <p className="mv-premium__error" role="alert">{t(errorKey(problem))}</p>}
-          {(!active || webDone) && <WebSignIn key={signOuts} startOpen={signIn} onDone={() => setWebDone(true)} />}
+          {(!active || webDone) && <WebSignIn key={signOuts} onDone={() => setWebDone(true)} />}
         </BillingPlanView>
 
         {!active && <p className="mv-premium__lead">{t('mobile.premium.heading')}</p>}

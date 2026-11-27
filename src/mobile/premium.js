@@ -7,7 +7,7 @@
 // highlighted. `usePremium()` is the one place a feature asks "is Premium on?".
 import { daemonCall, listen } from './transport.js';
 import { useMobileStore } from './store.js';
-import { formatFullDate } from './format.js';
+import { formatDateOnly } from './format.js';
 import { t } from './i18n.js';
 
 /** The features Premium adds on the phone; ids are what `openPaywall` takes. */
@@ -90,7 +90,7 @@ export function premiumSummary(premium) {
   if (!premium?.premium) return t('mobile.premium.free');
   const source = ['apple', 'google', 'web'].includes(premium.source) ? premium.source : 'web';
   return t('mobile.premium.active', {
-    date: premium.expiresMs ? formatFullDate(premium.expiresMs) : '',
+    date: premium.expiresMs ? formatDateOnly(premium.expiresMs) : '',
     source: t(`mobile.premium.source.${source}`),
   });
 }

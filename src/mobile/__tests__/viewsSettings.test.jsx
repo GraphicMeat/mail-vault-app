@@ -158,7 +158,7 @@ describe('Settings > Views on the phone', () => {
     expect(screen.getByTestId('views-limit').textContent).toBe(t('views.limit', { used: 2, max: 3 }));
     expect(document.querySelector('[data-mv-views-note]').textContent).toBe(t('mobile.views.offlineNote'));
     fireEvent.click(screen.getByTestId('views-upgrade'));
-    expect(useMobileStore.getState().paywall).toEqual({ feature: null, signIn: false });
+    expect(useMobileStore.getState().paywall).toEqual({ feature: null });
   });
 
   it('a row opens desktop\'s editor; Save writes the view through the engine', async () => {
@@ -224,7 +224,7 @@ describe('Settings > Views on the phone', () => {
     await flush();
     expect(screen.getByTestId('views-refused').textContent).toBe(t('views.limitReached', { max: 3 }));
     expect(document.body.textContent).not.toContain('PREMIUM_REQUIRED');
-    expect(useMobileStore.getState().paywall).toEqual({ feature: null, signIn: false });
+    expect(useMobileStore.getState().paywall).toEqual({ feature: null });
     expect(screen.queryByTestId('view-editor-form')).toBeNull();
   });
 

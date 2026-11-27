@@ -432,7 +432,7 @@ export function createMobileStore() {
       premium: { premium: false, source: null, expiresMs: null }, // the engine's Premium answer (premium.js keeps it current)
       premiumLost: null, // 'DEVICE_REPLACED' once the account gave this phone's place to another device
       premiumLapsed: false, // Premium was on in this session and has ended
-      paywall: null, // the paywall layer: { feature, signIn } while open, else null
+      paywall: null, // the paywall layer: { feature } while open, else null
       reauthState: null, // the last "Sign in again": { accountId, busy, code } (code null when fine)
       prefs: PREF_DEFAULTS, // the engine's preferences (prefs.js), defaults until read
       undoSend: null, // a send held for `sendDelay`: { id, accountId, fields, until } while it can be undone
@@ -634,8 +634,8 @@ export function createMobileStore() {
       },
 
       /** Opens the paywall; `feature` (scheduledSend | followUp | trackerBlocking) is highlighted. */
-      openPaywall(feature = null, { signIn = false } = {}) {
-        set({ paywall: { feature, signIn } });
+      openPaywall(feature = null) {
+        set({ paywall: { feature } });
       },
 
       closePaywall() {
@@ -923,18 +923,29 @@ export function createMobileStore() {
       // `revokeGoogle`: also end the account's grant with Google (only a grant of our own client
       // is revoked; Settings offers it when `mobile.accounts.revocable` says so).
       async removeAccount(id, { revokeGoogle = false } = {}) {
-        // A deferred action of the account being removed is dropped unsent: nothing can apply it.
-        const dropped = deferred?.groups.some((g) => g.accountId === id) ? deferred : null;
-        if (dropped) {
-          clearTimeout(dropped.timer);
-          if (get().undo?.id === dropped.id) set({ undo: null });
-          deferred = null;
+        // A waiting action's groups of the account being removed are dropped unsent: nothing can
+        // apply them. The other accounts' groups stay in the same action, with its timer and its
+        // undo toast (now counting what is left); it is cleared only when no group remains.
+        const own = deferred ? deferred.groups.filter((g) => g.accountId === id) : [];
+        if (own.length) {
+          const left = deferred.groups.filter((g) => g.accountId !== id);
+          if (left.length) {
+            deferred.groups = left;
+            const waiting = deferred;
+            if (get().undo?.id === waiting.id) {
+              set((s) => ({ undo: { ...s.undo, count: left.reduce((n, g) => n + g.uids.length, 0) } }));
+            }
+          } else {
+            clearTimeout(deferred.timer);
+            if (get().undo?.id === deferred.id) set({ undo: null });
+            deferred = null;
+          }
         }
         try {
           await daemonCall('mobile.accounts.remove', revokeGoogle ? { accountId: id, revokeGoogle: true } : { accountId: id });
         } catch (err) {
-          // The account stays: its dropped action's rows come back, and the switcher keeps asking.
-          for (const g of dropped?.groups || []) g.list?.unhide(keysIn(g.list, g.accountId, g.uids));
+          // The account stays: its dropped groups' rows come back, and the switcher keeps asking.
+          for (const g of own) g.list?.unhide(keysIn(g.list, g.accountId, g.uids));
           notice('mobile.switcher.removeFailed');
           throw err;
         }

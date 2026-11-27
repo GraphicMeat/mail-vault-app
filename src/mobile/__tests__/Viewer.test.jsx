@@ -395,7 +395,7 @@ describe('Viewer', () => {
     expect(screen.getByText(t('mobile.viewer.imagesTrack'))).toBeTruthy();
     fireEvent.click(shield);
     expect(document.querySelector('[data-mv-tracker-list]')).toBeNull();
-    expect(useMobileStore.getState().paywall).toEqual({ feature: 'trackerBlocking', signIn: false });
+    expect(useMobileStore.getState().paywall).toEqual({ feature: 'trackerBlocking' });
   });
 
   it('Premium with blocking turned off: the pixels are kept, and the shield opens their list, not the paywall', async () => {

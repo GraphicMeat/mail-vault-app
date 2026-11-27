@@ -67,7 +67,7 @@ const { default: Settings } = await import('../Settings.jsx');
 const { useMobileStore } = await import('../store.js');
 const { openPaywall, startPremiumSync, PREMIUM_FEATURES, premiumSummary, offerDuration, introText } = await import('../premium.js');
 const { t } = await import('../i18n.js');
-const { formatFullDate } = await import('../format.js');
+const { formatDateOnly } = await import('../format.js');
 
 const MONTH = { id: 'p.month', title: 'MailVault Premium Monthly', price: 'QQ 7.77', period: 'P1M' };
 const YEAR = { id: 'p.year', title: 'MailVault Premium Yearly', price: 'QQ 77.7', period: 'P1Y' };
@@ -401,19 +401,13 @@ describe('sign in with the website account', () => {
     expect((await screen.findByRole('alert')).textContent).toBe(t('mobile.error.NETWORK'));
     expect(screen.queryByLabelText('Code')).toBeNull();
   });
-
-  it('opens straight at the email step from Sign in again', async () => {
-    render(<Premium signIn onClose={() => {}} />);
-    await ready();
-    expect(screen.getByLabelText('Email address')).toBeTruthy();
-  });
 });
 
 describe('Premium state', () => {
   it('active Premium shows the summary and no purchase buttons', async () => {
     useMobileStore.getState().setPremium({ premium: true, source: 'google', expiresMs: EXPIRES });
     render(<Premium onClose={() => {}} />);
-    expect((await screen.findByRole('status')).textContent).toBe(`Premium: active until ${formatFullDate(EXPIRES)} (Google Play)`);
+    expect((await screen.findByRole('status')).textContent).toBe(`Premium: active until ${formatDateOnly(EXPIRES)} (Google Play)`);
     expect(screen.queryByRole('button', { name: 'Subscribe' })).toBeNull();
     // Desktop's Manage subscription button, handed to Play's own page as every link is.
     const opened = [];
@@ -509,9 +503,9 @@ describe('upkeep and the locked-feature entry point', () => {
 
   it('openPaywall(feature) opens the layer with that feature, and ignores an unknown one', () => {
     openPaywall('scheduledSend');
-    expect(useMobileStore.getState().paywall).toEqual({ feature: 'scheduledSend', signIn: false });
+    expect(useMobileStore.getState().paywall).toEqual({ feature: 'scheduledSend' });
     openPaywall('nonsense');
-    expect(useMobileStore.getState().paywall).toEqual({ feature: null, signIn: false });
+    expect(useMobileStore.getState().paywall).toEqual({ feature: null });
     useMobileStore.getState().closePaywall();
     expect(useMobileStore.getState().paywall).toBeNull();
   });

@@ -10,9 +10,9 @@ import { Button } from '../../components/ui/Button.jsx';
 
 const APP_VERSION = import.meta.env?.MV_APP_VERSION || '';
 
-export default function WebSignIn({ startOpen, onDone }) {
+export default function WebSignIn({ onDone }) {
   const t = useT();
-  const [step, setStep] = useState(startOpen ? 'email' : 'closed'); // closed | email | code | done
+  const [step, setStep] = useState('closed'); // closed | email | code | done
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);

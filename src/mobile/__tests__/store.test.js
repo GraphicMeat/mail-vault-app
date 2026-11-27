@@ -61,6 +61,10 @@ vi.mock('../transport.js', () => ({
         const last = page[page.length - 1];
         return { rows: page, nextCursor: more ? { dateMs: last.dateMs, uid: last.uid } : null, total: rows.length, listGen: engine.listGen[key] ?? 1 };
       }
+      case 'mobile.actions.apply':
+        return { queued: params.uids.length, skipped: [] };
+      case 'mobile.actions.pending':
+        return { pending: [] };
       default:
         throw Object.assign(new Error(`unsupported ${method}`), { code: 'UNSUPPORTED' });
     }
@@ -305,6 +309,45 @@ describe('mobile store', () => {
     await store.getState().removeAccount('a3');
     expect(store.getState().activeAccountId).toBe('a1');
     expect(store.getState().list).toBe(list);
+  });
+
+  it('removing an account drops only its own groups of a waiting delete; the others still go out', async () => {
+    const store = createMobileStore();
+    await store.getState().init();
+    store.getState().actMany('delete', [
+      { accountId: 'a1', folder: 'INBOX', uids: [1, 2] },
+      { accountId: 'a3', folder: 'INBOX', uids: [7] },
+    ]);
+    expect(store.getState().undo).toMatchObject({ kind: 'delete', count: 3 });
+    const id = store.getState().undo.id;
+    await store.getState().removeAccount('a3');
+    // The toast stays, counting what is left, and the survivors are still undoable and still sent.
+    expect(store.getState().undo).toMatchObject({ id, kind: 'delete', count: 2 });
+    engine.calls = [];
+    await store.getState().flush();
+    expect(callsOf('mobile.actions.apply')).toEqual([{ accountId: 'a1', folder: 'INBOX', uids: [1, 2], kind: 'delete' }]);
+    expect(store.getState().undo).toBeNull();
+  });
+
+  it('removing the only account of a waiting delete clears it, and a failed removal keeps nothing half-dropped', async () => {
+    const store = createMobileStore();
+    await store.getState().init();
+    store.getState().actMany('delete', [{ accountId: 'a3', folder: 'INBOX', uids: [7] }]);
+    await store.getState().removeAccount('a3');
+    expect(store.getState().undo).toBeNull();
+    engine.calls = [];
+    await store.getState().flush();
+    expect(callsOf('mobile.actions.apply')).toEqual([]);
+  });
+
+  it('a waiting delete of other accounts survives the removal of one that has none', async () => {
+    const store = createMobileStore();
+    await store.getState().init();
+    store.getState().actMany('delete', [{ accountId: 'a1', folder: 'INBOX', uids: [1] }]);
+    const id = store.getState().undo.id;
+    await store.getState().removeAccount('a3');
+    expect(store.getState().undo).toMatchObject({ id, count: 1 });
+    expect(store.getState().undoDeferred(id)).toBe(true);
   });
 
   it('addAccount selects the new account and keeps no password', async () => {

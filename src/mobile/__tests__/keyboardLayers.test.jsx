@@ -153,8 +153,9 @@ describe('Settings over the iOS keyboard', () => {
 
 describe('Premium web sign-in over the iOS keyboard', () => {
   it('follows the visible box, and keeps the focused email field in view', async () => {
-    render(<Premium signIn onClose={() => {}} />);
+    render(<Premium onClose={() => {}} />);
     await act(async () => {});
+    fireEvent.click(screen.getByRole('button', { name: t('mobile.premium.web.prompt') }));
     const layer = screen.getByRole('dialog', { name: t('mobile.premium.title') });
     const email = layer.querySelector('input[type="email"]');
     expect(email).toBeTruthy();
