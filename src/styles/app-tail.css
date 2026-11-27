@@ -281,15 +281,16 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--mail-accent-fi
  * left and is built to fit it. Smaller windows drop pictures, never controls. */
 .onboarding-page { height: 100dvh; overflow: hidden; background: var(--mail-bg); }
 .onboarding-content { height: 100%; display: flex; flex-direction: column; padding: 14px 28px 0; overflow: clip; }
-.onboarding-header { flex-shrink: 0; display: flex; align-items: center; gap: 12px; min-height: 32px; margin: 0 auto 8px; width: 100%; max-width: 1180px; color: var(--mail-text-muted); font-size: 12px; }
-.onboarding-header > :first-child:not(.onboarding-progress) { margin-right: auto; }
-.onboarding-progress { display: flex; gap: 6px; margin: 0 auto; }
-.onboarding-header > .onboarding-progress:first-child { margin-left: auto; }
+.onboarding-header { flex-shrink: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 12px; min-height: 32px; margin: 0 auto 8px; width: 100%; max-width: 1180px; color: var(--mail-text-muted); font-size: 12px; }
+/* Back left, the bar on the centre line, Skip tour right: each in its own
+   column, so a missing neighbour (no Back on the first step, no Skip tour on
+   the last) never moves the bar. */
+.onboarding-header > [data-testid="onboarding-back"] { grid-column: 1; justify-self: start; }
+.onboarding-progress { grid-column: 2; display: flex; gap: 6px; }
 .onboarding-progress > span { width: 24px; height: 4px; border-radius: 2px; background: var(--mail-border); transition: width 200ms, background-color 200ms; }
 .onboarding-progress > span[data-state="done"] { background: var(--mail-accent); }
 .onboarding-progress > span[data-state="current"] { width: 36px; background: var(--mail-accent-text); }
-.onboarding-header > [data-testid="onboarding-skip"] { margin-left: auto; }
-.onboarding-progress + .sr-only + [data-testid="onboarding-skip"] { margin-left: 0; }
+.onboarding-header > [data-testid="onboarding-skip"] { grid-column: 3; justify-self: end; }
 .onboarding-step { flex: 1; min-height: 0; width: 100%; max-width: 1180px; margin: 0 auto; display: flex; }
 .onboarding-screen { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .onboarding-screen-heading { flex-shrink: 0; display: flex; align-items: flex-end; gap: 16px; margin-bottom: 14px; }

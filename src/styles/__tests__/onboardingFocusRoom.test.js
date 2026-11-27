@@ -24,3 +24,16 @@ describe('onboarding controls column', () => {
     expect(px(body, 'padding')).toBeGreaterThanOrEqual(ring);
   });
 });
+
+// The bar sat between Back and Skip tour with auto margins, so it moved
+// sideways on the first step (no Back) and the last (no Skip tour), and by
+// the two labels' widths everywhere else. Three columns, the outer two equal,
+// keep it on the window's centre line whatever is beside it.
+describe('onboarding header', () => {
+  it('centres the progress bar in its own column', () => {
+    const header = rule('.onboarding-header');
+    expect(header).toMatch(/display:\s*grid/);
+    expect(header).toMatch(/grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto\s+minmax\(0,\s*1fr\)/);
+    expect(rule('.onboarding-progress')).toMatch(/grid-column:\s*2/);
+  });
+});
