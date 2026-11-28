@@ -32,3 +32,14 @@ describe('graphDeleteMessage', () => {
     expect(mockSend.mock.calls[0][1]).not.toHaveProperty('permanent');
   });
 });
+
+describe('graphDeleteMessages', () => {
+  it('sends one folder\'s items in one call, under the account it was given', async () => {
+    const items = [{ uid: 7, messageId: 'g7' }, { uid: 8, messageId: 'g8' }];
+    await api.graphDeleteMessages(OUTLOOK, { accountId: 'acc-outlook', mailbox: 'INBOX', items });
+    expect(mockSend).toHaveBeenCalledTimes(1);
+    expect(mockSend.mock.calls[0][0]).toBe('graph_delete_messages');
+    expect(mockSend.mock.calls[0][1]).toMatchObject({ accountId: 'acc-outlook', accountEmail: OUTLOOK.email, mailbox: 'INBOX', items });
+    expect(mockSend.mock.calls[0][1]).not.toHaveProperty('accessToken');
+  });
+});

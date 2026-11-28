@@ -55,6 +55,7 @@ vi.mock('../../daemonClient', async importOriginal => ({
 const mockGetGraphMessageId = vi.fn().mockReturnValue(null);
 const mockIsGraphAccount = vi.fn().mockReturnValue(false);
 const mockGraphDeleteMessage = vi.fn().mockResolvedValue(undefined);
+const mockGraphDeleteMessages = vi.fn();
 const mockGetArchivedEmailIds = vi.fn().mockResolvedValue(new Set());
 const mockGetSavedEmailIds = vi.fn().mockResolvedValue(new Set());
 const mockGetLocalEmails = vi.fn().mockResolvedValue([]);
@@ -121,6 +122,7 @@ vi.mock('../../api', () => ({
   deleteQueueSubmit: (...a) => mockDeleteQueueSubmit(...a),
   deleteQueueList: async () => [],
   graphDeleteMessage: (...a) => mockGraphDeleteMessage(...a),
+  graphDeleteMessages: (...a) => mockGraphDeleteMessages(...a),
   moveEmails: (...a) => mockMoveEmails(...a),
   appendLocalIndex: (...a) => mockAppendLocalIndex(...a),
   removeFromLocalIndex: (...a) => mockRemoveFromLocalIndex(...a),
@@ -254,6 +256,7 @@ beforeEach(() => {
   mockIsGraphAccount.mockReturnValue(false);
   mockGetGraphMessageId.mockReturnValue(null);
   mockGraphDeleteMessage.mockResolvedValue(undefined);
+  mockGraphDeleteMessages.mockImplementation(async (_a, { items }) => ({ done: items.map(i => i.uid), failed: [], binIds: {} }));
   mockGetArchivedEmailIds.mockResolvedValue(new Set());
   mockGetSavedEmailIds.mockResolvedValue(new Set());
   mockGetLocalEmails.mockResolvedValue([]);
@@ -510,8 +513,9 @@ describe('deleteSelectedFromServer', () => {
 
     await useMailStore.getState().deleteSelectedFromServer();
 
-    expect(mockGraphDeleteMessage).toHaveBeenCalledTimes(1);
-    expect(mockGraphDeleteMessage.mock.calls[0][1]).toBe('id-on-the-row');
+    // A selection's Graph delete is one batched call per folder.
+    expect(mockGraphDeleteMessages).toHaveBeenCalledTimes(1);
+    expect(mockGraphDeleteMessages.mock.calls[0][1].items).toEqual([{ uid: 1, messageId: 'id-on-the-row' }]);
   });
 
   // The tombstone that hides a deleted row is store state, so a reload wipes it.

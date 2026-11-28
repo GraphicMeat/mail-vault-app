@@ -723,6 +723,18 @@ export async function graphDeleteMessage(account, messageId, where = {}) {
   return await tauriInvoke('graph_delete_message', { ...where, ...graphAccount(account), messageId });
 }
 
+// Many messages of one (account, folder) in one call: `items` [{ uid, messageId }].
+// The daemon paces them (and Graph's 429s), keeps a bin copy of each, and
+// answers `{ done: [uid], failed: [{ uid, error }], binIds: { "<uid>": binId } }`;
+// a message Graph no longer has counts as done. The account named is the one
+// given, as for graphDeleteMessage.
+export async function graphDeleteMessages(account, { accountId, mailbox, items } = {}) {
+  return await tauriInvoke('graph_delete_messages', { accountId, mailbox, items, ...graphAccount(account) });
+}
+
+// `{ success, moved, done: [messageId], gone: [messageId], failed: [{ messageId, error }] }`:
+// every message is tried, a failure never stops the rest. `gone`: no longer in
+// the source (an earlier move landed).
 export async function graphMoveEmails(account, messageIds, targetFolderId) {
   return await tauriInvoke('graph_move_emails', { ...graphAccount(account), messageIds, targetFolderId });
 }

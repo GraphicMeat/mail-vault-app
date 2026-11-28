@@ -25,6 +25,9 @@ const mockMoveEmails = vi.fn();
 // The daemon's undo of a delete (`messages.restore`).
 const mockRestoreMessages = vi.fn();
 const mockGraphDeleteMessage = vi.fn().mockResolvedValue(undefined);
+// The batched Graph delete: what the daemon answers for every item landing.
+const graphDeletedAll = async (_account, { items }) => ({ done: items.map(i => i.uid), failed: [], binIds: {} });
+const mockGraphDeleteMessages = vi.fn(graphDeletedAll);
 const mockQueueOp = vi.fn().mockResolvedValue(1);
 const mockClearOps = vi.fn().mockResolvedValue(undefined);
 const mockNoteOpFailure = vi.fn();
@@ -66,6 +69,7 @@ vi.mock('../../api', () => ({
   updateEmailFlags: vi.fn().mockResolvedValue({ success: true, written: [] }),
   graphSetRead: vi.fn().mockResolvedValue(undefined),
   graphDeleteMessage: (...a) => mockGraphDeleteMessage(...a),
+  graphDeleteMessages: (...a) => mockGraphDeleteMessages(...a),
   moveEmails: (...a) => mockMoveEmails(...a),
   restoreMessages: (...a) => mockRestoreMessages(...a),
   findMessageId: vi.fn().mockResolvedValue({ found: [], searched: 1, failed: 0, complete: true }),
@@ -185,6 +189,8 @@ beforeEach(() => {
   mockSubmit.mockImplementation(landedAll);
   mockQueueList.mockResolvedValue([]);
   mockGraphDeleteMessage.mockReset().mockResolvedValue(undefined);
+  mockGraphDeleteMessages.mockReset().mockImplementation(graphDeletedAll);
+  mockQueueOp.mockResolvedValue(1);
   // What the app remembers about the queue lives in the module: each case starts clean.
   __resetDeleteQueueForTests();
   mockReadOps.mockResolvedValue([]);
@@ -293,28 +299,32 @@ describe('deleteMessages, one call over many keys', () => {
 
   it('a Graph message is deleted by the app itself, never through the queue, and a transient refusal is retried', async () => {
     prime({ accounts: [G], emails: [row(7), row(8)] });
-    mockGraphDeleteMessage.mockRejectedValueOnce(new Error('graph busy'));
+    mockGraphDeleteMessages.mockRejectedValueOnce(new Error('graph busy'));
 
     await deleteMessages([{ key: 7 }]);
 
     expect(mockSubmit).not.toHaveBeenCalled();
-    expect(mockGraphDeleteMessage).toHaveBeenCalledTimes(2);
+    expect(mockGraphDeleteMessages).toHaveBeenCalledTimes(2);
     expect(useMailStore.getState().emails.map(e => e.uid)).toEqual([8]);
     expect(useMailStore.getState().deleteTombstones.has('g1|INBOX|7')).toBe(true);
     expect(useMailStore.getState().error).toBeNull();
   });
 
-  it('a Graph delete refused on every try comes back and says so', async () => {
+  it('a Graph delete refused on every try comes back, stays journalled, and says once it is not deleted yet', async () => {
     prime({ accounts: [G], emails: [row(7), row(8)] });
-    mockGraphDeleteMessage.mockRejectedValue(new Error('graph down'));
+    mockGraphDeleteMessages.mockRejectedValue(new Error('graph down'));
 
     await deleteMessages([{ key: 7 }]);
 
     // The first try and five retries (the same schedule as Delete everywhere's).
-    expect(mockGraphDeleteMessage).toHaveBeenCalledTimes(6);
+    expect(mockGraphDeleteMessages).toHaveBeenCalledTimes(6);
     expect(useMailStore.getState().emails.map(e => e.uid).sort()).toEqual([7, 8]);
     expect(useMailStore.getState().deleteTombstones.has('g1|INBOX|7')).toBe(false);
-    expect(useMailStore.getState().error).toBe('Delete failed: graph down');
+    // Still owed: replayOps sends it again.
+    expect(mockQueueOp).toHaveBeenCalledWith(expect.objectContaining({ op: 'delete', accountId: 'g1', uids: [7] }));
+    expect(mockClearOps).not.toHaveBeenCalled();
+    expect(useMailStore.getState().error).toBe('Not deleted yet: graph down. MailVault keeps trying.');
+    expect(useMailStore.getState().errorType).toBe('warning');
   });
 
   it('a reply that answers queued for a uid that landed while it waited counts it done, with its undo from the landing', async () => {
@@ -339,6 +349,81 @@ describe('deleteMessages, one call over many keys', () => {
   });
 });
 
+describe('deleteMessages, a Graph account in bulk', () => {
+  const gid = async (_accountId, _mailbox, uid) => `g${uid}`;
+
+  it('sends one folder as ONE graph_delete_messages call, journalled before it and cleared by entry id after', async () => {
+    prime({ accounts: [G], emails: [row(7), row(8), row(9), row(10)] });
+    mockResolveGraphMessageId.mockImplementation(gid);
+    mockQueueOp.mockResolvedValue(42);
+
+    const { outcomes } = await deleteMessages([{ key: 7 }, { key: 8 }, { key: 9 }]);
+
+    expect(mockGraphDeleteMessages).toHaveBeenCalledTimes(1);
+    expect(mockGraphDeleteMessages).toHaveBeenCalledWith(G, {
+      accountId: 'g1', mailbox: 'INBOX',
+      items: [{ uid: 7, messageId: 'g7' }, { uid: 8, messageId: 'g8' }, { uid: 9, messageId: 'g9' }],
+    });
+    expect(mockGraphDeleteMessage).not.toHaveBeenCalled();
+    expect(mockSubmit).not.toHaveBeenCalled();
+    const ids = { 7: 'g7', 8: 'g8', 9: 'g9' };
+    expect(mockQueueOp).toHaveBeenCalledTimes(1);
+    expect(mockQueueOp).toHaveBeenCalledWith({ op: 'delete', accountId: 'g1', mailbox: 'INBOX', uids: [7, 8, 9], arg: expect.objectContaining({ graph: true, ids }) });
+    expect(mockQueueOp.mock.invocationCallOrder[0]).toBeLessThan(mockGraphDeleteMessages.mock.invocationCallOrder[0]);
+    expect(mockClearOps).toHaveBeenCalledWith(expect.objectContaining({ id: 42, op: 'delete', accountId: 'g1', mailbox: 'INBOX', uids: [7, 8, 9] }));
+    expect(useMailStore.getState().emails.map(e => e.uid)).toEqual([10]);
+    // A Graph delete lands in Deleted Items, with no uid to restore by.
+    expect(outcomes).toEqual([]);
+    expect(useMailStore.getState().error).toBeNull();
+  });
+
+  it('a big folder goes in chunks of 200 under one journal entry', async () => {
+    const uids = Array.from({ length: 250 }, (_, i) => i + 1);
+    prime({ accounts: [G], emails: uids.map(uid => row(uid)) });
+    mockResolveGraphMessageId.mockImplementation(gid);
+
+    await deleteMessages(uids.map(key => ({ key })));
+
+    expect(mockGraphDeleteMessages).toHaveBeenCalledTimes(2);
+    expect(mockGraphDeleteMessages.mock.calls.map(c => c[1].items.length)).toEqual([200, 50]);
+    expect(mockQueueOp).toHaveBeenCalledTimes(1);
+    expect(useMailStore.getState().emails).toEqual([]);
+  });
+
+  it('a uid the batch failed stays journalled, its row comes back, and one warning says MailVault keeps trying', async () => {
+    prime({ accounts: [G], emails: [row(7), row(8), row(9)] });
+    mockResolveGraphMessageId.mockImplementation(gid);
+    mockGraphDeleteMessages.mockResolvedValue({ done: [7], failed: [{ uid: 8, error: 'ErrorQuotaExceeded' }, { uid: 9, error: 'ErrorQuotaExceeded' }], binIds: {} });
+
+    await deleteMessages([{ key: 7 }, { key: 8 }, { key: 9 }]);
+
+    // Only the landed uid is cleared; the failed ones stay owed.
+    expect(mockClearOps).toHaveBeenCalledTimes(1);
+    expect(mockClearOps).toHaveBeenCalledWith(expect.objectContaining({ id: 1, op: 'delete', uids: [7] }));
+    expect(useMailStore.getState().emails.map(e => e.uid).sort()).toEqual([8, 9]);
+    expect(useMailStore.getState().deleteTombstones.has('g1|INBOX|8')).toBe(false);
+    expect(useMailStore.getState().deleteTombstones.has('g1|INBOX|7')).toBe(true);
+    expect(useMailStore.getState().error).toBe('Not deleted yet: ErrorQuotaExceeded. MailVault keeps trying.');
+    expect(useMailStore.getState().errorType).toBe('warning');
+  });
+
+  it('offline it is journalled and its rows stay hidden: nothing is sent, the replay finishes it', async () => {
+    netOnline = false;
+    prime({ accounts: [G], emails: [row(7), row(8), row(9)] });
+    mockResolveGraphMessageId.mockImplementation(gid);
+
+    const { outcomes } = await deleteMessages([{ key: 7 }, { key: 8 }]);
+
+    expect(outcomes).toEqual([]);
+    expect(mockGraphDeleteMessages).not.toHaveBeenCalled();
+    expect(mockQueueOp).toHaveBeenCalledWith({ op: 'delete', accountId: 'g1', mailbox: 'INBOX', uids: [7, 8], arg: expect.objectContaining({ graph: true, ids: { 7: 'g7', 8: 'g8' } }) });
+    expect(mockClearOps).not.toHaveBeenCalled();
+    expect(useMailStore.getState().emails.map(e => e.uid)).toEqual([9]);
+    expect(useMailStore.getState().deleteTombstones.has('g1|INBOX|7')).toBe(true);
+    expect(useMailStore.getState().error).toBeNull();
+  });
+});
+
 describe('deleteMessages, Review Focus 6: a Graph message whose id cannot be resolved', () => {
   it('puts the row back, says so, and journals nothing', async () => {
     prime({ accounts: [G], emails: [row(7), row(8)] });
@@ -349,6 +434,8 @@ describe('deleteMessages, Review Focus 6: a Graph message whose id cannot be res
     expect(outcomes).toEqual([]);
     expect(mockSubmit).not.toHaveBeenCalled();
     expect(mockGraphDeleteMessage).not.toHaveBeenCalled();
+    expect(mockGraphDeleteMessages).not.toHaveBeenCalled();
+    expect(mockQueueOp).not.toHaveBeenCalled();
     expect(useMailStore.getState().deleteTombstones.has('g1|INBOX|7')).toBe(false);
     expect(useMailStore.getState().emails.map(e => e.uid).sort()).toEqual([7, 8]);
     expect(useMailStore.getState().error).toBeTruthy();

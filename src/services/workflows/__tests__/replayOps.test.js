@@ -28,6 +28,9 @@ const mockMoveEmails = vi.fn().mockResolvedValue(undefined);
 const mockMarkServerDeleted = vi.fn().mockResolvedValue(true);
 const mockLoadEmails = vi.fn();
 const mockNoteOpFailure = vi.fn();
+const mockGraphDeleteMessages = vi.fn();
+const mockGraphMoveEmails = vi.fn();
+const mockResolveGraphMessageId = vi.fn().mockResolvedValue(null);
 
 vi.mock('../../db', () => ({
   readOps: (...a) => mockReadOps(...a),
@@ -44,7 +47,10 @@ vi.mock('../../api', () => ({
   updateEmailFlags: (...a) => mockUpdateEmailFlags(...a),
   updateEmailFlagsBatch: (...a) => mockUpdateEmailFlagsBatch(...a),
   moveEmails: (...a) => mockMoveEmails(...a),
+  graphDeleteMessages: (...a) => mockGraphDeleteMessages(...a),
+  graphMoveEmails: (...a) => mockGraphMoveEmails(...a),
 }));
+vi.mock('../../cacheManager', () => ({ resolveGraphMessageId: (...a) => mockResolveGraphMessageId(...a) }));
 
 vi.mock('../../authUtils', () => ({ ensureFreshToken: async (a) => a }));
 vi.mock('../../graphConfig', () => ({ isGraphAccount: (a) => a?.oauth2Transport === 'graph' }));
@@ -99,6 +105,7 @@ beforeEach(() => {
   mockUpdateEmailFlagsBatch.mockImplementation(async (_a, uids) => ({ success: true, written: [], done: uids, skipped: [] }));
   mailState.activeAccountId = 'acct1';
   mailState.activeMailbox = 'INBOX';
+  mockResolveGraphMessageId.mockResolvedValue(null);
   vi.spyOn(console, 'log').mockImplementation(() => {});
 });
 
@@ -365,6 +372,97 @@ describe('replayOps', () => {
 
       expect(mockClearOps).not.toHaveBeenCalled();
       expect(result).toMatchObject({ failed: 1, kept: 1 });
+    });
+
+    it('replays a Graph delete entry as one call by its journalled ids, clears only what landed by entry id', async () => {
+      const arg = { graph: true, ids: { 3: 'g3', 4: 'g4' } };
+      const owed = entry({ id: 4, op: 'delete', uids: [3, 4, 5], arg });
+      mockReadOps.mockResolvedValue([owed]);
+      // Not journalled with an id: resolved now.
+      mockResolveGraphMessageId.mockImplementation(async (_a, _m, uid) => (uid === 5 ? 'g5' : null));
+      mockGraphDeleteMessages.mockResolvedValue({ done: [3, 5], failed: [{ uid: 4, error: '429' }], binIds: {} });
+
+      const result = await replayOps();
+
+      expect(mockGraphDeleteMessages).toHaveBeenCalledTimes(1);
+      expect(mockGraphDeleteMessages).toHaveBeenCalledWith(GRAPH, {
+        accountId: 'acct1', mailbox: 'INBOX',
+        items: [{ uid: 3, messageId: 'g3' }, { uid: 4, messageId: 'g4' }, { uid: 5, messageId: 'g5' }],
+      });
+      expect(mockDeleteQueueSubmit).not.toHaveBeenCalled();
+      expect(mockClearOps).toHaveBeenCalledTimes(1);
+      expect(mockClearOps).toHaveBeenCalledWith({ id: 4, op: 'delete', accountId: 'acct1', mailbox: 'INBOX', uids: [3, 5], arg });
+      expect(mockSaveEmailHeaders).toHaveBeenCalledWith('acct1', 'INBOX', [], null, { removedUids: [3, 5] });
+      expect(mockNoteOpFailure).toHaveBeenCalledWith({ op: 'delete', accountId: 'acct1', mailbox: 'INBOX', uid: 4 }, '429');
+      expect(mockLoadEmails).toHaveBeenCalled();
+      expect(result).toMatchObject({ attempted: 3, done: 2, failed: 1, kept: 1 });
+    });
+
+    it('answers a Graph delete uid with no id anywhere: dropped, its row shown, never retried', async () => {
+      const arg = { graph: true, ids: {} };
+      const owed = entry({ id: 6, op: 'delete', uids: [3], arg });
+      mockReadOps.mockResolvedValue([owed]);
+
+      const result = await replayOps();
+
+      expect(mockGraphDeleteMessages).not.toHaveBeenCalled();
+      expect(mockClearOps).toHaveBeenCalledWith({ id: 6, op: 'delete', accountId: 'acct1', mailbox: 'INBOX', uids: [3], arg });
+      expect(mockShowQueued).toHaveBeenCalledWith(owed, [3]);
+      expect(result).toMatchObject({ kept: 0 });
+    });
+
+    it('keeps a young Graph delete uid whose id lookup came up empty: a relist that failed or cooled down is not proof', async () => {
+      const arg = { graph: true, ids: {} };
+      mockReadOps.mockResolvedValue([entry({ id: 7, op: 'delete', uids: [3], arg, at: Date.now() - 60_000 })]);
+
+      const result = await replayOps();
+
+      expect(mockGraphDeleteMessages).not.toHaveBeenCalled();
+      expect(mockClearOps).not.toHaveBeenCalled();
+      expect(mockShowQueued).not.toHaveBeenCalled();
+      expect(result).toMatchObject({ kept: 1 });
+    });
+
+    it('keeps every uid of a Graph delete whose call failed outright', async () => {
+      const arg = { graph: true, ids: { 3: 'g3' } };
+      mockReadOps.mockResolvedValue([entry({ op: 'delete', uids: [3], arg })]);
+      mockGraphDeleteMessages.mockRejectedValue(new Error('daemon gone'));
+
+      const result = await replayOps();
+
+      expect(mockClearOps).not.toHaveBeenCalled();
+      expect(mockNoteOpFailure).toHaveBeenCalledWith({ op: 'delete', accountId: 'acct1', mailbox: 'INBOX', uid: 3 }, 'daemon gone');
+      expect(result).toMatchObject({ failed: 1, kept: 1 });
+    });
+
+    it('replays a Graph move entry as one call: done and gone are answered and pruned, the failed one kept', async () => {
+      const arg = { target: 'Archive', graph: true, ids: { 3: 'g3', 4: 'g4', 5: 'g5' }, targetFolderId: 'gf' };
+      mockReadOps.mockResolvedValue([entry({ id: 8, op: 'move', uids: [3, 4, 5], arg })]);
+      mockGraphMoveEmails.mockResolvedValue({ success: true, moved: 1, done: ['g3'], gone: ['g4'], failed: [{ messageId: 'g5', error: 'ErrorMoveCopyFailed' }] });
+
+      const result = await replayOps();
+
+      expect(mockGraphMoveEmails).toHaveBeenCalledTimes(1);
+      expect(mockGraphMoveEmails).toHaveBeenCalledWith(GRAPH, ['g3', 'g4', 'g5'], 'gf');
+      expect(mockMoveEmails).not.toHaveBeenCalled();
+      expect(mockClearOps).toHaveBeenCalledTimes(1);
+      expect(mockClearOps).toHaveBeenCalledWith({ id: 8, op: 'move', accountId: 'acct1', mailbox: 'INBOX', uids: [3, 4], arg });
+      expect(mockSaveEmailHeaders).toHaveBeenCalledWith('acct1', 'INBOX', [], null, { removedUids: [3, 4] });
+      expect(mockNoteOpFailure).toHaveBeenCalledWith({ op: 'move', accountId: 'acct1', mailbox: 'INBOX', uid: 5 }, 'ErrorMoveCopyFailed');
+      expect(result).toMatchObject({ done: 2, failed: 1, kept: 1 });
+    });
+
+    it('answers a Graph move uid with no id anywhere and sends the rest', async () => {
+      const arg = { target: 'Archive', graph: true, ids: { 3: 'g3' }, targetFolderId: 'gf' };
+      const owed = entry({ id: 9, op: 'move', uids: [3, 4], arg });
+      mockReadOps.mockResolvedValue([owed]);
+      mockGraphMoveEmails.mockResolvedValue({ success: true, moved: 1, done: ['g3'], gone: [], failed: [] });
+
+      await replayOps();
+
+      expect(mockGraphMoveEmails).toHaveBeenCalledWith(GRAPH, ['g3'], 'gf');
+      expect(mockClearOps).toHaveBeenCalledWith({ id: 9, op: 'move', accountId: 'acct1', mailbox: 'INBOX', uids: [4, 3], arg });
+      expect(mockShowQueued).toHaveBeenCalledWith(owed, [4]);
     });
 
     it('still drops a Graph entry it cannot replay (a move)', async () => {

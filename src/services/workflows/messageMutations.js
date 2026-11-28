@@ -992,6 +992,9 @@ const SELECTION_DELETE = Object.freeze({
   // copies come back; the undo slot is always written.
   reconcile: 'batch',
   noGraphId: (uid) => tr('errors.noGraphIdForUid', { uid }),
+  // A Graph account's targets go as one journalled `graph_delete_messages`
+  // per (account, folder) (_sendGraphDeletes), not one call per message.
+  graphBatch: true,
 });
 
 // How deleteEmailFromServer's delete runs.
@@ -1010,6 +1013,9 @@ const ONE_DELETE = Object.freeze({
   // deleted, and not under `skipRefresh`.
   reconcile: 'each',
   noGraphId: () => tr('errors.noGraphIdDelete'),
+  // One message, sent and answered here: a failure is thrown at the caller,
+  // so nothing is journalled to retry behind its back.
+  graphBatch: false,
 });
 
 const _where = ({ accountId, mailbox, uid }) => ({ accountId, mailbox, uid });
@@ -1169,8 +1175,9 @@ async function _resolveDeleteTargets(targets, state, how) {
       tombstone: `${accountId}|${mailbox}|${placed.uid}`,
       localFolder,
       localOnly,
-      // Graph is not queued (the daemon refuses it): its delete is addressed by
-      // a per-session message id, not a replayable uid. A local-only row has no
+      // Graph is not queued (the daemon refuses it): its selection delete is
+      // journalled here with the Graph ids it is addressed by, and replayOps
+      // sends what is still owed (_sendGraphDeletes). A local-only row has no
       // server delete to replay.
       queued: !!account && !isGraphAccount(account) && !localOnly,
     });
@@ -1297,13 +1304,27 @@ async function _sendDeletes(useMailStore, ctxs, { how, hidden, waitsOffline, isU
   let lastError = null;
   // The first reason a still-owed uid was refused for: said once, below.
   let notYet = null;
+  // A Graph account's targets, all sent before the loop below settles them.
+  const graphAnswers = how.graphBatch
+    ? await _sendGraphDeletes(ctxs.filter(c => !c.queued && !c.localOnly && c.account && isGraphAccount(c.account)), { how, waitsOffline, state: get() })
+    : new Map();
 
   for (const c of ctxs) {
     try {
       const answer = c.queued ? answers.get(c.tombstone) : undefined;
-      const result = c.queued
-        ? _answered(c, answer, hidden, batch)
-        : await _sendDirect(c, { how, waitsOffline, invoke });
+      const graphAnswer = graphAnswers.get(c.tombstone);
+      // Journalled and refused: the replay sends it again. The row comes back
+      // meanwhile, and one warning says it is not deleted yet.
+      if (graphAnswer?.failed !== undefined) {
+        _putBack(useMailStore, hidden, c, { reopen: false, isUnified });
+        notYet ??= graphAnswer.failed;
+        continue;
+      }
+      if (graphAnswer?.error) throw graphAnswer.error;
+      let result;
+      if (c.queued) result = _answered(c, answer, hidden, batch);
+      else if (graphAnswer) result = graphAnswer.offline ? OFFLINE : undefined;
+      else result = await _sendDirect(c, { how, waitsOffline, invoke });
       if (result === QUEUED && answer?.refused && !_transientRefusal(answer.refused)) notYet ??= answer.refused;
       if (result === OFFLINE || result === QUEUED) continue;
       if (result && result !== LOCAL && result !== GONE) outcomes.push(result);
@@ -1333,6 +1354,79 @@ async function _sendDeletes(useMailStore, ctxs, { how, hidden, waitsOffline, isU
   if (lastError) _reportDeleteFailure(lastError);
   else if (notYet) await _reportNotDeletedYet(notYet);
   return { outcomes, settled, prunes, surviving };
+}
+
+// Graph ids per call: the daemon paces the messages of one call itself.
+const GRAPH_DELETE_CHUNK = 200;
+
+// A Graph account's selection delete: one `graph_delete_messages` per
+// (account, folder), in chunks, each folder journalled first
+// (`arg: { graph, ids }`, the ids the replay addresses it by) and cleared by
+// its entry id as uids land. The daemon queue does not take Graph, so the
+// journal is the app's and replayOps sends what is still owed. Answers each
+// target by tombstone: `{ landed }`, `{ offline }` (journalled, nothing sent),
+// `{ failed: reason }` (journalled, still owed) or `{ error }` (no Graph id
+// online: nothing journalled, the delete did not happen).
+async function _sendGraphDeletes(ctxs, { how, waitsOffline, state }) {
+  const answers = new Map();
+  const groups = new Map();
+  for (const c of ctxs) {
+    const key = `${c.accountId}|${c.mailbox}`;
+    if (!groups.has(key)) groups.set(key, { accountId: c.accountId, mailbox: c.mailbox, account: c.account, ctxs: [] });
+    groups.get(key).ctxs.push(c);
+  }
+  await Promise.all([...groups.values()].map(async ({ accountId, mailbox, account, ctxs: group }) => {
+    const offline = waitsOffline(group[0]);
+    const ids = {};
+    for (const c of group) {
+      // Offline only what this computer already knows: a relist would go to
+      // the network. A uid journalled with no id is resolved at replay.
+      const graphId = await resolveGraphMessageId(accountId, mailbox, c.uid, offline ? { row: c.row } : { row: c.row, account });
+      if (graphId) ids[c.uid] = graphId;
+      // A Graph id we cannot establish means the delete did not happen:
+      // never reported as done, or the row went away and the message sat on
+      // the server until the next reload put it back.
+      else if (!offline) answers.set(c.tombstone, { error: new Error(how.noGraphId(c.uid)) });
+    }
+    const owed = group.filter(c => !answers.has(c.tombstone));
+    if (!owed.length) return;
+    const uids = owed.map(c => c.uid);
+    const entry = { op: 'delete', accountId, mailbox, uids, arg: { ..._queuedList({ accountId, mailbox, uids }, state), graph: true, ids } };
+    // Each entry's id names it to its own clear (another delete can share its arg).
+    const id = await db.queueOp(entry);
+    if (offline) {
+      for (const c of owed) answers.set(c.tombstone, { offline: true });
+      return;
+    }
+    for (let i = 0; i < owed.length; i += GRAPH_DELETE_CHUNK) {
+      const chunk = owed.slice(i, i + GRAPH_DELETE_CHUNK);
+      const items = chunk.map(c => ({ uid: c.uid, messageId: ids[c.uid] }));
+      let reply;
+      try {
+        // A call that fails as a whole (no daemon, no token yet) goes again
+        // quietly; what the daemon answered per message does not.
+        reply = await _withQuietRetries(() => api.graphDeleteMessages(account, { accountId, mailbox, items }));
+      } catch (error) {
+        const reason = error?.message || String(error);
+        for (const c of chunk) answers.set(c.tombstone, { failed: reason });
+        continue;
+      }
+      const done = new Set((reply?.done || []).map(Number));
+      const why = new Map((reply?.failed || []).map(f => [Number(f.uid), f.error]));
+      const landed = [];
+      for (const c of chunk) {
+        if (done.has(Number(c.uid))) {
+          landed.push(c.uid);
+          answers.set(c.tombstone, { landed: true });
+        } else {
+          // Not named as done: not done, whatever else the reply says.
+          answers.set(c.tombstone, { failed: String(why.get(Number(c.uid)) || 'errors.flagNotConfirmed') });
+        }
+      }
+      if (landed.length) await db.clearOps({ id, ...entry, uids: landed });
+    }
+  }));
+  return answers;
 }
 
 // A busy account passes on its own: the daemon's next round usually sends it,
@@ -1637,7 +1731,11 @@ async function _relistQueue() {
   }
   const now = new Set(list.flatMap(entry => (entry.uids || []).map(uid => _targetId({ ...entry, uid }))));
   const left = new Set([..._owedIds].filter(id => !now.has(id) && !_held.has(id)));
-  const added = [...now].filter(id => !_owedIds.has(id));
+  // A Graph delete is the app's own journal entry (_sendGraphDeletes), listed
+  // with the queue's: one whose row its live send put back is not hidden again.
+  const graphOwned = new Set(list.filter(entry => entry.arg?.graph)
+    .flatMap(entry => (entry.uids || []).map(uid => _targetId({ ...entry, uid }))));
+  const added = [...now].filter(id => !_owedIds.has(id) && !graphOwned.has(id));
   for (const id of left) {
     _owedIds.delete(id);
     _owedRows.delete(id);
@@ -3797,12 +3895,23 @@ export async function moveEmails(keys, targetMailbox) {
     let journalId = null;
     try {
       if (isGraphAccount(account)) {
-        // Addressed by a per-session message id, not a replayable uid: a
-        // journalled entry is something no later launch could act on, and there
-        // is no destination uid to hand an undo either.
-        await _graphMoveGroup(state, account, group, targetMailbox);
-        doneGroups.push(group);
-        tally.completed += group.uids.length;
+        // Journalled with the Graph ids it is addressed by (replayOps sends what
+        // is still owed). Live it has no undo: no destination uid comes back.
+        const moved = await _graphMoveGroup(state, account, group, targetMailbox, {
+          online: useConnectivityStore.getState().online,
+          onJournalled: () => { journalled = true; },
+        });
+        if (moved.deferred) {
+          console.log(`[moveEmails] offline — ${group.mailbox} → ${targetMailbox} journalled, replayOps will finish it`);
+          records.push(record(null, { deferred: true, journalId: moved.journalId, journalArg: moved.arg }));
+        }
+        if (moved.group.uids.length) doneGroups.push(moved.group);
+        tally.completed += moved.group.uids.length;
+        if (moved.failed.length) {
+          tally.errors += moved.failed.length;
+          notYet ??= moved.failed[0].error;
+          notMoved += moved.failed.length;
+        }
         paintMove(true);
         continue;
       }
@@ -3964,7 +4073,7 @@ async function _undoMove(records) {
       // Never sent: forgetting the journal entry IS the undo. The rows come back
       // through the reload below — they were only hidden locally.
       if (r.deferred) {
-        await db.clearOps({ id: r.journalId, op: 'move', accountId: r.accountId, mailbox: r.from, uids: r.srcUids, arg: { target: r.to } });
+        await db.clearOps({ id: r.journalId, op: 'move', accountId: r.accountId, mailbox: r.from, uids: r.srcUids, arg: r.journalArg ?? { target: r.to } });
         // The message never left: its uid is live again.
         _liftTombstones(useMailStore, r);
         continue;
@@ -3999,17 +4108,50 @@ async function _resolveDestinationUids(account, mailbox, messageIds) {
 }
 
 // One (account, mailbox) of a move on a Graph account: every uid must resolve
-// to a Graph message id, and the target must be a folder Graph knows.
-async function _graphMoveGroup(state, account, { accountId, mailbox, uids, rows }, targetMailbox) {
-  const messageIds = (await Promise.all(uids.map((uid, i) => resolveGraphMessageId(
+// to a Graph message id, and the target must be a folder Graph knows (both
+// thrown before anything is journalled). Then journalled like an IMAP move,
+// with the ids and the target folder id the replay addresses it by. Offline it
+// is `deferred`; live one call moves the whole group and its reply splits it:
+// `group` is what moved (or was gone already, an earlier move having landed)
+// and is cleared from the journal by the entry's id, `failed` stays journalled.
+async function _graphMoveGroup(state, account, group, targetMailbox, { online = true, onJournalled } = {}) {
+  const { accountId, mailbox, uids, rows, keys } = group;
+  const messageIds = await Promise.all(uids.map((uid, i) => resolveGraphMessageId(
     accountId, mailbox, uid, { row: rows[i], account },
-  )))).filter(Boolean);
-  if (messageIds.length !== uids.length) {
+  )));
+  if (messageIds.some(id => !id)) {
     throw new Error(tr('errors.noGraphIdMove'));
   }
   const targetFolder = state.mailboxes.find(m => m.path === targetMailbox || m.name === targetMailbox);
   if (!targetFolder || !targetFolder._graphFolderId) {
     throw new Error(tr('errors.moveTargetNotFound', { folder: targetMailbox }));
   }
-  await api.graphMoveEmails(account, messageIds, targetFolder._graphFolderId);
+  const targetFolderId = targetFolder._graphFolderId;
+  const ids = Object.fromEntries(uids.map((uid, i) => [uid, messageIds[i]]));
+  const arg = { target: targetMailbox, graph: true, ids, targetFolderId };
+  const entry = { op: 'move', accountId, mailbox, uids, arg };
+  const journalId = await db.queueOp(entry);
+  if (journalId != null) onJournalled?.();
+  if (!online) return { deferred: true, journalId, arg, group, failed: [] };
+
+  const res = await api.graphMoveEmails(account, messageIds, targetFolderId);
+  // A reply with no per-message lists (an older daemon) moved everything or threw.
+  const failedById = new Map((Array.isArray(res?.failed) ? res.failed : []).map(f => [f.messageId, f.error]));
+  const answered = Array.isArray(res?.done) || Array.isArray(res?.gone)
+    ? new Set([...(res.done || []), ...(res.gone || [])])
+    : null;
+  const leaves = (i) => (answered ? answered.has(messageIds[i]) : !failedById.has(messageIds[i]));
+  const moved = { ...group, uids: [], rows: [], keys: [] };
+  const failed = [];
+  uids.forEach((uid, i) => {
+    if (leaves(i)) {
+      moved.uids.push(uid);
+      moved.rows.push(rows[i]);
+      moved.keys.push(keys[i]);
+    } else {
+      failed.push({ uid, error: failedById.get(messageIds[i]) || 'errors.flagNotConfirmed' });
+    }
+  });
+  if (moved.uids.length) await db.clearOps({ id: journalId, ...entry, uids: moved.uids });
+  return { group: moved, failed, journalId, arg };
 }

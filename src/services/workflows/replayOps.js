@@ -3,6 +3,7 @@
 import * as db from '../db';
 import * as api from '../api';
 import { isGraphAccount } from '../graphConfig';
+import { resolveGraphMessageId } from '../cacheManager';
 import { isImportUid } from '../../utils/importUid';
 import { replayPurge, _setFlagOnServer, hideQueuedDeletes, showQueuedRows, onDeleteQueueLanded, onDeleteQueueChanged, onDeleteQueueStatus } from './messageMutations';
 import { remindOfUnfinished } from './pendingActionsReminder';
@@ -29,7 +30,10 @@ const log = (...args) => {
  * Not deletes: the daemon owns those end to end (src-daemon/src/delete_queue.rs
  * journals, sends, retries and replays them, with or without a window), so a
  * delete entry in the journal is skipped here, never sent, cleared or hidden.
- * Flags, moves and purges are still replayed from here.
+ * The exception is a Graph account's delete (`arg.graph`), which the daemon's
+ * queue does not take: the app journals it (messageMutations
+ * `_sendGraphDeletes`) and sends it again from here. Flags, moves (Graph ones
+ * with `arg.graph` too) and purges are replayed from here.
  *
  * The journal is written before the optimistic update and cleared after the
  * last round-trip (see messageMutations), so anything still in it belongs to a
@@ -72,7 +76,7 @@ export async function replayOps({ reason = 'launch' } = {}) {
 
   // The journal table is shared with the daemon's delete queue: its entries
   // are the daemon's to send, so this replay never sees them.
-  const ops = (await db.readOps()).filter((entry) => entry.op !== 'delete');
+  const ops = (await db.readOps()).filter((entry) => entry.op !== 'delete' || entry.arg?.graph);
   if (!ops.length) return finish({ attempted: 0, done: 0, failed: 0, kept: 0, errors: [] });
   // Rows owed a purge stay hidden, whichever session queued them.
   await hideQueuedDeletes(ops);
@@ -131,11 +135,22 @@ export async function replayOps({ reason = 'launch' } = {}) {
     const account = accounts.find((a) => a.id === accountId);
     const graph = !!account && isGraphAccount(account);
     // Account removed since, or a Graph op nothing here can replay: stop
-    // carrying it. A Graph flag the live path journalled (`arg.graph`) is the
-    // one Graph op replayed, through the Graph write and its id ladder.
-    if (!account || (graph && !(op === 'flag' && arg?.graph))) {
+    // carrying it. A Graph flag, delete or move the live path journalled
+    // (`arg.graph`) is replayed, by the Graph ids it carries.
+    if (!account || (graph && !(GRAPH_REPLAYED.has(op) && arg?.graph))
+      || (!graph && op === 'delete')) {
       await db.clearOps({ id, op, accountId, mailbox, uids, arg });
       await showQueuedRows(entry);
+      continue;
+    }
+
+    if (graph && (op === 'delete' || op === 'move')) {
+      const r = await _replayGraphEntry(account, entry);
+      attempted += r.attempted;
+      ok += r.landed.length;
+      failed += r.failed.length;
+      kept += r.failed.length;
+      errors.push(...r.errors);
       continue;
     }
 
@@ -274,6 +289,97 @@ export async function replayOps({ reason = 'launch' } = {}) {
   // A replay the user started from that Settings list answers there.
   if (reason !== 'manual') await remindOfUnfinished(kept);
   return finish({ attempted, done: ok, failed, kept, errors });
+}
+
+// The Graph ops the live paths journal with `arg.graph`.
+const GRAPH_REPLAYED = new Set(['flag', 'delete', 'move']);
+const GRAPH_CHUNK = 200;
+// How long a uid whose Graph id cannot be found stays owed before it is dropped.
+const GRAPH_NO_ID_GRACE_MS = 24 * 60 * 60_000;
+
+/**
+ * One journalled Graph delete or move, sent again: one call per entry (a
+ * delete in chunks), each uid addressed by the id journalled with it, else
+ * the id map's. A uid with no id anywhere names nothing Graph can act on, so
+ * it is answered (dropped, its row shown) rather than retried forever. Done
+ * (and, for a move, gone: an earlier move landed) is answered, pruned from the
+ * header cache and cleared by the entry's id; a failure keeps its uid.
+ */
+async function _replayGraphEntry(account, entry) {
+  const { useMailStore } = await import('./boundStore');
+  const { id, op, accountId, mailbox, uids, arg } = entry;
+  const out = { attempted: 0, landed: [], failed: [], errors: [] };
+  const ids = new Map();
+  const noId = [];
+  for (const uid of uids) {
+    let graphId = arg?.ids?.[uid] || null;
+    if (!graphId) {
+      try {
+        graphId = await resolveGraphMessageId(accountId, mailbox, uid, { account });
+      } catch (e) {
+        log(`[replayOps] ${op} ${mailbox} uid ${uid}: Graph id lookup failed:`, String(e?.message || e));
+      }
+    }
+    if (graphId) ids.set(uid, graphId);
+    else noId.push(uid);
+  }
+  const fail = (uid, message) => {
+    out.failed.push(uid);
+    db.noteOpFailure({ op, accountId, mailbox, uid }, message);
+  };
+  // An empty lookup is no proof the message is gone: the id map's relist
+  // swallows its own failure and cools down between tries. A young entry
+  // keeps such a uid owed; past GRAPH_NO_ID_GRACE_MS it is dropped.
+  if (noId.length && Date.now() - (Number(entry.at) || 0) < GRAPH_NO_ID_GRACE_MS) {
+    log(`[replayOps] Graph ${op} ${mailbox}: ${noId.length} uid(s) with no Graph id yet, kept:`, noId.join(','));
+    for (const uid of noId.splice(0)) fail(uid, op === 'delete' ? 'errors.noGraphIdDelete' : 'errors.noGraphIdMove');
+  }
+  if (noId.length) log(`[replayOps] Graph ${op} ${mailbox}: ${noId.length} uid(s) with no Graph id, dropped:`, noId.join(','));
+  const owed = uids.filter((uid) => ids.has(uid));
+  out.attempted = owed.length;
+  if (owed.length && op === 'delete') {
+    for (let i = 0; i < owed.length; i += GRAPH_CHUNK) {
+      const chunk = owed.slice(i, i + GRAPH_CHUNK);
+      try {
+        const res = await api.graphDeleteMessages(account, { accountId, mailbox, items: chunk.map((uid) => ({ uid, messageId: ids.get(uid) })) });
+        const done = new Set((res?.done || []).map(Number));
+        const why = new Map((res?.failed || []).map((f) => [Number(f.uid), f.error]));
+        for (const uid of chunk) {
+          if (done.has(Number(uid))) out.landed.push(uid);
+          else fail(uid, String(why.get(Number(uid)) || 'errors.flagNotConfirmed'));
+        }
+      } catch (e) {
+        for (const uid of chunk) fail(uid, String(e?.message || e));
+      }
+    }
+  } else if (owed.length) {
+    try {
+      const res = await api.graphMoveEmails(account, owed.map((uid) => ids.get(uid)), arg?.targetFolderId);
+      const answered = new Set([...(res?.done || []), ...(res?.gone || [])]);
+      const why = new Map((res?.failed || []).map((f) => [f.messageId, f.error]));
+      for (const uid of owed) {
+        if (answered.has(ids.get(uid))) out.landed.push(uid);
+        else fail(uid, String(why.get(ids.get(uid)) || 'errors.flagNotConfirmed'));
+      }
+    } catch (e) {
+      for (const uid of owed) fail(uid, String(e?.message || e));
+    }
+  }
+  if (out.failed.length) {
+    const message = `Graph ${op} ${mailbox}/${out.failed.join(',')}: not done`;
+    out.errors.push(message);
+    log(`[replayOps] ${account.email} ${message}`);
+  }
+  const answered = [...noId, ...out.landed];
+  if (answered.length) await db.clearOps({ id, op, accountId, mailbox, uids: answered, arg });
+  if (noId.length) await showQueuedRows(entry, noId);
+  if (out.landed.length) {
+    // Gone from the folder: the header cache must not paint it again.
+    await db.saveEmailHeaders(accountId, mailbox, [], null, { removedUids: out.landed });
+    const s = useMailStore.getState();
+    if (s.activeAccountId === accountId && s.activeMailbox === mailbox) s.loadEmails?.();
+  }
+  return out;
 }
 
 // How often an online session re-attempts whatever is still owed.

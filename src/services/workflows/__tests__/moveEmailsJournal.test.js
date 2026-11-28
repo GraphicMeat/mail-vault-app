@@ -81,7 +81,7 @@ vi.mock('../../cacheManager', () => ({
   getAccountCacheMailboxes: () => null,
   listGraphMessages: vi.fn().mockResolvedValue({ headers: [], graphMessageIds: [] }),
   getGraphMessageId: () => graphId,
-  resolveGraphMessageId: async () => graphId,
+  resolveGraphMessageId: async (acct, mb, uid, opts) => opts?.row?._graphId ?? graphId,
   clearGraphIdMap: () => {},
 }));
 
@@ -278,25 +278,84 @@ describe('moveEmails', () => {
     expect([...useMailStore.getState().selectedEmailIds]).toEqual([9]);
   });
 
-  it('a Graph group is not journalled', async () => {
+  describe('a Graph group', () => {
     const graphAccount = { id: 'a1', email: 'a1@x', oauth2Transport: 'graph', oauth2AccessToken: 'tok' };
-    graphId = 'gid';
-    primeStore({
-      emails: [row(7)],
-      account: graphAccount,
-      mailboxes: [{ name: 'Archive', path: 'Archive', _graphFolderId: 'gfolder', children: [] }],
+    const ARCHIVE = [{ name: 'Archive', path: 'Archive', _graphFolderId: 'gfolder', children: [] }];
+    const graphArg = (ids) => ({ target: 'Archive', graph: true, ids, targetFolderId: 'gfolder' });
+
+    it('is journalled with its Graph ids before the call and cleared once it lands', async () => {
+      graphId = 'gid';
+      const callOrder = [];
+      mockQueueOp.mockImplementation(async () => { callOrder.push('queueOp'); return 5; });
+      mockGraphMoveEmails.mockImplementation(async (_a, ids) => { callOrder.push('graphMoveEmails'); return { success: true, moved: ids.length, done: ids, gone: [], failed: [] }; });
+      mockClearOps.mockImplementation(async () => { callOrder.push('clearOps'); });
+      primeStore({ emails: [row(7)], account: graphAccount, mailboxes: ARCHIVE });
+
+      const result = await useMailStore.getState().moveEmails([7], 'Archive');
+
+      expect(mockGraphMoveEmails).toHaveBeenCalledWith(expect.objectContaining({ id: 'a1' }), ['gid'], 'gfolder');
+      expect(mockQueueOp).toHaveBeenCalledWith({ op: 'move', accountId: 'a1', mailbox: 'INBOX', uids: [7], arg: graphArg({ 7: 'gid' }) });
+      expect(mockClearOps).toHaveBeenCalledWith({ id: 5, op: 'move', accountId: 'a1', mailbox: 'INBOX', uids: [7], arg: graphArg({ 7: 'gid' }) });
+      expect(callOrder).toEqual(['queueOp', 'graphMoveEmails', 'clearOps']);
+      expect(mockMoveEmails).not.toHaveBeenCalled();
+      // A live Graph move still has no undo: no destination uid comes back.
+      expect(result.moved).toEqual([]);
+      expect(useMailStore.getState().emails).toEqual([]);
     });
 
-    const result = await useMailStore.getState().moveEmails([7], 'Archive');
+    it('a partial failure: moved and already-gone rows leave, the failed one stays on screen and journalled', async () => {
+      mockGraphMoveEmails.mockResolvedValue({
+        success: true, moved: 1, done: ['g7'], gone: ['g8'], failed: [{ messageId: 'g9', error: 'ErrorQuotaExceeded' }],
+      });
+      primeStore({ emails: [row(7, { _graphId: 'g7' }), row(8, { _graphId: 'g8' }), row(9, { _graphId: 'g9' })], account: graphAccount, mailboxes: ARCHIVE });
 
-    expect(mockGraphMoveEmails).toHaveBeenCalledWith(expect.objectContaining({ id: 'a1' }), ['gid'], 'gfolder');
-    // Graph is addressed by a per-session message id, not a replayable uid —
-    // replayOps would only throw the entry away again.
-    expect(mockQueueOp).not.toHaveBeenCalled();
-    expect(mockMoveEmails).not.toHaveBeenCalled();
-    expect(result.moved).toEqual([]);
-    // The rows still leave the list: the move happened, it just has no undo.
-    expect(useMailStore.getState().emails).toEqual([]);
+      const result = await useMailStore.getState().moveEmails([7, 8, 9], 'Archive');
+
+      // One call for the whole folder.
+      expect(mockGraphMoveEmails).toHaveBeenCalledTimes(1);
+      expect(mockGraphMoveEmails).toHaveBeenCalledWith(expect.objectContaining({ id: 'a1' }), ['g7', 'g8', 'g9'], 'gfolder');
+      // Only what landed is cleared, by the entry's id.
+      const arg = graphArg({ 7: 'g7', 8: 'g8', 9: 'g9' });
+      expect(mockClearOps).toHaveBeenCalledTimes(1);
+      expect(mockClearOps).toHaveBeenCalledWith({ id: 1, op: 'move', accountId: 'a1', mailbox: 'INBOX', uids: [7, 8], arg });
+      expect(useMailStore.getState().emails.map(e => e.uid)).toEqual([9]);
+      expect(result.notMoved).toBe(1);
+      const { error, errorType } = useMailStore.getState();
+      expect(error).toMatch(/keeps trying/i);
+      expect(errorType).toBe('warning');
+    });
+
+    it('a call that fails outright keeps every row and the journal: "not moved yet", not thrown', async () => {
+      graphId = 'gid';
+      mockGraphMoveEmails.mockRejectedValue(new Error('Graph 503'));
+      primeStore({ emails: [row(7)], account: graphAccount, mailboxes: ARCHIVE });
+
+      const result = await useMailStore.getState().moveEmails([7], 'Archive');
+
+      expect(mockClearOps).not.toHaveBeenCalled();
+      expect(result.notMoved).toBe(1);
+      expect(useMailStore.getState().emails.map(e => e.uid)).toEqual([7]);
+      expect(useMailStore.getState().error).toMatch(/Graph 503/);
+    });
+
+    it('offline it is journalled and deferred like an IMAP move: the rows leave, the undo forgets the entry', async () => {
+      netOnline = false;
+      graphId = 'gid';
+      mockQueueOp.mockResolvedValue(9);
+      primeStore({ emails: [row(7), row(8)], account: graphAccount, mailboxes: ARCHIVE });
+
+      const result = await useMailStore.getState().moveEmails([7], 'Archive');
+
+      expect(mockGraphMoveEmails).not.toHaveBeenCalled();
+      expect(mockQueueOp).toHaveBeenCalledWith({ op: 'move', accountId: 'a1', mailbox: 'INBOX', uids: [7], arg: graphArg({ 7: 'gid' }) });
+      expect(mockClearOps).not.toHaveBeenCalled();
+      expect(result.moved).toHaveLength(1);
+      expect(result.moved[0]).toMatchObject({ deferred: true, journalId: 9, srcUids: [7] });
+      expect(useMailStore.getState().emails.map(e => e.uid)).toEqual([8]);
+
+      await useMailStore.getState().undo.run();
+      expect(mockClearOps).toHaveBeenCalledWith(expect.objectContaining({ id: 9, op: 'move', uids: [7], arg: graphArg({ 7: 'gid' }) }));
+    });
   });
 });
 
