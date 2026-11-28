@@ -38,21 +38,21 @@ export function formatPurgeEverywhereOutcome(result) {
   return clauses.join(' ');
 }
 
-// A target refused because another message now holds its uid did not fail on
-// the server, and no resync makes it deletable: the list shows what the server
-// holds now. It leaves `failed` for `changed`, and a mailbox whose only reason
-// to resync was such a target leaves `needsResync`. Never queued
-// (messageMutations `_purgeQueueable`), so `_nativePurge`'s queued adjustment
-// never counts it again.
+// Settles the counts from the final per-target outcomes. A target refused
+// because another message now holds its uid did not fail on the server, and no
+// resync makes it deletable: the list shows what the server holds now, so it
+// leaves `failed` for `changed`. A target held back for a resync is said once,
+// as waiting for one: the daemon counts it as failed AND its mailbox as needing
+// a resync, which read "1 could not be deleted ... 1 was skipped" for one
+// message. Never queued (messageMutations `_purgeQueueable`), so
+// `_nativePurge`'s queued adjustment never counts it again.
 export function splitChangedOutcome(result, finals) {
-  const changed = finals.filter(target => target?.refused && !target.skipped
-    && target.lastError === 'errors.bulkIdentityChanged');
-  if (!changed.length) return result;
+  const refused = finals.filter(target => target?.refused && !target.skipped);
+  const changed = refused.filter(target => target.lastError === 'errors.bulkIdentityChanged');
   // Counted afresh from the final outcomes, never subtracted from a total an
-  // earlier step (retryAfterResync) has already adjusted: the mailboxes that
-  // still hold a target waiting for a resync that is not a changed one.
-  const resync = new Set(finals.filter(target => target?.needsResync && !changed.includes(target))
-    .map(target => JSON.stringify([target.accountId, target.mailbox])));
-  return { ...result, failed: Math.max(0, (result.failed || 0) - changed.length),
-    needsResync: resync.size, changed: changed.length };
+  // earlier step (retryAfterResync) has already adjusted.
+  const resync = refused.filter(target => target.needsResync && !changed.includes(target));
+  if (!changed.length && !resync.length) return result;
+  return { ...result, failed: Math.max(0, (result.failed || 0) - changed.length - resync.length),
+    needsResync: resync.length, ...(changed.length ? { changed: changed.length } : {}) };
 }

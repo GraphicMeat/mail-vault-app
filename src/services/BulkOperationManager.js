@@ -189,12 +189,8 @@ function deletedGroups(raw, owner) {
   }));
 }
 
-// A delete never gets the corner panel: its rows left the list when it was
-// clicked, and only a final failure is said, as a toast. A recovered archive
-// run has no caller of its own and reports there.
 const DELETE_TYPES = new Set(['delete', 'delete_everywhere']);
 export const isDeleteBulkType = (type) => DELETE_TYPES.has(type);
-const panelFor = (type) => !isDeleteBulkType(type);
 
 // All mail decisions and pending writes belong to the native worker. This
 // adapter owns only one subscription, attempt matching and status recovery.
@@ -231,8 +227,8 @@ export class BulkOperationManager {
     spans = false,
     uids = [],
     onProgress,
-    // The bulk selection's archive runs report in the list's corner panel;
-    // any delete answers with its toast alone (panelFor).
+    // A bulk run (archive or delete) reports in the list's corner panel; one
+    // row's delete answers with its toast alone.
     panel = false,
   }) {
     return this._run(
@@ -245,7 +241,7 @@ export class BulkOperationManager {
       },
       onProgress,
       undefined,
-      panel && panelFor(type)
+      panel
     );
   }
   resume(pending, _account, onProgress) {
@@ -254,7 +250,8 @@ export class BulkOperationManager {
       { operationId: pending.id, attemptId: uuid(), type: pending.type },
       onProgress,
       undefined,
-      panelFor(pending.type)
+      // A recovered run has no caller of its own: it reports in the panel.
+      true
     );
   }
   attach(active, onProgress) {
@@ -267,7 +264,7 @@ export class BulkOperationManager {
       },
       onProgress,
       active,
-      panelFor(active.type)
+      true
     );
   }
   async _run(command, params, onProgress, attached, panel = false) {

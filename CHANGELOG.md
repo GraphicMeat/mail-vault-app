@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Fixed: deleting many emails in a saved view left them on screen until the server answered. They now leave the list at the click, a view's included, while the delete runs in the background, shown in the same bottom right progress panel as other bulk actions. An email waiting for its mailbox to resync is no longer also counted as failed.
 - Fixed: in the setup tour's Make it yours, the highlight around a focused menu or choice was still cut off at its left edge. It now shows whole. The new email sound has a Preview sound button beside it, to hear the chosen sound again.
 - Added: the "Let your mail look after itself" note now shows the Premium price in your currency, with the standard price struck beside it, as a limited-time early access offer for you, your family and friends. Once early access sells the standard price, it shows the price without calling it an offer. The note disappears once you have Premium or sign in to billing.
 - Fixed: marking many emails read or unread, or starring them, sent one request per email and waited for each, with failures never shown. It now sends one request per folder in the background, says when the server has not taken the change yet, and keeps trying. On Gmail, the copies of an email in Bin and All Mail change with it.
@@ -9,7 +10,7 @@
 - Fixed: when a move across several folders failed partway, the emails that did move stayed in the list and could not be undone.
 - Fixed: in a saved view or search, Export did nothing, Tag and Snooze skipped emails not on screen, and Select all stopped at 500 emails. They now cover the whole selection.
 - Fixed: undoing a change right away could reach the server before the change itself, leaving the server in the wrong state.
-- Fixed: Delete everywhere on many emails took many minutes, because it asked the server about each email on a new connection. It now checks and deletes a whole folder at once, so a few hundred emails take seconds, and a chip in the corner shows how far it is while it runs.
+- Fixed: Delete everywhere on many emails took many minutes, because it asked the server about each email on a new connection. It now checks and deletes a whole folder at once, so a few hundred emails take seconds, and the bulk progress panel in the bottom right corner shows how far it is while it runs.
 - Fixed: on Gmail, Delete everywhere left the All Mail copy of every email on the server, so the emails came back. A copy in a folder MailVault does not sync is now deleted when the server holds the same email at that place.
 - Fixed: after moving an Outlook account from Microsoft Graph to IMAP, deleting an email kept only on this computer failed with "The specified message set is invalid" and was retried forever. Such an email has no server copy, so the delete now goes through at once.
 - Fixed: in the Folders under account sidebar layout, picking an account below the open one made it jump up as the folders above it closed. The picked account now stays where you clicked it, with its folders opening right below.

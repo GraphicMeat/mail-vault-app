@@ -56,7 +56,6 @@ import { SearchIndexProgress } from './components/SearchIndexProgress';
 import { ViewsReindexNotice } from './components/ViewsReindexNotice';
 import { MboxUploadProgress } from './components/MboxUploadProgress';
 import { FolderMoveProgress } from './components/FolderMoveProgress';
-import { DeleteEverywhereProgress } from './components/DeleteEverywhereProgress';
 import { FormatMigrationProgress } from './components/FormatMigrationProgress';
 import { OfflineBanner } from './components/OfflineBanner';
 import { GraphImapBanner } from './components/GraphImapBanner';
@@ -960,7 +959,6 @@ function App() {
       <ViewsReindexNotice />
       <MboxUploadProgress onOpenAccounts={(accountId) => openSettings({ tab: 'accounts', accountId })} />
       <FolderMoveProgress />
-      <DeleteEverywhereProgress />
       <FormatMigrationProgress />
       <ShareUnlockModal onSubscribe={() => openSettings({ tab: 'billing' })} />
       <PendingActionsReminder />

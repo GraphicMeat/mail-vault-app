@@ -11,8 +11,8 @@ import { formatPurgeEverywhereOutcome } from '../../utils/purgeOutcome';
 export function useBulkActions({ formatArchiveBackupDeleteOutcome }) {
   const t = useT();
   const [bulkOpProgress, setBulkOpProgress] = useState(null);
-  // Only a bulk selection's run (or one recovered after a relaunch) reports in
-  // the corner panel; any other delete answers with its toast alone.
+  // A bulk run (archive or delete, or one recovered after a relaunch) reports
+  // in the corner panel; one row's delete answers with its toast alone.
   useEffect(() => bulkOperationManager.subscribe((op, lifecycle) => { if (lifecycle?.panel) setBulkOpProgress(op); }), []);
 
   const handleBulkConfirm = async ({ action, uids }) => {
@@ -40,8 +40,9 @@ export function useBulkActions({ formatArchiveBackupDeleteOutcome }) {
       return;
     }
 
-    // Delete everywhere took its rows off the list at the click and retries
-    // quietly; only what it could not do is said, as a toast. No panel.
+    // Delete everywhere takes its rows off the list at the click and works in
+    // the background, reporting in the corner panel; what it could not do is
+    // said, as a toast.
     if (action === 'delete_everywhere') {
       purgeEverywhereReporting(uids, { scope }).catch(err => {
         console.error('[EmailList] Delete everywhere failed:', err);
@@ -53,8 +54,8 @@ export function useBulkActions({ formatArchiveBackupDeleteOutcome }) {
     try {
       // The selection's keys can name any account and folder; a bare uid
       // names the open folder's message only where the view is one folder.
-      // A delete leaves the list at the click and reports by toast alone; the
-      // corner panel is for archiving.
+      // A delete leaves the list at the click and reports in the corner
+      // panel like any bulk run.
       if (action === 'delete') await bulkDeleteFromServer(scope);
       else {
         await bulkOperationManager.start({ type: action, scope, onProgress: op => setBulkOpProgress({ ...op }), panel: true });

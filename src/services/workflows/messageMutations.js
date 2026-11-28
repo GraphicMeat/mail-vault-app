@@ -3183,7 +3183,7 @@ function _purgeInTurn(run) {
   return turn;
 }
 
-async function _nativePurge(originalScope, { onProgress, panel } = {}) {
+async function _nativePurge(originalScope, { onProgress, panel = originalScope.keys.length > 1 } = {}) {
   const store = nativePurgeStore;
   const get = () => store.getState();
   if (!originalScope.keys.length) return { deleted: 0, failed: 0, queuedBackup: 0, needsResync: 0 };
@@ -3240,17 +3240,18 @@ async function _nativePurge(originalScope, { onProgress, panel } = {}) {
     const snapshot = live.selectedEmailSnapshots?.get(key);
     return snapshot && originalHints.has(originalTargetId(snapshot));
   });
-  // Journal first, as a server delete does: the rows leave the list now, so a
-  // quit, a reload or a run that never lands leaves the purge owed (replayOps
-  // retries it, Settings › Unfinished server actions lists it), never dropped.
-  // Graph and vault-only folders are not journalled: replayOps cannot act on
-  // either, so those keep the restore-on-failure contract below.
+  // The rows leave the list, and a view's hits, at the click: nothing on
+  // screen waits for a daemon round trip. Then the journal, before anything is
+  // sent, so a quit, a reload or a run that never lands leaves the purge owed
+  // (replayOps retries it, Settings › Unfinished server actions lists it),
+  // never dropped. Graph and vault-only folders are not journalled: replayOps
+  // cannot act on either, so those keep the restore-on-failure contract below.
+  const hidden = _hideDeleted(store, targets, { keys: consumedKeys });
+  await pruneSearchResults(targets.map(({ accountId, mailbox, uid }) => ({ accountId, mailbox, uid })));
   const journal = _purgeJournal(targets.map(target => hintsById.get(_targetId(target))), live);
   // Each entry's id names it to its own clear (another purge can share its arg).
   const journalIds = await Promise.all(journal.map(entry => db.queueOp(entry)));
   const journalled = new Set(journal.flatMap(entry => entry.uids.map(uid => _targetId({ ...entry, uid }))));
-  const hidden = _hideDeleted(store, targets, { keys: consumedKeys });
-  await pruneSearchResults(targets.map(({ accountId, mailbox, uid }) => ({ accountId, mailbox, uid })));
   // The rows stay hidden through every try. A target the daemon could not
   // finish (no proof, the server or local step not complete) or a run that
   // failed outright goes again after QUIET_RETRY's wait, outside the queue
@@ -3266,11 +3267,12 @@ async function _nativePurge(originalScope, { onProgress, panel } = {}) {
     failure = undefined;
     try {
       operation = await _purgeInTurn(async () => {
-        const run = await bulkOperationManager.start({ type: 'delete_everywhere', scope: runScope, panel,
+        // A quiet retry of the leftovers does not bring the corner panel back.
+        const run = await bulkOperationManager.start({ type: 'delete_everywhere', scope: runScope, panel: panel && !retry,
           onProgress: op => onProgress?.({ ...op, phase: op.currentPhase }) });
         // A row cached before native identity existed is refused as "needs resync":
         // sync its mailbox, re-prove the row and run once more rather than drop the delete.
-        try { return await retryAfterResync(run, runScope, op => onProgress?.({ ...op, phase: op.currentPhase }), panel); }
+        try { return await retryAfterResync(run, runScope, op => onProgress?.({ ...op, phase: op.currentPhase }), panel && !retry); }
         catch (error) { console.warn('[purgeEverywhere] retry after resync failed:', error); return run; }
       });
     } catch (error) { failure = error; }
@@ -3637,13 +3639,15 @@ export async function bulkDeleteFromServer(scope) {
       const generation = _hintedGeneration(hintsById, entry);
       return { ...entry, arg: { ..._queuedList(entry, live), mode: 'permanent', ...(generation ? { uidValidity: generation } : {}) } };
     });
+  // The rows, and a view's hits, leave at the click; then the journal.
+  _hideDeleted(store, targets, { keys: scope.keys });
+  await pruneSearchResults(targets);
   // Each entry's id names it to its own clear (another purge can share its arg).
   const journalIds = await Promise.all(journal.map(entry => db.queueOp(entry)));
-  _hideDeleted(store, targets, { keys: scope.keys });
   let operation;
   let failure;
   try {
-    operation = await _purgeInTurn(() => bulkOperationManager.start({ type: 'delete', scope }));
+    operation = await _purgeInTurn(() => bulkOperationManager.start({ type: 'delete', scope, panel: scope.keys.length > 1 }));
   } catch (error) { failure = error; }
   const run = operation || bulkOperationManager.operation;
   const clean = !failure && run?.status === 'complete' && !run.errors;

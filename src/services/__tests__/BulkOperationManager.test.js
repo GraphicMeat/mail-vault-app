@@ -442,9 +442,10 @@ it('retains an ambiguous owner when its first unstarted fence is unavailable', a
   ).toHaveLength(1);
 });
 
-// The list's corner panel belongs to the bulk selection. A run started with no
-// panel (a delete from the list or reader) tells subscribers so; one recovered
-// after a relaunch has no caller of its own and gets the panel.
+// The list's corner panel belongs to the bulk selection, deletes included: a
+// run started with no panel (one row's delete from the list or reader) tells
+// subscribers so; one recovered after a relaunch has no caller of its own and
+// gets the panel, whatever its type.
 it('tells subscribers whether a run belongs to the corner panel', async () => {
   const seen = [];
   const stop = manager.subscribe((_op, lifecycle) => seen.push(lifecycle?.panel));
@@ -459,9 +460,11 @@ it('tells subscribers whether a run belongs to the corner panel', async () => {
   expect(seen.every((panel) => panel === false)).toBe(true);
   await manager.start({ type: 'archive', scope, panel: true });
   expect(seen.at(-1)).toBe(true);
-  // A delete never gets the panel, whoever asks: its rows are already gone.
+  // A bulk delete reports in the same corner panel as a bulk archive.
   await manager.start({ type: 'delete', scope, panel: true });
-  expect(seen.at(-1)).toBe(false);
+  expect(seen.at(-1)).toBe(true);
+  await manager.start({ type: 'delete_everywhere', scope, panel: true });
+  expect(seen.at(-1)).toBe(true);
 
   seen.length = 0;
   const active = { id: 'existing', attemptId: 'A', type: 'archive', status: 'archiving' };
@@ -485,7 +488,7 @@ it('tells subscribers whether a run belongs to the corner panel', async () => {
   });
   await reattached;
   expect(seen.length).toBeGreaterThan(0);
-  expect(seen.every((panel) => panel === false)).toBe(true);
+  expect(seen.every((panel) => panel === true)).toBe(true);
   stop();
 });
 // A plain server delete hands back what its own durable row says it removed,
