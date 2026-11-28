@@ -101,6 +101,24 @@ async fn a_pass_lands_imap_and_jmap_entries_and_drops_entries_no_account_can_sen
     assert_eq!(seen.last().unwrap().0, "delete-queue-status", "after the pass");
 }
 
+/// A Graph delete the app journalled (`arg.graph`) is the app's to replay
+/// (replayOps sends it through Graph): a pass neither sends nor drops it,
+/// or an offline Outlook delete was thrown away seconds after the link came
+/// back and its rows returned.
+#[tokio::test]
+async fn a_pass_leaves_a_graph_entry_the_app_replays() {
+    let f = fixture_with(vec![], r#"[{"id":"ms","oauth2Transport":"graph"}]"#, vec![]);
+    let id = queue(&f, "ms", "Inbox", &[9, 10], json!({"graph": true, "ids": {"9": "AAA", "10": "BBB"}}));
+    let mut rx = f.s.events.subscribe();
+
+    let counts = pass(&f.s, "launch").await;
+
+    assert_eq!((counts.attempted, counts.dropped, counts.done), (0, 0, 0), "{counts:?}");
+    assert_eq!(entry(&f, id).map(|e| e.uids), Some(vec![9, 10]), "kept for the app");
+    assert!(sends(&f).is_empty());
+    assert!(!events(&mut rx).iter().any(|(n, _)| n == "delete-queue-changed"), "nothing dropped, nothing announced");
+}
+
 /// A legacy entry outside INBOX replays as `Auto` under today's rule (owner
 /// decision 1): a move to Trash, not the permanent delete the old replay
 /// sent. No full fetch: a move needs no bin bytes.

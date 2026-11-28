@@ -377,14 +377,22 @@ async fn replay_all(state: &Arc<DaemonState>, backoff: bool) -> PassCounts {
     c
 }
 
-/// The delete entries, in one locked read.
+/// The delete entries this worker sends, in one locked read. A Graph delete
+/// the app journalled (`arg.graph`) is the app's to replay (replayOps sends
+/// it through Graph by its journalled ids): left alone here, never dropped as
+/// a Graph account this queue cannot send for.
 async fn delete_entries(state: &Arc<DaemonState>) -> Result<Vec<OpEntry>, String> {
     let st = Arc::clone(state);
     blocking(move || {
         let _lock = st.journal.lock().unwrap_or_else(|p| p.into_inner());
-        op_journal::read(&st.app_dir).into_iter().filter(|e| e.op == "delete").collect::<Vec<_>>()
+        op_journal::read(&st.app_dir).into_iter().filter(|e| e.op == "delete" && !app_replayed(e)).collect::<Vec<_>>()
     })
     .await
+}
+
+/// A Graph delete the app journalled and replays itself.
+fn app_replayed(entry: &OpEntry) -> bool {
+    entry.arg.get("graph").and_then(Value::as_bool) == Some(true)
 }
 
 /// Whether the entry's folder is a vault-only one (`vault_only_folder`, the
