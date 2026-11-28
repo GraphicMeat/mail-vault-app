@@ -243,6 +243,11 @@ export const DAEMON_OWNED = new Set([
   // task, so this is the only fit, under their existing flat names.
   // Credentials still travel in the payload (`account`), unchanged.
   'imap_set_flags', 'imap_delete_email', 'imap_ensure_sent_mailbox', 'imap_create_mailbox',
+  // The batched flag write (one SELECT and UID STORE per folder): every bulk
+  // mark read, unread and star, and their journal replay. Daemon-only, so
+  // left out of this set it fell through to Tauri, which answered "Command
+  // not found", and no bulk flag change ever reached the server.
+  'imap_set_flags_batch',
   'imap_rename_mailbox', 'imap_delete_mailbox', 'imap_find_message_id', 'imap_disconnect',
   'imap_move_emails', 'imap_test_connection',
   // Task 5.5: SMTP (test connection, build MIME for local archive, build

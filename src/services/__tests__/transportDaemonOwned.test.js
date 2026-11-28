@@ -179,7 +179,7 @@ describe('daemon-owned commands', () => {
       'imap_disconnect', 'imap_ensure_sent_mailbox', 'imap_fetch_changed_flags', 'imap_fetch_headers_by_uids',
       'imap_find_message_id', 'imap_folder_status', 'imap_get_email', 'imap_get_email_light', 'imap_get_emails',
       'imap_get_mailboxes', 'imap_move_emails', 'imap_rename_mailbox', 'imap_search_all_uids', 'imap_search_emails',
-      'imap_set_flags', 'imap_test_connection',
+      'imap_set_flags', 'imap_set_flags_batch', 'imap_test_connection',
       'import_backup',
       'import_mbox',
       'insights_begin_snapshot', 'insights_read_page', 'insights_release_snapshot',
