@@ -1108,6 +1108,30 @@ mod tests {
         r.result.expect("bulk_delete_emails must succeed")
     }
 
+    /// Gmail: the bulk delete's in-place expunge of INBOX only took the label
+    /// off, and All Mail kept the message. It goes through Trash, whose copy
+    /// is expunged; the other message stays everywhere.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn bulk_delete_emails_on_gmail_leaves_no_copy_in_all_mail() {
+        use mock_imap::state::{GmailMsg, GMAIL_ALL_MAIL, GMAIL_TRASH};
+        let (_v, s) = st(true);
+        let raw = |n: u32| format!("From: s@example.com\r\nSubject: m{n}\r\nMessage-ID: <m{n}@example.com>\r\n\r\nbody\r\n");
+        let server = mock_imap::MockImap::start(
+            mock_imap::Scenario::gmail()
+                .gmail_message(GmailMsg::new(raw(1)).labels(&["\\Inbox"]))
+                .gmail_message(GmailMsg::new(raw(2)).labels(&["\\Inbox"])),
+        );
+        bulk_delete(&s, &server, &[1]).await;
+        let state = server.state();
+        let holds = |mailbox: &str, n: u32| {
+            state.find(mailbox).unwrap().messages.iter().any(|m| String::from_utf8_lossy(&m.raw).contains(&format!("<m{n}@example.com>")))
+        };
+        for mailbox in ["INBOX", GMAIL_ALL_MAIL, GMAIL_TRASH] {
+            assert!(!holds(mailbox, 1), "{mailbox} still holds it: {:?}", server.commands());
+        }
+        assert!(holds("INBOX", 2) && holds(GMAIL_ALL_MAIL, 2), "the other message stays");
+    }
+
     /// Email Cleanup: Delete on a Newsletter group finished, and every row
     /// stayed listed. The deleted copies' classifications go with them; a uid
     /// the server kept, and the same uid in another folder, stay.

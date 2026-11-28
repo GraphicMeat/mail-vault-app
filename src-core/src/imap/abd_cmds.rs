@@ -612,6 +612,67 @@ pub async fn expunge_exact(
     run_checked(session, format!("UID EXPUNGE {}", set), "UID EXPUNGE").await
 }
 
+/// Where a Gmail permanent delete of `mailbox` has to go, from the account's
+/// LIST: `None` when an expunge in `mailbox` itself is final (it is the
+/// declared `\Trash` or `\Junk`), else the declared `\Trash` to move through.
+/// Only a DECLARED role counts (Gmail declares SPECIAL-USE; its folder names
+/// are localized, "[Google Mail]/Bin"), and a Trash that is not declared is an
+/// error, never a guess and never a CREATE.
+fn gmail_purge_route(boxes: &[MailboxInfo], mailbox: &str) -> Result<Option<String>, String> {
+    let declared = |role: &str| boxes.iter().filter(|b| !b.noselect).find(|b| has_attr(&b.flags, role)).map(|b| b.path.clone());
+    let is = |path: &Option<String>| path.as_deref().is_some_and(|p| p.eq_ignore_ascii_case(mailbox));
+    let trash = declared("Trash");
+    if is(&trash) || is(&declared("Junk")) {
+        return Ok(None);
+    }
+    trash.map(Some).ok_or_else(|| "Gmail declares no \\Trash folder: refusing a permanent delete that would only remove a label".to_string())
+}
+
+/// Delete exactly `uids` of `mailbox` for good, on any server.
+///
+/// Anywhere but Gmail this is `expunge_exact`. On Gmail (`caps.gmail_ext`) an
+/// expunge in a label folder only takes that label off, and one in All Mail
+/// archives: the message survives in All Mail and the next sync brings it
+/// back. So outside Trash and Spam the uids are `UID MOVE`d to the declared
+/// `\Trash` (which takes every label copy and the All Mail copy out with them)
+/// and then exactly the COPYUID destination uids are expunged there, under
+/// the destination's own UIDVALIDITY. In Trash or Spam the expunge in place is
+/// final, as everywhere else.
+///
+/// `expect_validity` binds the source uids as in `expunge_exact`. A move the
+/// server reports no COPYUID for is an error: the copies left Gmail's labels
+/// but cannot be named in Trash (Gmail purges Trash after 30 days).
+pub async fn purge_exact(
+    session: &mut ImapSession,
+    mailbox: &str,
+    uids: &[u32],
+    caps: Caps,
+    expect_validity: Option<u32>,
+) -> Result<(), String> {
+    if uids.is_empty() {
+        return Ok(());
+    }
+    if !caps.gmail_ext {
+        return expunge_exact(session, mailbox, uids, caps.uidplus, expect_validity).await;
+    }
+    if !caps.uidplus {
+        return Err("UIDPLUS is required for an exact expunge; refusing to expunge".to_string());
+    }
+    let boxes = super::list_mailboxes(session).await?;
+    let Some(trash) = gmail_purge_route(&boxes, mailbox)? else {
+        return expunge_exact(session, mailbox, uids, true, expect_validity).await;
+    };
+    tracing::info!("[purge] Gmail: {} uid(s) of '{}' go through '{}'", uids.len(), mailbox, trash);
+    let copied = move_uids_scoped(session, mailbox, &trash, uids, caps.move_cmd, true, expect_validity).await?;
+    let Some(cu) = copied.filter(|c| !c.src.is_empty() && c.src.len() == c.dst.len()) else {
+        return Err(format!("Gmail moved {} message(s) to '{}' without COPYUID: left in Trash", uids.len(), trash));
+    };
+    let mut dst: Vec<u32> = cu.src.iter().zip(&cu.dst).filter(|(s, _)| uids.contains(s)).map(|(_, d)| *d).collect();
+    dst.sort_unstable();
+    dst.dedup();
+    expunge_exact(session, &trash, &dst, true, cu.validity).await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -657,6 +718,25 @@ mod tests {
     fn an_unselectable_trash_is_skipped() {
         let boxes = vec![mb("Trash", "/", &["Trash", "NoSelect"], true)];
         assert_eq!(resolve_trash(&boxes), None);
+    }
+
+    #[test]
+    fn a_gmail_purge_goes_through_the_declared_trash_unless_it_is_already_final() {
+        let boxes = vec![
+            mb("INBOX", "/", &[], false),
+            mb("[Google Mail]/All Mail", "/", &["All"], false),
+            mb("[Google Mail]/Bin", "/", &["Trash"], false),
+            mb("[Google Mail]/Spam", "/", &["Junk"], false),
+            mb("Trash", "/", &[], false),
+        ];
+        let bin = Some("[Google Mail]/Bin".to_string());
+        assert_eq!(gmail_purge_route(&boxes, "INBOX"), Ok(bin.clone()));
+        assert_eq!(gmail_purge_route(&boxes, "[Google Mail]/All Mail"), Ok(bin.clone()));
+        assert_eq!(gmail_purge_route(&boxes, "Trash"), Ok(bin), "a user folder named Trash is a label");
+        assert_eq!(gmail_purge_route(&boxes, "[Google Mail]/Bin"), Ok(None));
+        assert_eq!(gmail_purge_route(&boxes, "[Google Mail]/Spam"), Ok(None));
+        let undeclared = vec![mb("INBOX", "/", &[], false), mb("[Gmail]/Trash", "/", &[], false)];
+        assert!(gmail_purge_route(&undeclared, "INBOX").is_err(), "never a guessed Trash");
     }
 
     #[test]

@@ -1214,20 +1214,17 @@ async fn delete_single_email(
                 }
             }
             let caps = imap::abd_cmds::capabilities(&mut session).await?;
-            imap::abd_cmds::expunge_exact(
-                &mut session,
-                mailbox,
-                &[uid],
-                caps.uidplus,
-                Some(validity),
-            )
-            .await?;
+            // Gmail: through Trash, so All Mail loses it too (`purge_exact`).
+            imap::abd_cmds::purge_exact(&mut session, mailbox, &[uid], caps, Some(validity)).await?;
+            // A Gmail purge ends with Trash selected.
+            let selected = (!caps.gmail_ext).then(|| mailbox.to_string());
+            return Ok(((), session, selected));
         } else {
             // Preserve the legacy route's capability/fallback contract.
             let has_uidplus = pool.has_capability(account, "UIDPLUS").await;
             imap::delete_email(&mut session, mailbox, uid, true, has_uidplus).await?;
         }
-        Ok(((), session, Some(mailbox.to_string())))
+        Ok(((), session, None))
     })
     .await
 }
@@ -1236,7 +1233,8 @@ async fn delete_single_email(
 /// folder, on one session: one SELECT that must report `validity`, one
 /// Message-ID read of every uid under that same generation, then one exact
 /// `UID STORE`/`UID EXPUNGE` (UIDPLUS) of the uids still holding the expected
-/// message. Per uid, the same rule as the single delete:
+/// message; on Gmail, outside Trash and Spam, a move through Trash and the
+/// exact expunge there (`abd_cmds::purge_exact`). Per uid, the same rule as the single delete:
 /// - present with the expected Message-ID (or none expected): deleted;
 /// - present with another Message-ID: left alone, not in the answer;
 /// - absent from this generation: already gone, so in the answer, nothing sent.
@@ -1286,12 +1284,19 @@ pub async fn delete_exact_batch(
                     }
                 }
             }
+            let mut selected = Some(mailbox.to_string());
             if !send.is_empty() {
                 let caps = imap::abd_cmds::capabilities(&mut session).await?;
-                imap::abd_cmds::expunge_exact(&mut session, mailbox, &send, caps.uidplus, Some(validity)).await?;
+                // Gmail: through Trash, so All Mail loses it too; a label
+                // twin named later in the same purge then reads as absent
+                // under this generation, which is gone (`purge_exact`).
+                imap::abd_cmds::purge_exact(&mut session, mailbox, &send, caps, Some(validity)).await?;
+                if caps.gmail_ext {
+                    selected = None;
+                }
             }
             gone.extend(send);
-            Ok((Ok(gone), session, Some(mailbox.to_string())))
+            Ok((Ok(gone), session, selected))
         })
         .await?;
     outcome

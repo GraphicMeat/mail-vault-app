@@ -408,6 +408,37 @@ async fn a_gmail_note_deleted_from_every_label_at_once_ends_in_trash_once() {
     }
 }
 
+/// Gmail: an expunge from a label folder only takes the label off, so a
+/// permanent delete that expunged INBOX in place left the message in All
+/// Mail, and the next sync brought it back. It goes through Trash instead,
+/// and only its Trash copy is expunged.
+#[tokio::test]
+async fn a_gmail_permanent_delete_outside_trash_leaves_no_copy_in_all_mail() {
+    let srv = MockImap::start(Scenario::gmail().gmail_message(GmailMsg::new(RAW).labels(&["\\Inbox"])));
+    let (s, config) = rule_state(&srv, "INBOX");
+    assert_eq!(srv.state().find("[Gmail]/All Mail").unwrap().messages.len(), 1, "precondition: All Mail holds it");
+    delete_one(&s, Provider::Imap(&config), "acc1", "INBOX", 1, Mode::Permanent, false)
+        .await
+        .expect("a permanent delete on Gmail lands");
+    let state = srv.state();
+    for folder in ["INBOX", "[Gmail]/All Mail", "[Gmail]/Trash"] {
+        assert!(state.find(folder).unwrap().messages.is_empty(), "{folder} holds no copy: {:?}", srv.commands());
+    }
+}
+
+/// In Gmail's Trash an expunge is final: a permanent delete there stays the
+/// exact expunge in place, no move.
+#[tokio::test]
+async fn a_gmail_permanent_delete_in_trash_expunges_in_place() {
+    let srv = MockImap::start(Scenario::gmail().gmail_message(GmailMsg::new(RAW).labels(&["\\Trash"])));
+    let (s, config) = rule_state(&srv, "[Gmail]/Trash");
+    delete_one(&s, Provider::Imap(&config), "acc1", "[Gmail]/Trash", 1, Mode::Permanent, false)
+        .await
+        .expect("a permanent delete in Gmail's Trash lands");
+    assert!(srv.state().find("[Gmail]/Trash").unwrap().messages.is_empty());
+    assert_eq!(srv.count_commands("MOVE"), 0, "{:?}", srv.commands());
+}
+
 /// Sent, Archive, Spam and a custom folder: `auto` moves to Trash, with an
 /// undo handle (the Trash uid) and the bin row that says where it went. No
 /// full fetch: a move keeps a byte-less bin row.

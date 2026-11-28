@@ -261,6 +261,9 @@ struct LiveFolder {
 }
 #[derive(Default)]
 struct PurgeReads {
+    /// Every target of the run, (account, mailbox, uid): a Gmail label twin
+    /// that is a target itself is left to its own purge (`purge_twins`).
+    targets:HashSet<(String,String,u32)>,
     /// Per (account, mailbox): the uids this run still has to prove (`purge_begin`).
     uids:HashMap<(String,String),Vec<u32>>,
     /// Per (account, mailbox): the one read of all of them, taken on first use.
@@ -900,6 +903,7 @@ impl Ports for MailPorts {
         // Every target still to prove, by folder: `purge_prepare` reads each
         // folder's live identity once for all of them (`batched_read`).
         self.reads=PurgeReads::default();
+        self.reads.targets=targets.iter().map(|t|(t.account_id.clone(),t.mailbox.clone(),t.uid)).collect();
         for target in targets.iter().filter(|t|t.proof.is_none()&&!t.skipped&&!t.refused) {
             self.reads.uids.entry((target.account_id.clone(),target.mailbox.clone())).or_default().push(target.uid);
         }
@@ -991,6 +995,31 @@ impl Ports for MailPorts {
         answers.into_iter().map(|answer|answer.unwrap_or_else(||Err("errors.bulkIdentityUncertain".into()))).collect()
     }
     async fn purge_local(&mut self,t:&PurgeTarget)->Result<PurgeEffect,String> {
+        let effect=self.purge_local_copy(t).await?;
+        if effect==PurgeEffect::Complete { self.purge_twins(t).await; }
+        Ok(effect)
+    }
+    async fn purge_mirror(&mut self,t:&PurgeTarget)->Result<PurgeMirror,String> {
+        self.purge_mirror_copy(t).await
+    }
+}
+
+impl MailPorts {
+    /// Gmail keeps one vault copy of a message per label folder (INBOX, All
+    /// Mail, ...), under one Message-ID, and views read every one. Once the
+    /// server lost the message (its move through Trash takes every label),
+    /// the account's other vault copies go too: found by the flags' label-twin
+    /// lookup (`vault_flags::apply_to_twins`), each removed only when its bytes
+    /// are the bytes the purge proved (`StoredProof`). A Trash copy is not a
+    /// label twin, and a twin the run targets itself is left to its own purge.
+    /// Best effort: a twin that cannot be looked up or proved stays.
+    async fn purge_twins(&self,t:&PurgeTarget) {
+        let Some(PurgeProof::Server{stored:Some(stored),..})=&t.proof else { return };
+        if t.server!=PurgeEffect::Complete { return; }
+        let (state,target,sha,targets)=(self.state.clone(),t.clone(),stored.sha256.clone(),self.reads.targets.clone());
+        let _=self.blocking(move||purge_local_twins(&state,&target,&sha,&targets)).await;
+    }
+    async fn purge_local_copy(&mut self,t:&PurgeTarget)->Result<PurgeEffect,String> {
         if let Some(PurgeProof::Server{origin,email,..})=&t.proof {
             let config=match self.config(&t.group()).await {
                 Err(error) if identity_error(&error)=>return Ok(PurgeEffect::Conflict),
@@ -1012,7 +1041,7 @@ impl Ports for MailPorts {
         };
         self.purge_local_with(t,mid,fresh).await
     }
-    async fn purge_mirror(&mut self,t:&PurgeTarget)->Result<PurgeMirror,String> {
+    async fn purge_mirror_copy(&mut self,t:&PurgeTarget)->Result<PurgeMirror,String> {
         let (email,proof) = match t.proof.as_ref().ok_or("errors.bulkIdentityUncertain")? {
             PurgeProof::Server{email,origin,identity,stored} => (Some(email.clone()),stored.as_ref().map(|stored|
                 mailvault_core::app_db::ops::MirrorPurgeProof::server(email,&t.group(),origin,identity,stored)).transpose()?),
@@ -1247,20 +1276,82 @@ fn purge_local_target(state:&Arc<DaemonState>,t:&PurgeTarget,original_mid:Option
         let candidates=inventory.candidates.get(&t.uid).ok_or("errors.bulkIdentityUncertain")?;
         let outcome=mailvault_core::vault_files::delete_uid_candidates(&state.vault_registry,root,&t.account_id,&t.mailbox,t.uid,candidates)?;
         if outcome.failed {return Ok(PurgeEffect::Failed);}
-        mailvault_core::custody::entries::remove(c,&t.account_id,&t.mailbox,&[t.uid])?;
-        // Unreadable cache metadata refuses the tallied write; the bytes are
-        // already gone, so drop the row itself rather than leave it listed.
-        if mailvault_core::custody::cache::save_headers(c,&t.account_id,&t.mailbox,&json!({"removedUids":[t.uid]}).to_string()).is_err() {
-            mailvault_core::custody::cache::remove_headers(c,&t.account_id,&t.mailbox,&[t.uid])?;
-        }
-        crate::classification::forget_at(&state.app_dir,&t.account_id,&t.mailbox,&[t.uid]);
-        if let Ok(ids)=mailvault_core::app_db::with(&state.app_dir,|c|mailvault_core::app_db::follow_up::dismiss_at(c,&t.account_id,&t.mailbox,&[t.uid])) {
-            for id in ids {crate::follow_up_worker::emit(state,&id,"dismissed");}
-        }
+        forget_local_uid(state,c,&t.account_id,&t.mailbox,t.uid)?;
         tracing::info!("bulk purge: removed {} local artifacts",outcome.removed);
         Ok(PurgeEffect::Complete)
       })
     })
+}
+/// What a removed vault copy leaves behind: its custody entry, its header
+/// row, its classification and any follow-up reminder that points at it.
+fn forget_local_uid(state:&Arc<DaemonState>,c:&rusqlite::Connection,account_id:&str,mailbox:&str,uid:u32)->Result<(),String> {
+    mailvault_core::custody::entries::remove(c,account_id,mailbox,&[uid])?;
+    // Unreadable cache metadata refuses the tallied write; the bytes are
+    // already gone, so drop the row itself rather than leave it listed.
+    if mailvault_core::custody::cache::save_headers(c,account_id,mailbox,&json!({"removedUids":[uid]}).to_string()).is_err() {
+        mailvault_core::custody::cache::remove_headers(c,account_id,mailbox,&[uid])?;
+    }
+    crate::classification::forget_at(&state.app_dir,account_id,mailbox,&[uid]);
+    if let Ok(ids)=mailvault_core::app_db::with(&state.app_dir,|c|mailvault_core::app_db::follow_up::dismiss_at(c,account_id,mailbox,&[uid])) {
+        for id in ids {crate::follow_up_worker::emit(state,&id,"dismissed");}
+    }
+    Ok(())
+}
+/// `MailPorts::purge_twins`' blocking half. Returns how many twin copies went.
+fn purge_local_twins(state:&Arc<DaemonState>,t:&PurgeTarget,sha256:&str,targets:&HashSet<(String,String,u32)>)->usize {
+    use mailvault_core::search_index::text::{mailboxes_from_vault_dirs,vault_dir_name};
+    if !crate::handlers::vault_flags::shares_flags_across_folders(state,&t.account_id) { return 0; }
+    let mid=match crate::search_index::known_message_ids(&state.search_index,&t.account_id,&t.mailbox,&[t.uid]) {
+        Ok(ids)=>ids.get(&t.uid).cloned().flatten().filter(|id|!id.trim().is_empty()),
+        Err(e)=>{tracing::info!("bulk purge: twins of uid {} in {} not looked up: {e}",t.uid,t.mailbox);return 0;}
+    };
+    let Some(mid)=mid else { return 0 };
+    let twins=match crate::search_index::message_id_twins(&state.search_index,&t.account_id,&vault_dir_name(&t.mailbox),&[mid]) {
+        Ok(twins)=>twins,
+        Err(e)=>{tracing::info!("bulk purge: twins of uid {} in {} not looked up: {e}",t.uid,t.mailbox);return 0;}
+    };
+    if twins.is_empty() { return 0; }
+    let dirs:Vec<String>=twins.iter().map(|(dir,_,_)|dir.clone()).collect::<std::collections::BTreeSet<_>>().into_iter().collect();
+    let folder_of:HashMap<String,String>=dirs.iter().cloned().zip(mailboxes_from_vault_dirs(&dirs,&crate::handlers::vault_flags::known_mailboxes(state,&t.account_id))).collect();
+    let trash=trash_folders(state,&t.account_id);
+    let mut removed=0;
+    for (dir,uid,_) in &twins {
+        let folder=&folder_of[dir];
+        if folder.eq_ignore_ascii_case(&t.mailbox) || trash.iter().any(|f|f.eq_ignore_ascii_case(folder))
+            || targets.contains(&(t.account_id.clone(),folder.clone(),*uid)) { continue; }
+        match remove_proved_twin(state,&t.account_id,folder,*uid,sha256) {
+            Ok(true)=>{removed+=1;crate::search_index::nudge(&state.search_index,&t.account_id,folder);}
+            Ok(false)=>tracing::info!("bulk purge: kept twin uid {uid} in {folder}: its bytes are not the purged message's"),
+            Err(e)=>tracing::warn!("bulk purge: kept twin uid {uid} in {folder}: {e}"),
+        }
+    }
+    if removed>0 { tracing::info!("bulk purge: removed {removed} label twin cop(ies) of uid {} in {}",t.uid,t.mailbox); }
+    removed
+}
+/// The account's Trash folders as its cached folder listing names them, by
+/// declared role, else by the well-known names.
+fn trash_folders(state:&Arc<DaemonState>,account_id:&str)->Vec<String> {
+    let listing=crate::custody::with_conn(state,|c|mailvault_core::custody::cache::load_mailboxes(c,account_id)).ok().flatten();
+    let refs=listing.as_deref().map(mailvault_core::takeout::folder_refs_from_listing).unwrap_or_default();
+    let declared:Vec<String>=refs.iter().filter(|f|f.role==mailvault_core::takeout::Role::Trash).map(|f|f.path.clone()).collect();
+    if !declared.is_empty() { return declared; }
+    let entries:Vec<(String,Vec<String>)>=refs.iter().map(|f|(f.path.clone(),vec![])).collect();
+    mailvault_core::imap::find_role_mailbox(&entries,"trash",mailvault_core::imap::TRASH_CANDIDATES).into_iter().collect()
+}
+/// Remove `uid` of `mailbox` when every artifact it has is exactly the bytes
+/// hashed `sha256`. `Ok(false)`: nothing there, or other bytes; left alone.
+fn remove_proved_twin(state:&Arc<DaemonState>,account_id:&str,mailbox:&str,uid:u32,sha256:&str)->Result<bool,String> {
+    common::with_mailbox_write(state,account_id,mailbox,|root| crate::custody::with_conn(state,|c| {
+        let wanted:HashSet<u32>=[uid].into_iter().collect();
+        let found=mailvault_core::message_store::inventory_uid_artifacts(root,account_id,mailbox,&wanted,&AtomicBool::new(false)).map_err(|e|e.to_string())?;
+        let Some(candidates)=found.get(&uid).filter(|c|!c.is_empty()) else { return Ok(false) };
+        let artifacts=mailvault_core::message_store::read_uid_candidates(root,account_id,mailbox,uid,candidates).map_err(|e|e.to_string())?;
+        if artifacts.is_empty() || artifacts.iter().any(|(_,raw)|bulk_worker::bytes_hash(raw)!=sha256) { return Ok(false); }
+        let outcome=mailvault_core::vault_files::delete_uid_candidates(&state.vault_registry,root,account_id,mailbox,uid,candidates)?;
+        if outcome.failed { return Err("a twin file could not be removed".into()); }
+        forget_local_uid(state,c,account_id,mailbox,uid)?;
+        Ok(true)
+    }))
 }
 
 /// No mailbox listing: the registry's writer-safe targeted lookup follows
@@ -3115,6 +3206,156 @@ mod tests {
             assert!(provider.state().find(mailbox).unwrap().messages.iter().any(|m|m.uid==9),"{on_server}: the folder's other message stays");
         }
         std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+    }
+    const GMAIL_ALL:&str=mock_imap::state::GMAIL_ALL_MAIL;
+    const GMAIL_BIN:&str=mock_imap::state::GMAIL_TRASH;
+    /// Account `acc` as a Gmail account (accounts.json names Gmail's host, so
+    /// its label twins count) with the folders `Scenario::gmail()` lists.
+    fn seed_gmail_account(state:&Arc<DaemonState>) {
+        std::fs::write(state.app_dir.join("accounts.json"),r#"[{"id":"acc","imapHost":"imap.gmail.com"}]"#).unwrap();
+        let listing=json!({"mailboxes":[
+            {"path":"INBOX","name":"INBOX"},
+            {"path":GMAIL_ALL,"name":"All Mail","specialUse":"\\All","flags":["\\All"]},
+            {"path":GMAIL_BIN,"name":"Trash","specialUse":"\\Trash","flags":["\\Trash"]},
+            {"path":mock_imap::state::GMAIL_SPAM,"name":"Spam","specialUse":"\\Junk","flags":["\\Junk"]},
+        ]});
+        crate::custody::with_conn(state,|c|mailvault_core::custody::cache::save_mailboxes(c,"acc",&listing.to_string())).unwrap();
+    }
+    fn holds(server:&MockImap,mailbox:&str,mid:&str)->bool {
+        server.state().find(mailbox).is_some_and(|m|m.messages.iter().any(|m|String::from_utf8_lossy(&m.raw).contains(mid)))
+    }
+    /// A spanning delete everywhere of `(mailbox, uid, n)`: the message at
+    /// `uid` in `mailbox` is hinted with Message-ID `<m{n}@test>`.
+    fn spanning_scope(targets:&[(&str,u32,u32)])->Value {
+        let keys:Vec<String>=targets.iter().map(|(mailbox,uid,_)|format!("acc:{mailbox}:{uid}")).collect();
+        let hints:Vec<Value>=targets.iter().map(|(mailbox,uid,n)|json!({"accountId":"acc","mailbox":mailbox,"uid":uid,"nativeIdentity":null,"messageIdPresent":true,"messageId":format!("<m{n}@test>")})).collect();
+        json!({"spans":true,"keys":keys,"targetHints":hints})
+    }
+    async fn run_purge_rpc(state:&Arc<DaemonState>,id:&str,scope:Value)->Value {
+        let reply=handle_request_for_test(state,"bulk.start",json!({"operationId":id,"type":"delete_everywhere","scope":scope,"externalStatus":"unavailable"})).await;
+        assert!(reply.error.is_none(),"{id}: {:?}",reply.error);
+        wait_drained(state).await
+    }
+    /// The field report: delete everywhere expunged Gmail INBOX copies in
+    /// place, which only takes the INBOX label off. All Mail kept every one
+    /// and the next sync restored them. The message goes through Trash, whose
+    /// copy is then expunged; another INBOX message stays.
+    #[tokio::test(flavor="multi_thread")]
+    async fn bulk_purge_on_gmail_moves_an_inbox_copy_through_trash_so_all_mail_loses_it() {
+        let _env=crate::credentials::test_env_lock().lock().unwrap_or_else(|e|e.into_inner());
+        let dir=tempfile::tempdir().unwrap();let state=DaemonState::for_test(dir.path().into(),dir.path().into(),true);
+        seed_gmail_account(&state);
+        seed_vault_copy(&state,"INBOX",1,&numbered(1),"m1@test");
+        let provider=MockImap::start(Scenario::gmail()
+            .gmail_message(mock_imap::state::GmailMsg::new(numbered(1)).labels(&["\\Inbox"]))
+            .gmail_message(mock_imap::state::GmailMsg::new("Message-ID: <keep@test>\r\n\r\nkeep").labels(&["\\Inbox"])));
+        assert!(holds(&provider,GMAIL_ALL,"<m1@test>"),"precondition: All Mail holds the message");
+        let cfg=purge_credentials(&state,&provider);
+        let pending=run_purge_rpc(&state,"gmail-inbox",folder_scope(&cfg,"INBOX",&[1],false)).await;
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+        assert_eq!((&pending["result"]["deleted"],&pending["result"]["failed"]),(&json!(1),&json!(0)),"{pending}");
+        for mailbox in ["INBOX",GMAIL_ALL,GMAIL_BIN] {
+            assert!(!holds(&provider,mailbox,"<m1@test>"),"{mailbox} still holds the purged message: {:?}",provider.commands());
+        }
+        assert!(holds(&provider,"INBOX","<keep@test>") && holds(&provider,GMAIL_ALL,"<keep@test>"),"the other message stays");
+        assert!(mailvault_core::message_store::read_raw(dir.path(),"acc","INBOX",1).unwrap().is_none(),"the vault copy goes");
+    }
+    /// An All Mail target on Gmail: an expunge there archives (the message
+    /// stays), so it goes through Trash too, and its label copies go with it.
+    #[tokio::test(flavor="multi_thread")]
+    async fn bulk_purge_on_gmail_of_an_all_mail_copy_goes_through_trash() {
+        let _env=crate::credentials::test_env_lock().lock().unwrap_or_else(|e|e.into_inner());
+        let dir=tempfile::tempdir().unwrap();let state=DaemonState::for_test(dir.path().into(),dir.path().into(),true);
+        seed_gmail_account(&state);
+        seed_vault_copy(&state,GMAIL_ALL,1,&numbered(1),"m1@test");
+        let provider=MockImap::start(Scenario::gmail().gmail_message(mock_imap::state::GmailMsg::new(numbered(1)).labels(&["\\Inbox"])));
+        let cfg=purge_credentials(&state,&provider);
+        let pending=run_purge_rpc(&state,"gmail-all",folder_scope(&cfg,GMAIL_ALL,&[1],false)).await;
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+        assert_eq!((&pending["result"]["deleted"],&pending["result"]["failed"]),(&json!(1),&json!(0)),"{pending}");
+        for mailbox in ["INBOX",GMAIL_ALL,GMAIL_BIN] {
+            assert!(!holds(&provider,mailbox,"<m1@test>"),"{mailbox} still holds the purged message: {:?}",provider.commands());
+        }
+        assert!(mailvault_core::message_store::read_raw(dir.path(),"acc",GMAIL_ALL,1).unwrap().is_none(),"the vault copy goes");
+    }
+    /// A Gmail Trash target is expunged where it is: an expunge in Trash is
+    /// final, and there is nowhere further to move it.
+    #[tokio::test(flavor="multi_thread")]
+    async fn bulk_purge_on_gmail_of_a_trash_copy_expunges_in_place() {
+        let _env=crate::credentials::test_env_lock().lock().unwrap_or_else(|e|e.into_inner());
+        let dir=tempfile::tempdir().unwrap();let state=DaemonState::for_test(dir.path().into(),dir.path().into(),true);
+        seed_gmail_account(&state);
+        seed_vault_copy(&state,GMAIL_BIN,1,&numbered(1),"m1@test");
+        let provider=MockImap::start(Scenario::gmail().gmail_message(mock_imap::state::GmailMsg::new(numbered(1)).labels(&["\\Trash"])));
+        let cfg=purge_credentials(&state,&provider);
+        let pending=run_purge_rpc(&state,"gmail-bin",folder_scope(&cfg,GMAIL_BIN,&[1],false)).await;
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+        assert_eq!((&pending["result"]["deleted"],&pending["result"]["failed"]),(&json!(1),&json!(0)),"{pending}");
+        assert!(!holds(&provider,GMAIL_BIN,"<m1@test>"),"{:?}",provider.commands());
+        assert_eq!(provider.count_commands("MOVE"),0,"nothing moves out of Trash: {:?}",provider.commands());
+        assert_eq!(provider.count_commands("UID EXPUNGE"),1,"{:?}",provider.commands());
+    }
+    /// One purge naming two copies of one Gmail message (INBOX and All
+    /// Mail): the first copy's move to Trash takes the other with it. The
+    /// second group finds its uid absent under the same UIDVALIDITY, which is
+    /// gone, not a changed identity. Both orders.
+    #[tokio::test(flavor="multi_thread")]
+    async fn bulk_purge_on_gmail_counts_a_label_twin_in_the_same_batch_as_gone() {
+        let _env=crate::credentials::test_env_lock().lock().unwrap_or_else(|e|e.into_inner());
+        for (case,targets) in [("inbox-first",[("INBOX",1u32,1u32),(GMAIL_ALL,1,1)]),("all-mail-first",[(GMAIL_ALL,1,1),("INBOX",1,1)])] {
+            let dir=tempfile::tempdir().unwrap();let state=DaemonState::for_test(dir.path().into(),dir.path().into(),true);
+            seed_gmail_account(&state);
+            seed_vault_copy(&state,"INBOX",1,&numbered(1),"m1@test");
+            seed_vault_copy(&state,GMAIL_ALL,1,&numbered(1),"m1@test");
+            let provider=MockImap::start(Scenario::gmail().gmail_message(mock_imap::state::GmailMsg::new(numbered(1)).labels(&["\\Inbox"])));
+            purge_credentials(&state,&provider);
+            let pending=run_purge_rpc(&state,case,spanning_scope(&targets)).await;
+            assert_eq!((&pending["result"]["deleted"],&pending["result"]["failed"]),(&json!(2),&json!(0)),"{case}: {pending}");
+            for t in pending["worker"]["purgeTargets"].as_array().unwrap() {
+                assert_eq!((&t["refused"],&t["lastError"],&t["server"]),(&json!(false),&json!(null),&json!("complete")),"{case}: {t}");
+            }
+            for mailbox in ["INBOX",GMAIL_ALL,GMAIL_BIN] {
+                assert!(!holds(&provider,mailbox,"<m1@test>"),"{case}: {mailbox} still holds it: {:?}",provider.commands());
+            }
+        }
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+    }
+    /// Views read the vault, which holds a Gmail message once per label
+    /// folder. Purging the INBOX copy left the All Mail copy (file, header
+    /// row) in the vault, so the message stayed in the view. The account's
+    /// other copies with the same bytes go too; a copy whose bytes differ
+    /// stays, and so does the Trash copy.
+    #[tokio::test(flavor="multi_thread")]
+    async fn bulk_purge_on_gmail_removes_the_vault_twins_of_the_purged_message() {
+        use mailvault_core::search_index::{db as index_db, lock};
+        let _env=crate::credentials::test_env_lock().lock().unwrap_or_else(|e|e.into_inner());
+        let dir=tempfile::tempdir().unwrap();let state=DaemonState::for_test(dir.path().into(),dir.path().into(),true);
+        seed_gmail_account(&state);
+        let edited="From: a@example.test\r\nSubject: n2\r\nMessage-ID: <m2@test>\r\n\r\nedited elsewhere\r\n";
+        for (mailbox,uid,raw,mid) in [("INBOX",1,numbered(1),"m1@test"),("INBOX",2,numbered(2),"m2@test"),(GMAIL_ALL,1,numbered(1),"m1@test"),(GMAIL_ALL,2,edited.to_string(),"m2@test"),(GMAIL_BIN,5,numbered(1),"m1@test")] {
+            seed_vault_copy(&state,mailbox,uid,&raw,mid);
+        }
+        crate::custody::with_conn(&state,|c|mailvault_core::custody::cache::save_headers(c,"acc",GMAIL_ALL,&json!({"emails":[{"uid":1,"messageId":"<m1@test>"},{"uid":2,"messageId":"<m2@test>"}]}).to_string())).unwrap();
+        let conn=index_db::open(&state.data_dir).unwrap();
+        for (mailbox,uid,id) in [("INBOX",1u32,"<m1@test>"),("INBOX",2,"<m2@test>"),(GMAIL_ALL,1,"<m1@test>"),(GMAIL_ALL,2,"<m2@test>"),(GMAIL_BIN,5,"<m1@test>")] {
+            conn.execute("INSERT INTO messages (account_id, vault_dir, uid, filename, size, mtime_ns, message_id, date_utc) VALUES ('acc',?1,?2,?3,0,0,?4,0)",
+                rusqlite::params![mailvault_core::search_index::text::vault_dir_name(mailbox),uid,format!("{uid}.eml"),id]).unwrap();
+        }
+        *lock(&state.search_index.db)=Some(conn);
+        let provider=MockImap::start(Scenario::gmail()
+            .gmail_message(mock_imap::state::GmailMsg::new(numbered(1)).labels(&["\\Inbox"]))
+            .gmail_message(mock_imap::state::GmailMsg::new(numbered(2)).labels(&["\\Inbox"])));
+        let cfg=purge_credentials(&state,&provider);
+        let pending=run_purge_rpc(&state,"gmail-twins",folder_scope(&cfg,"INBOX",&[1,2],false)).await;
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+        assert_eq!((&pending["result"]["deleted"],&pending["result"]["failed"]),(&json!(2),&json!(0)),"{pending}");
+        let kept=|mailbox:&str,uid:u32|mailvault_core::message_store::read_raw(dir.path(),"acc",mailbox,uid).unwrap().is_some();
+        let row=|mailbox:&str,uid:u32|!crate::custody::with_conn(&state,|c|mailvault_core::custody::cache::load_by_uids(c,"acc",mailbox,&[uid])).unwrap().is_empty();
+        assert!(!kept("INBOX",1) && !kept("INBOX",2),"the purged copies go");
+        assert!(!kept(GMAIL_ALL,1),"the All Mail twin with the same bytes goes");
+        assert!(!row(GMAIL_ALL,1),"and its header row");
+        assert!(kept(GMAIL_ALL,2) && row(GMAIL_ALL,2),"a twin whose bytes differ stays");
+        assert!(kept(GMAIL_BIN,5),"the Trash copy is not a label twin");
     }
     #[tokio::test(flavor="multi_thread")]
     async fn bulk_purge_local_replacement_after_actual_server_success_is_preserved() {

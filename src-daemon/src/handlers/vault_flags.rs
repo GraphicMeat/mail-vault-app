@@ -116,7 +116,7 @@ fn twin_switches(changes: &[FlagChange]) -> Vec<(u32, Vec<String>, bool)> {
 /// row in all. Never a scan of every cached header or custody entry: this
 /// runs on every flag change. A directory neither names (a folder gone from
 /// the server with no header cache) reads back as itself.
-fn known_mailboxes(state: &Arc<DaemonState>, account_id: &str) -> Vec<String> {
+pub(crate) fn known_mailboxes(state: &Arc<DaemonState>, account_id: &str) -> Vec<String> {
     daemon_custody::with_conn(state, |c| {
         let mut stmt = c
             .prepare_cached("SELECT mailbox_path FROM header_cache_meta WHERE account_id=?1")
@@ -136,7 +136,7 @@ fn known_mailboxes(state: &Arc<DaemonState>, account_id: &str) -> Vec<String> {
 /// state. Read from `accounts.json`; an account it does not list is not
 /// assumed to be Gmail: on any other server a copy in Sent or another folder
 /// is its own message with its own flags.
-fn shares_flags_across_folders(state: &Arc<DaemonState>, account_id: &str) -> bool {
+pub(crate) fn shares_flags_across_folders(state: &Arc<DaemonState>, account_id: &str) -> bool {
     crate::ai_gate::listed_record(&state.app_dir, account_id)
         .is_some_and(|record| mailvault_core::provider::Provider::Google.owns_account(&record))
 }

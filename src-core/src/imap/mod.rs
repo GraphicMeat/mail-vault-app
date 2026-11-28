@@ -2051,6 +2051,14 @@ pub async fn delete_email_in(
     }
 
     if permanent {
+        // Gmail: an expunge here only takes a label off (All Mail keeps the
+        // message, and the next sync brings it back), so the delete goes
+        // through Trash (`abd_cmds::purge_exact`). Everywhere else, as always.
+        let caps = abd_cmds::capabilities(session).await?;
+        if caps.gmail_ext {
+            abd_cmds::purge_exact(session, mailbox, &[uid], caps, mbox.uid_validity).await?;
+            return Ok(DeleteOutcome::default());
+        }
         run_checked(session, format!("UID STORE {} +FLAGS (\\Deleted)", uid), "STORE \\Deleted").await?;
         expunge_scoped(session, &uid.to_string(), has_uidplus).await?;
         Ok(DeleteOutcome::default())
