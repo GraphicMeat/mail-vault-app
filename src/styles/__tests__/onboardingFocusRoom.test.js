@@ -23,6 +23,17 @@ describe('onboarding controls column', () => {
     const ring = parseFloat(css.match(/select:focus-visible\s*\{\s*outline:\s*(\d+)px[^}]*outline-offset:\s*(\d+)px/)?.slice(1).reduce((a, b) => +a + +b, 0) ?? 4);
     expect(px(body, 'padding')).toBeGreaterThanOrEqual(ring);
   });
+
+  // The column's -4px margin pulls its left edge onto the step body's edge,
+  // and the step body clips too. With no padding there, the left 4px of every
+  // ring in the column was cut (the right side had the grid gap).
+  it('leaves room inside the step body clip as well', () => {
+    const controls = rule('.onboarding-appearance-controls');
+    const body = rule('.onboarding-screen-body');
+    expect(body).toMatch(/overflow:\s*hidden/);
+    const room = px(body, 'padding') + px(controls, 'padding') + px(controls, 'margin');
+    expect(room).toBeGreaterThanOrEqual(4);
+  });
 });
 
 // The bar sat between Back and Skip tour with auto margins, so it moved

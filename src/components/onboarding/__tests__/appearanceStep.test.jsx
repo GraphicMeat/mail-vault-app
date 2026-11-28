@@ -181,6 +181,18 @@ describe('appearance step', () => {
     expect(previewNotificationSound).toHaveBeenCalledTimes(1);
     cleanup();
 
+    // A button replays the chosen sound; off has nothing to play.
+    previewNotificationSound.mockClear();
+    useSettingsStore.setState(s => ({ notificationSettings: { ...s.notificationSettings, sound: 'Glass' } }));
+    render(<AppearanceStep onContinue={() => {}} />);
+    fireEvent.click(tab('reading'));
+    const play = within(screen.getByTestId('appearance-control-sound')).getByRole('button', { name: t('settings.notifications.previewSound') });
+    fireEvent.click(play);
+    expect(previewNotificationSound).toHaveBeenCalledWith('Glass');
+    fireEvent.change(within(screen.getByTestId('appearance-control-sound')).getByRole('combobox'), { target: { value: 'none' } });
+    expect(play.disabled).toBe(true);
+    cleanup();
+
     // Notifications off: a sound would never play, so no picker.
     useSettingsStore.setState(s => ({ notificationSettings: { ...s.notificationSettings, enabled: false } }));
     render(<AppearanceStep onContinue={() => {}} />);

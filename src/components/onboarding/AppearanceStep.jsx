@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowRight, Moon, Sun } from 'lucide-react';
+import { ArrowRight, Moon, Sun, Volume2 } from 'lucide-react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { SIDEBAR_LAYOUTS } from '../../utils/sidebarLayouts';
 import { useThemeStore, PALETTES } from '../../stores/themeStore';
@@ -172,20 +172,27 @@ export function AppearanceStep({ onContinue }) {
             </fieldset>;
           })}
           {/* Same gate as Settings: a sound with notifications off never plays.
-              Picking one plays it, which is the preview. */}
+              Picking one plays it; the button plays it again. */}
           {section === 'reading' && isMac() && settings.notificationSettings?.enabled && <fieldset data-testid="appearance-control-sound">
             <legend>{t('settings.notifications.newEmailSound')}</legend>
-            <select className="onboarding-select" data-testid="appearance-sound" aria-label={t('settings.notifications.newEmailSound')}
-              value={normalizeNotificationSound(settings.notificationSettings.sound)}
-              onChange={event => {
-                const sound = event.target.value;
-                settings.setNotificationSound(sound);
-                if (sound !== 'none') previewNotificationSound(sound).catch(() => {});
-              }}>
-              {['none', ...NOTIFICATION_SOUNDS].map(value => <option key={value} value={value}>
-                {value === 'none' ? t('settings.notifications.soundOff') : value}
-              </option>)}
-            </select>
+            <div className="onboarding-sound">
+              <select className="onboarding-select" data-testid="appearance-sound" aria-label={t('settings.notifications.newEmailSound')}
+                value={normalizeNotificationSound(settings.notificationSettings.sound)}
+                onChange={event => {
+                  const sound = event.target.value;
+                  settings.setNotificationSound(sound);
+                  if (sound !== 'none') previewNotificationSound(sound).catch(() => {});
+                }}>
+                {['none', ...NOTIFICATION_SOUNDS].map(value => <option key={value} value={value}>
+                  {value === 'none' ? t('settings.notifications.soundOff') : value}
+                </option>)}
+              </select>
+              <Button variant="secondary" size="sm" data-testid="appearance-sound-preview"
+                disabled={normalizeNotificationSound(settings.notificationSettings.sound) === 'none'}
+                onClick={() => previewNotificationSound(normalizeNotificationSound(settings.notificationSettings.sound)).catch(() => {})}>
+                <Volume2 size={14} aria-hidden="true" />{t('settings.notifications.previewSound')}
+              </Button>
+            </div>
           </fieldset>}
           {chat && ['layout', 'reading'].includes(section) && <p className="onboarding-choice-hint">{t('workspace.emailViewOnly')}</p>}
         </div>

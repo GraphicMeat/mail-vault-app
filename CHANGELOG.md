@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Fixed: in the setup tour's Make it yours, the highlight around a focused menu or choice was still cut off at its left edge. It now shows whole. The new email sound has a Preview sound button beside it, to hear the chosen sound again.
 - Added: the "Let your mail look after itself" note now shows the Premium price in your currency, with the standard price struck beside it, as a limited-time early access offer for you, your family and friends. Once early access sells the standard price, it shows the price without calling it an offer. The note disappears once you have Premium or sign in to billing.
 - Fixed: marking many emails read or unread, or starring them, sent one request per email and waited for each, with failures never shown. It now sends one request per folder in the background, says when the server has not taken the change yet, and keeps trying. On Gmail, the copies of an email in Bin and All Mail change with it.
 - Fixed: an email kept only on this computer after moving an Outlook account to IMAP made mark read, star and move fail and retry forever, and could make a whole folder's move fail. Such emails are now left out of server changes.
