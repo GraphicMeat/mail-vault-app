@@ -76,6 +76,14 @@ describe('Billing plan picker', () => {
     await waitFor(() => expect(startCheckout).toHaveBeenCalledWith({ email: 'First@Example.com', planId: 'monthly' }));
   });
 
+  it('a plan chosen in the free note arrives chosen, and the choice is used up', async () => {
+    useSettingsStore.getState().chooseBillingPlan('monthly');
+    render(<BillingSettings />);
+    await screen.findByTestId('billing-checkout');
+    await waitFor(() => expect(screen.getByRole('radio', { name: new RegExp(t('settings.billing.monthly')) }).checked).toBe(true));
+    expect(useSettingsStore.getState().billingPlanChoice).toBeNull();
+  });
+
   it('shows why a checkout did not open', async () => {
     startCheckout.mockResolvedValue({ ok: false, error: 'Could not start checkout.' });
     render(<BillingSettings />);

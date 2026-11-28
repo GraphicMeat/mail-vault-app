@@ -189,6 +189,13 @@ export function BillingSettings({ onNavigate, onReportBug }) {
   const [showingCached, setShowingCached] = useState(false); // transient: true only while last request failed AND cached data exists
   const [checkoutLoading, setCheckoutLoading] = useState(null);
   const [chosenPlanId, setChosenPlanId] = useState(null); // null: the default plan
+  // A plan picked in the free note arrives here chosen; the hand-off is used up.
+  const billingPlanChoice = useSettingsStore(s => s.billingPlanChoice);
+  useEffect(() => {
+    if (!billingPlanChoice) return;
+    setChosenPlanId(billingPlanChoice);
+    useSettingsStore.getState().chooseBillingPlan(null);
+  }, [billingPlanChoice]);
   const lifecycleMessages = useSettingsStore(s => s.lifecycleMessages);
   const setLifecycleMessages = useSettingsStore(s => s.setLifecycleMessages);
   const [checkoutError, setCheckoutError] = useState(null);

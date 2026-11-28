@@ -75,7 +75,7 @@ describe('pricingRecord', () => {
 
   it('keeps the currency the server resolved, not the machine locale', () => {
     expect(pricingRecord(response)).toEqual({
-      currency: 'eur', monthly: 400, yearly: 2500, pricingMode: 'manual',
+      currency: 'eur', monthly: 400, yearly: 2500, pricingMode: 'manual', trialDays: 0,
     });
   });
 
@@ -93,42 +93,71 @@ describe('pricingRecord', () => {
   });
 });
 
-describe('pricingRecord standard price', () => {
-  it('keeps the standard price after early access when the server sends it', () => {
+describe('pricingRecord standard price and trial', () => {
+  it('keeps the standard price after early access and the yearly trial when the server sends them', () => {
     const res = {
       currency: 'gbp', pricingMode: 'manual',
-      plans: [{ interval: 'month', amount: 350 }, { interval: 'year', amount: 2100 }],
+      plans: [{ interval: 'month', amount: 350 }, { interval: 'year', amount: 2100, trialDays: 14, trialEligible: true }],
       standard: { monthly: 500, yearly: 3300 },
     };
     expect(pricingRecord(res)).toEqual({
-      currency: 'gbp', monthly: 350, yearly: 2100, pricingMode: 'manual', standardMonthly: 500, standardYearly: 3300,
+      currency: 'gbp', monthly: 350, yearly: 2100, pricingMode: 'manual', standardMonthly: 500, standardYearly: 3300, trialDays: 14,
     });
+  });
+
+  it('a customer who already had a trial gets none', () => {
+    const res = {
+      currency: 'eur', plans: [{ interval: 'month', amount: 400 }, { interval: 'year', amount: 2500, trialDays: 14, trialEligible: false }],
+    };
+    expect(pricingRecord(res).trialDays).toBe(0);
   });
 });
 
 describe('premiumOffer', () => {
-  const gbp = { currency: 'gbp', monthly: 350, yearly: 2100, pricingMode: 'manual', standardMonthly: 500, standardYearly: 3300 };
+  const gbp = { currency: 'gbp', monthly: 350, yearly: 2100, pricingMode: 'manual', standardMonthly: 500, standardYearly: 3300, trialDays: 14 };
 
-  it('quotes the early access price beside the standard one it undercuts', () => {
+  it('quotes each plan beside the standard price it undercuts, with the discount', () => {
     expect(premiumOffer(gbp)).toEqual({
-      price: blurbFromAmounts(350, 2100, 'gbp'),
-      standard: blurbFromAmounts(500, 3300, 'gbp'),
       limited: true,
+      trialDays: 14,
+      yearly: { planId: 'yearly', price: '£21', standard: '£33', off: 36 },
+      monthly: { planId: 'monthly', price: '£3.50', standard: '£5', off: 30 },
     });
-    expect(premiumOffer(gbp).price).toContain('£3.50');
   });
 
-  it('once early access sells the standard price, nothing is called limited', () => {
-    const full = { ...gbp, monthly: 500, yearly: 3300 };
-    expect(premiumOffer(full)).toEqual({ price: blurbFromAmounts(500, 3300, 'gbp'), standard: null, limited: false });
+  it('the EUR early access prices read like the website: 36% off yearly, 33% off monthly', () => {
+    const eur = { currency: 'eur', monthly: 400, yearly: 2500, standardMonthly: 600, standardYearly: 3900, trialDays: 14 };
+    const offer = premiumOffer(eur);
+    expect(offer.yearly).toEqual({ planId: 'yearly', price: '€25', standard: '€39', off: 36 });
+    expect(offer.monthly).toEqual({ planId: 'monthly', price: '€4', standard: '€6', off: 33 });
   });
 
-  it('a cached answer from before the standard price was kept quotes the plan price alone', () => {
-    const old = { currency: 'eur', monthly: 400, yearly: 2500, pricingMode: 'manual' };
-    expect(premiumOffer(old)).toEqual({ price: blurbFromAmounts(400, 2500, 'eur'), standard: null, limited: true });
+  it('once early access sells the standard price, nothing is called limited or discounted', () => {
+    const offer = premiumOffer({ ...gbp, monthly: 500, yearly: 3300 });
+    expect(offer.limited).toBe(false);
+    expect(offer.yearly).toEqual({ planId: 'yearly', price: '£33', standard: null, off: 0 });
+    expect(offer.monthly).toEqual({ planId: 'monthly', price: '£5', standard: null, off: 0 });
+  });
+
+  it('a cached answer from before the standard price was kept quotes the plan prices alone, trial assumed', () => {
+    const offer = premiumOffer({ currency: 'eur', monthly: 400, yearly: 2500, pricingMode: 'manual' });
+    expect(offer).toEqual({
+      limited: true, trialDays: 14,
+      yearly: { planId: 'yearly', price: '€25', standard: null, off: 0 },
+      monthly: { planId: 'monthly', price: '€4', standard: null, off: 0 },
+    });
+  });
+
+  it('no trial when the customer already had one', () => {
+    expect(premiumOffer({ ...gbp, trialDays: 0 }).trialDays).toBe(0);
   });
 
   it('before the server answers, the locale guess stands in', () => {
-    expect(premiumOffer(null)).toEqual({ price: PREMIUM_PRICE_BLURB, standard: null, limited: true });
+    const offer = premiumOffer(null);
+    expect(offer.limited).toBe(true);
+    expect(offer.trialDays).toBe(14);
+    expect(PREMIUM_PRICE_BLURB).toContain(offer.yearly.price);
+    expect(PREMIUM_PRICE_BLURB).toContain(offer.monthly.price);
+    expect(offer.yearly.standard).toBeNull();
   });
 });

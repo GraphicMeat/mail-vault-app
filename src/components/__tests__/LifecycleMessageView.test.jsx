@@ -4,7 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { setLocale, t } from '../../i18n/index.js';
 import { formatDateLong } from '../../utils/dateFormat';
-import { blurbFromAmounts } from '../../utils/pricing';
 
 vi.mock('../../services/api', async (importOriginal) => ({
   ...(await importOriginal()),
@@ -92,7 +91,6 @@ describe('LifecycleMessageView', () => {
     expect(free.textContent).toContain(t('lifecycle.freeNudge.freeTitle'));
     expect(free.textContent).toContain(t('lifecycle.freeBadge'));
     expect(screen.getByTestId('lifecycle-message-outro').textContent).toBe(t('lifecycle.freeNudge.outro'));
-    expect(screen.getByTestId('lifecycle-open-billing').textContent).toBe(t('lifecycle.freeNudge.cta'));
     const star = screen.getByTestId('lifecycle-star');
     expect(star.textContent).toContain(t('lifecycle.freeNudge.star.title'));
     expect(star.textContent).toContain(t('lifecycle.freeNudge.star.blurb'));
@@ -115,7 +113,6 @@ describe('LifecycleMessageView', () => {
     ['trial-ending', 'lifecycle.trialEnding.cta'],
     ['checkout-left', 'lifecycle.checkoutLeft.cta'],
     ['plan-ended', 'lifecycle.planEnded.cta'],
-    ['free-nudge', 'lifecycle.freeNudge.cta'],
   ])('the %s note names its own next step on the button, never "Open Billing"', (kind, ctaKey) => {
     useLifecycleStore.setState({ rows: [row(`${kind}:1`, kind)], openId: `${kind}:1` });
     render(<LifecycleMessageView onOpenBilling={() => {}} />);
@@ -132,49 +129,95 @@ describe('LifecycleMessageView', () => {
   });
 
   describe('the offer in the free note', () => {
-    const gbp = { currency: 'gbp', monthly: 350, yearly: 2100, pricingMode: 'manual', standardMonthly: 500, standardYearly: 3300 };
-    const open = (kind = 'free-nudge') => {
+    const eur = { currency: 'eur', monthly: 400, yearly: 2500, pricingMode: 'manual', standardMonthly: 600, standardYearly: 3900, trialDays: 14 };
+    const open = (kind = 'free-nudge', onOpenBilling = () => {}) => {
       useLifecycleStore.setState({ rows: [row(kind, kind)], openId: kind });
-      render(<LifecycleMessageView onOpenBilling={() => {}} />);
+      render(<LifecycleMessageView onOpenBilling={onOpenBilling} />);
     };
+    const price = (plan) => screen.getByTestId(`lifecycle-plan-${plan}`);
 
-    it('quotes the price in the local currency, the standard price struck, as a limited offer for family and friends', () => {
-      useSettingsStore.setState({ premiumPricing: { ...gbp, fetchedAt: Date.now() } });
+    it('is a limited offer for you, family and friends, with two plan buttons in the local currency', () => {
+      useSettingsStore.setState({ premiumPricing: { ...eur, fetchedAt: Date.now() } });
       open();
       const offer = screen.getByTestId('lifecycle-offer');
       expect(offer.textContent).toContain(t('lifecycle.freeNudge.offer.title'));
       expect(offer.textContent).toContain(t('lifecycle.freeNudge.offer.blurb'));
-      expect(screen.getByTestId('lifecycle-offer-price').textContent).toBe(blurbFromAmounts(350, 2100, 'gbp'));
-      const standard = screen.getByTestId('lifecycle-offer-standard');
-      expect(standard.textContent).toBe(blurbFromAmounts(500, 3300, 'gbp'));
-      expect(standard.tagName).toBe('S');
+      const buttons = offer.querySelectorAll('button');
+      expect([...buttons].map((b) => b.dataset.testid)).toEqual(['lifecycle-plan-yearly', 'lifecycle-plan-monthly']);
     });
 
-    it('once early access is over it quotes the price without calling it limited', () => {
-      useSettingsStore.setState({ premiumPricing: { ...gbp, monthly: 500, yearly: 3300, fetchedAt: Date.now() } });
+    it('yearly is the best offer: try Premium free, then the yearly price, 36% off the struck standard price', () => {
+      useSettingsStore.setState({ premiumPricing: { ...eur, fetchedAt: Date.now() } });
       open();
-      expect(screen.getByTestId('lifecycle-offer-price').textContent).toBe(blurbFromAmounts(500, 3300, 'gbp'));
-      expect(screen.getByTestId('lifecycle-offer').textContent).not.toContain(t('lifecycle.freeNudge.offer.title'));
-      expect(screen.queryByTestId('lifecycle-offer-standard')).toBeNull();
+      const yearly = price('yearly');
+      expect(yearly.textContent).toContain(t('lifecycle.freeNudge.offer.bestOffer'));
+      expect(yearly.textContent).toContain(t('lifecycle.freeNudge.cta'));
+      expect(yearly.textContent).toContain(t('lifecycle.freeNudge.offer.trialDays', { days: 14 }));
+      expect(yearly.textContent).toContain(t('lifecycle.freeNudge.offer.perYear', { price: '€25' }));
+      expect(yearly.textContent).toContain(t('lifecycle.freeNudge.offer.off', { percent: 36 }));
+      expect(yearly.querySelector('s').textContent).toBe('€39');
     });
 
-    it('where checkout converts the currency, it says so under the price', () => {
-      useSettingsStore.setState({ premiumPricing: { ...gbp, currency: 'eur', pricingMode: 'adaptive', fetchedAt: Date.now() } });
+    it('monthly quotes its own price, 33% off the struck standard price', () => {
+      useSettingsStore.setState({ premiumPricing: { ...eur, fetchedAt: Date.now() } });
+      open();
+      const monthly = price('monthly');
+      expect(monthly.textContent).toContain(t('settings.billing.monthly'));
+      expect(monthly.textContent).toContain(t('lifecycle.freeNudge.offer.perMonth', { price: '€4' }));
+      expect(monthly.textContent).toContain(t('lifecycle.freeNudge.offer.off', { percent: 33 }));
+      expect(monthly.querySelector('s').textContent).toBe('€6');
+      expect(monthly.textContent).not.toContain(t('lifecycle.freeNudge.offer.bestOffer'));
+    });
+
+    it.each(['yearly', 'monthly'])('the %s button opens Billing with that plan chosen', (plan) => {
+      useSettingsStore.setState({ premiumPricing: { ...eur, fetchedAt: Date.now() } });
+      const onOpenBilling = vi.fn();
+      open('free-nudge', onOpenBilling);
+      fireEvent.click(price(plan));
+      expect(useSettingsStore.getState().billingPlanChoice).toBe(plan);
+      expect(onOpenBilling).toHaveBeenCalledOnce();
+    });
+
+    it('the free note has no separate button: the plans are the buttons', () => {
+      useSettingsStore.setState({ premiumPricing: { ...eur, fetchedAt: Date.now() } });
+      open();
+      expect(screen.queryByTestId('lifecycle-open-billing')).toBeNull();
+    });
+
+    it('a customer who already had a trial is not offered one', () => {
+      useSettingsStore.setState({ premiumPricing: { ...eur, trialDays: 0, fetchedAt: Date.now() } });
+      open();
+      expect(price('yearly').textContent).not.toContain(t('lifecycle.freeNudge.cta'));
+      expect(price('yearly').textContent).toContain(t('settings.billing.yearly'));
+    });
+
+    it('once early access is over it quotes the prices without calling them limited or discounted', () => {
+      useSettingsStore.setState({ premiumPricing: { ...eur, monthly: 600, yearly: 3900, fetchedAt: Date.now() } });
+      open();
+      expect(screen.getByTestId('lifecycle-offer').textContent).not.toContain(t('lifecycle.freeNudge.offer.title'));
+      expect(price('yearly').querySelector('s')).toBeNull();
+      expect(price('yearly').textContent).not.toMatch(/% off/);
+      expect(price('yearly').textContent).toContain(t('lifecycle.freeNudge.offer.perYear', { price: '€39' }));
+    });
+
+    it('where checkout converts the currency, it says so under the plans', () => {
+      useSettingsStore.setState({ premiumPricing: { ...eur, pricingMode: 'adaptive', fetchedAt: Date.now() } });
       open();
       expect(screen.getByTestId('lifecycle-offer-currency').textContent)
         .toBe(t('settings.billing.pricesShownCheckoutConvertLocal', { pricing: 'EUR' }));
     });
 
     it('a price in the local currency needs no currency note', () => {
-      useSettingsStore.setState({ premiumPricing: { ...gbp, fetchedAt: Date.now() } });
+      useSettingsStore.setState({ premiumPricing: { ...eur, fetchedAt: Date.now() } });
       open();
       expect(screen.queryByTestId('lifecycle-offer-currency')).toBeNull();
     });
 
     it.each(['trial-ending', 'checkout-left', 'plan-ended'])('the %s note quotes no price', (kind) => {
-      useSettingsStore.setState({ premiumPricing: { ...gbp, fetchedAt: Date.now() } });
+      useSettingsStore.setState({ premiumPricing: { ...eur, fetchedAt: Date.now() } });
       open(kind);
       expect(screen.queryByTestId('lifecycle-offer')).toBeNull();
+      expect(screen.getByTestId('lifecycle-open-billing')).toBeTruthy();
     });
   });
 });

@@ -95,27 +95,46 @@ export function pricingRecord(response) {
     monthly: monthly.amount,
     yearly: yearly.amount,
     pricingMode: response.pricingMode || null,
+    trialDays: yearly.trialEligible && yearly.trialDays ? yearly.trialDays : 0,
     ...(response.standard?.monthly && response.standard?.yearly
       ? { standardMonthly: response.standard.monthly, standardYearly: response.standard.yearly }
       : {}),
   };
 }
 
+/** The trial the yearly plan carries when the cached answer predates `trialDays`. */
+const DEFAULT_TRIAL_DAYS = 14;
+
+function planOffer(planId, amount, standardAmount, currency) {
+  const off = standardAmount && amount < standardAmount ? Math.round((1 - amount / standardAmount) * 100) : 0;
+  return {
+    planId,
+    price: formatAmount(amount, currency),
+    standard: off ? formatAmount(standardAmount, currency) : null,
+    off,
+  };
+}
+
 /**
- * What the free note quotes: the plan price, and while early access sells it
- * below the standard price, that standard price too. `limited` is false once
- * checkout charges the standard price, so nothing is called an offer then.
- * Before the server answers, the locale guess stands in (early access prices).
+ * What the free note quotes, plan by plan: the price, and while early access
+ * sells it below the standard price, that standard price and the discount.
+ * `limited` is false once checkout charges the standard price, so nothing is
+ * called an offer then. Before the server answers, the locale guess stands in
+ * (early access prices, no standard to compare with).
  */
 export function premiumOffer(record) {
-  if (!record) return { price: PREMIUM_PRICE_BLURB, standard: null, limited: true };
-  const price = blurbFromAmounts(record.monthly, record.yearly, record.currency);
-  if (!record.standardMonthly || !record.standardYearly) return { price, standard: null, limited: true };
-  const limited = record.monthly < record.standardMonthly || record.yearly < record.standardYearly;
+  const r = record || (() => {
+    const currency = currencyForRegion(detectRegion());
+    return { currency, ...AMOUNTS[currency] };
+  })();
+  const yearly = planOffer('yearly', r.yearly, r.standardYearly, r.currency);
+  const monthly = planOffer('monthly', r.monthly, r.standardMonthly, r.currency);
+  const known = !!(r.standardMonthly && r.standardYearly);
   return {
-    price,
-    standard: limited ? blurbFromAmounts(record.standardMonthly, record.standardYearly, record.currency) : null,
-    limited,
+    limited: !known || yearly.off > 0 || monthly.off > 0,
+    trialDays: r.trialDays ?? DEFAULT_TRIAL_DAYS,
+    yearly,
+    monthly,
   };
 }
 

@@ -719,6 +719,11 @@ export const useSettingsStore = create(
       premiumPricing: null,
       setPremiumPricing: (p) => set({ premiumPricing: p ? { ...p, fetchedAt: Date.now() } : null }),
 
+      // A plan picked outside Billing (the free note's plan buttons), handed to
+      // the Billing tab's picker, which preselects it and clears it.
+      billingPlanChoice: null,
+      chooseBillingPlan: (planId) => set({ billingPlanChoice: planId || null }),
+
       // Share-to-unlock reward (non-MAS): premium granted for starring/sharing.
       // expiresAt is the running unlock deadline; each action grants days once.
       shareGrant: { expiresAt: null, github: false, x: false, linkedin: false, githubUser: null },
