@@ -7,7 +7,6 @@
   "ad38559c2090": "Eine EML-Datei enthält eine E-Mail samt Header, Text und allen mitgespeicherten Anhängen. Verwende sie, um einzelne Nachrichten aufzubewahren oder zu übertragen.",
   "5053b695e336": "Was EML bewahrt",
   "33270d2f5af5": "Eine EML-Datei öffnen",
-  "df2c2f4299f1": "Öffne die Datei auf dem Mac mit Apple Mail oder wähle die App im Finder über „Öffnen mit“. Prüfe Absender, Datum und Text und öffne einen bekannten Anhang. Bei einem verlinkten Anhang brauchst du möglicherweise Internetzugang.",
   "4f1075384b3a": "Wann EML sinnvoll ist",
   "e2e49f494c4c": "Eine EML-Datei enthält eine E-Mail. Erfahre, was sie bewahrt, wie du sie öffnest und wann sie sich gegenüber MBOX eignet.",
   "048d9384af65": "MBOX speichert eine Folge von Nachrichten samt Headern, Text und eingebetteten Anhängen. Wie die Nachrichten getrennt werden, hängt von der Umsetzung ab. Ordnerstruktur, Labels und Lesestatus hängen von Export und Import ab. <a href=\"https://www.rfc-editor.org/rfc/rfc4155.html\">RFC 4155 zu MBOX</a>",

@@ -50,6 +50,7 @@
   "headline": "IMAPとPOP3の違い：メールの同期とダウンロード",
   "description": "IMAPはサーバーのフォルダやフラグを扱います。POP3は受信用メールボックスから取得します。利用方法に合うものを選びましょう。",
   "datePublished": "2026-11-22",
+  "dateModified": "2026-11-28",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -57,6 +58,7 @@
   "mainEntityOfPage": "https://mailvaultapp.com/ja/blog/imap-vs-pop3.html"
 }
   </script>
+<link rel="stylesheet" href="/assets/email-client-reviews.css?v=20261002">
 <link rel="stylesheet" href="/assets/help-center.css?v=2">
 </head>
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">本文へ移動</a>
@@ -85,19 +87,41 @@
     <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>
   </header>
 
-  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>ヘルプのトピック</summary><nav aria-label="ヘルプセンターのトピック"><a href="/ja/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVaultヘルプ</a><a href="/ja/faq/getting-started.html">はじめに</a><a href="/ja/faq/storage-and-vault.html">保存場所と保管庫</a><a href="/ja/faq/providers.html">メールプロバイダ</a><a href="/ja/faq/backup-and-restore.html">バックアップと復元</a><a href="/ja/faq/explorer-and-insights.html">Explorerとメール分析</a><a href="/ja/faq/scheduled-send.html">送信の予約</a><a href="/ja/faq/premium.html">無料版とPremium</a><a href="/ja/faq/your-questions.html">皆さまからのご質問</a><a href="/ja/faq/troubleshooting.html">トラブルシューティング</a><a href="/ja/docs.html#guides" class="mv-help-divider">実践ガイド</a><a href="/ja/docs.html#articles">記事</a><a href="/ja/features.html">機能リファレンス</a><a href="/changelog.html">リリースノート</a></nav><div class="mv-help-version"><div>バージョン <span translate="no">2.25.0</span></div><div>確認日 <time datetime="2026-11-22">2026年11月22日</time></div></div></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content"><div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>ヘルプのトピック</summary><nav aria-label="ヘルプセンターのトピック"><a href="/ja/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVaultヘルプ</a><a href="/ja/faq/getting-started.html">はじめに</a><a href="/ja/faq/storage-and-vault.html">保存場所と保管庫</a><a href="/ja/faq/providers.html">メールプロバイダ</a><a href="/ja/faq/backup-and-restore.html">バックアップと復元</a><a href="/ja/faq/explorer-and-insights.html">Explorerとメール分析</a><a href="/ja/faq/scheduled-send.html">送信の予約</a><a href="/ja/faq/premium.html">無料版とPremium</a><a href="/ja/faq/your-questions.html">皆さまからのご質問</a><a href="/ja/faq/troubleshooting.html">トラブルシューティング</a><a href="/ja/docs.html#guides" class="mv-help-divider">実践ガイド</a><a href="/ja/docs.html#articles">記事</a><a href="/ja/features.html">機能リファレンス</a><a href="/changelog.html">リリースノート</a></nav><div class="mv-help-version"><div>バージョン <span translate="no">2.25.1</span></div><div>確認日 <time datetime="2026-11-28">2026年11月28日</time></div></div></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content"><div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 <a href="/ja/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 mb-8">← ブログに戻る</a>
 <article><header class="mb-8"><h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">IMAPとPOP3の違い：メールの同期とダウンロード</h1>
-<p class="mv-lead">IMAPではサーバー上のメールを操作できます。POP3はサーバーの受信用メールボックスから取得し、アプリの設定によっては取得したメールをサーバーから削除します。</p><!-- help-intro:start --><form class="mv-help-search" action="/ja/docs.html" method="get" role="search"><label for="help-q">ドキュメント、よくある質問、記事を検索</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="すべてのガイドと回答を検索" required><button type="submit">検索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>このページの内容</summary><ul><li><a href="#help-section-1">複数の端末でメールを使うならIMAP</a></li><li><a href="#help-section-2">メールをダウンロードするPOP3</a></li><li><a href="#help-section-3">自分で管理できるコピーを保管する方法</a></li></ul></details><!-- help-contents:end --></header>
+<p class="mv-lead">IMAPではサーバー上のメールを操作できます。POP3はサーバーの受信用メールボックスから取得し、アプリの設定によっては取得したメールをサーバーから削除します。</p><!-- help-intro:start --><form class="mv-help-search" action="/ja/docs.html" method="get" role="search"><label for="help-q">ドキュメント、よくある質問、記事を検索</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="すべてのガイドと回答を検索" required><button type="submit">検索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>このページの内容</summary><ul><li><a href="#comparison">IMAPとPOP3の早見表</a></li><li><a href="#help-section-1">複数の端末でメールを使うならIMAP</a></li><li><a href="#help-section-2">メールをダウンロードするPOP3</a></li><li><a href="#help-section-3">自分で管理できるコピーを保管する方法</a></li><li><a href="#switching-from-pop3">POP3からIMAPに切り替える前に</a></li><li><a href="#related-reading">関連情報</a></li></ul></details><!-- help-contents:end --></header>
 <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
-<p>確認日：<time datetime="2026-11-22" data-article-reviewed="">2026年11月22日</time>。</p>
+<p><time datetime="2026-11-28" data-article-reviewed="">2026年11月28日</time>に確認しました。</p>
+<h2 id="comparison">IMAPとPOP3の早見表</h2>
+<div class="mv-review-table-wrap" role="region" aria-labelledby="comparison" tabindex="0">
+<table class="mv-review-table">
+<thead><tr><th scope="col">メールボックスの動作</th><th scope="col">IMAP</th><th scope="col" translate="no">POP3</th></tr></thead>
+<tbody>
+<tr><th scope="row">サーバー上のフォルダ</th><td>サーバーが公開しているフォルダを同期</td><td>サーバーの受け取り口から取得。通常は受信トレイ</td></tr>
+<tr><th scope="row">既読状態</th><td>接続した端末間で同期</td><td>各アプリ内に保存</td></tr>
+<tr><th scope="row">サーバー上のコピー</th><td>削除されるか、保持ポリシーで取り除かれるまで残る</td><td>設定によりダウンロード後に削除される場合がある</td></tr>
+<tr><th scope="row">オフラインでのアクセス</th><td>アプリがキャッシュまたはダウンロードした内容</td><td>その端末に保存したメッセージ</td></tr>
+<tr><th scope="row">向いている人</th><td>スマートフォン、パソコン、ウェブメールで同じ受信箱を使う</td><td>受信メールを主に1台の端末にダウンロードする</td></tr>
+</tbody>
+</table>
+</div>
 <h2 id="help-section-1">複数の端末でメールを使うならIMAP</h2>
 <p>IMAPはサーバー上のフォルダや既読状態などのフラグを同期できます。ある端末での変更が別の端末にも表示されることがあります。オフラインで読める内容はアプリがダウンロードしたデータによります。<a href="https://www.rfc-editor.org/rfc/rfc9051.html">IMAP仕様</a></p>
 <h2 id="help-section-2">メールをダウンロードするPOP3</h2>
 <p>POP3はサーバーの受信用メールボックスからメッセージを取得します。IMAPのようなフォルダとフラグの同期はありません。切り替える前に、サーバーにコピーを残す設定か確認してください。どちらも受信用で、送信には通常SMTPを使います。<a href="https://www.rfc-editor.org/rfc/rfc1939.html">POP3仕様</a></p>
 <h2 id="help-section-3">自分で管理できるコピーを保管する方法</h2>
 <p>複数の端末で同じメールボックスを使うならIMAPを選びます。別のバックアップが必要な場合は、必要なメールと添付を保存し、数件をオフラインで開けるか確認します。<a href="/ja/guides/archive-imap-emails-locally.html">IMAPメールをローカルに保存する</a>。</p>
-</div></article></div><!-- help-version:start --><footer class="mv-help-review"><div class="mv-help-version"><div>バージョン <span translate="no">2.25.0</span></div><div>確認日 <time datetime="2026-11-22">2026年11月22日</time></div></div></footer><!-- help-version:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
+<h2 id="switching-from-pop3">POP3からIMAPに切り替える前に</h2>
+<p>以前のアプリとウェブメールの内容を見比べてください。以前のアプリにしかないメールは、POP3アカウントを削除する前に書き出します。IMAPで参照できるのは、サーバーに残っているメールだけです。</p>
+<h2 id="related-reading">関連情報</h2>
+<ul>
+<li><a href="/ja/blog/how-does-imap-work.html">IMAPはどのように動作する？</a></li>
+<li><a href="/ja/blog/how-does-pop3-work.html">POP3はどのように動作する？</a></li>
+<li><a href="/ja/blog/how-does-smtp-work.html">SMTPはどのように動作する？</a></li>
+<li><a href="/ja/blog/what-is-an-eml-file.html">EMLファイルとは？</a></li>
+</ul>
+</div></article></div><!-- help-version:start --><footer class="mv-help-review"><div class="mv-help-version"><div>バージョン <span translate="no">2.25.1</span></div><div>確認日 <time datetime="2026-11-28">2026年11月28日</time></div></div></footer><!-- help-version:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat の作品</p><h2 id="studio-title">MailVault を作る人々をご紹介します。</h2><p>私たちはGraphic Meatです。2013年から役立つソフトウェアを作っている独立系プロダクトスタジオです。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meatを見る ↗</a></div></div></aside>
   <footer class="mv-footer"><div class="mv-wrap"><div class="mv-footer-top"><div><a class="mv-brand" href="/ja/"><img src="/icon-128.webp" width="28" height="28" alt=""><span class="mv-brand-mail">Mail</span>Vault</a><p>メールを読む。メールを残す。</p></div><nav aria-label="MailVault を見る"><a href="/ja/use-cases.html">利用例</a><a href="/ja/blog.html">ブログ</a><a href="/changelog.html">新着情報</a><a href="/ja/faq.html">FAQ</a><a href="/ja/docs.html">ヘルプ</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub のコード ↗</a><a href="https://discord.gg/3GB62ethD8" target="_blank" rel="noopener">Discord ↗</a></nav></div><div class="mv-footer-bottom"><p>© 2026 MailVault. 制作： <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p><div><a href="/privacy.html">プライバシー</a><a href="/terms.html">利用規約</a></div></div></div></footer>
 <dialog class="mv-lightbox" aria-label="製品スクリーンショット"><button type="button" class="mv-button mv-secondary" data-close-image>スクリーンショットを閉じる</button><img src="/screenshots/ja/thread-view-1440.webp" alt="MailVault の受信トレイ · MailVault version 2.16.0" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0">

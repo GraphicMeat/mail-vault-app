@@ -50,6 +50,7 @@
   "headline": "IMAP과 POP3의 차이: 이메일 동기화와 다운로드",
   "description": "IMAP은 서버 폴더와 플래그를 다룹니다. POP3는 수신 사서함에서 메일을 가져옵니다. 사용 방식에 맞춰 선택하세요.",
   "datePublished": "2026-11-22",
+  "dateModified": "2026-11-28",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -57,6 +58,7 @@
   "mainEntityOfPage": "https://mailvaultapp.com/ko/blog/imap-vs-pop3.html"
 }
   </script>
+<link rel="stylesheet" href="/assets/email-client-reviews.css?v=20261002">
 <link rel="stylesheet" href="/assets/help-center.css?v=2">
 </head>
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">본문으로 건너뛰기</a>
@@ -85,19 +87,41 @@
     <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>
   </header>
 
-  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>도움말 주제</summary><nav aria-label="도움말 센터 주제"><a href="/ko/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 도움말</a><a href="/ko/faq/getting-started.html">시작하기</a><a href="/ko/faq/storage-and-vault.html">저장소와 볼트</a><a href="/ko/faq/providers.html">이메일 제공업체</a><a href="/ko/faq/backup-and-restore.html">백업과 복원</a><a href="/ko/faq/explorer-and-insights.html">Explorer와 메일 분석</a><a href="/ko/faq/scheduled-send.html">예약 발송</a><a href="/ko/faq/premium.html">무료와 Premium</a><a href="/ko/faq/your-questions.html">여러분의 질문</a><a href="/ko/faq/troubleshooting.html">문제 해결</a><a href="/ko/docs.html#guides" class="mv-help-divider">실용 가이드</a><a href="/ko/docs.html#articles">글</a><a href="/ko/features.html">기능 안내</a><a href="/changelog.html">릴리스 노트</a></nav><div class="mv-help-version"><div>버전 <span translate="no">2.25.0</span></div><div>검토일 <time datetime="2026-11-22">2026년 11월 22일</time></div></div></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content"><div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>도움말 주제</summary><nav aria-label="도움말 센터 주제"><a href="/ko/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 도움말</a><a href="/ko/faq/getting-started.html">시작하기</a><a href="/ko/faq/storage-and-vault.html">저장소와 볼트</a><a href="/ko/faq/providers.html">이메일 제공업체</a><a href="/ko/faq/backup-and-restore.html">백업과 복원</a><a href="/ko/faq/explorer-and-insights.html">Explorer와 메일 분석</a><a href="/ko/faq/scheduled-send.html">예약 발송</a><a href="/ko/faq/premium.html">무료와 Premium</a><a href="/ko/faq/your-questions.html">여러분의 질문</a><a href="/ko/faq/troubleshooting.html">문제 해결</a><a href="/ko/docs.html#guides" class="mv-help-divider">실용 가이드</a><a href="/ko/docs.html#articles">글</a><a href="/ko/features.html">기능 안내</a><a href="/changelog.html">릴리스 노트</a></nav><div class="mv-help-version"><div>버전 <span translate="no">2.25.1</span></div><div>검토일 <time datetime="2026-11-28">2026년 11월 28일</time></div></div></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content"><div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 <a href="/ko/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 mb-8">← 블로그로 돌아가기</a>
 <article><header class="mb-8"><h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">IMAP과 POP3의 차이: 이메일 동기화와 다운로드</h1>
-<p class="mv-lead">IMAP을 사용하면 서버에 저장된 메일을 다룰 수 있습니다. POP3는 서버의 수신 사서함에서 메시지를 가져오며, 앱 설정에 따라 서버에서 삭제할 수 있습니다.</p><!-- help-intro:start --><form class="mv-help-search" action="/ko/docs.html" method="get" role="search"><label for="help-q">문서, 자주 묻는 질문 및 글 검색</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="모든 가이드와 답변 검색" required><button type="submit">검색</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>이 페이지의 내용</summary><ul><li><a href="#help-section-1">여러 기기에서 메일을 쓰기 위한 IMAP</a></li><li><a href="#help-section-2">메시지를 내려받기 위한 POP3</a></li><li><a href="#help-section-3">직접 관리하는 복사본 보관하기</a></li></ul></details><!-- help-contents:end --></header>
+<p class="mv-lead">IMAP을 사용하면 서버에 저장된 메일을 다룰 수 있습니다. POP3는 서버의 수신 사서함에서 메시지를 가져오며, 앱 설정에 따라 서버에서 삭제할 수 있습니다.</p><!-- help-intro:start --><form class="mv-help-search" action="/ko/docs.html" method="get" role="search"><label for="help-q">문서, 자주 묻는 질문 및 글 검색</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="모든 가이드와 답변 검색" required><button type="submit">검색</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>이 페이지의 내용</summary><ul><li><a href="#comparison">IMAP과 POP3 한눈에 보기</a></li><li><a href="#help-section-1">여러 기기에서 메일을 쓰기 위한 IMAP</a></li><li><a href="#help-section-2">메시지를 내려받기 위한 POP3</a></li><li><a href="#help-section-3">직접 관리하는 복사본 보관하기</a></li><li><a href="#switching-from-pop3">POP3에서 IMAP으로 전환하기 전에</a></li><li><a href="#related-reading">관련 자료</a></li></ul></details><!-- help-contents:end --></header>
 <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
-<p>검토일 <time datetime="2026-11-22" data-article-reviewed="">2026년 11월 22일</time>.</p>
+<p><time datetime="2026-11-28" data-article-reviewed="">2026년 11월 28일</time>에 검토했습니다.</p>
+<h2 id="comparison">IMAP과 POP3 한눈에 보기</h2>
+<div class="mv-review-table-wrap" role="region" aria-labelledby="comparison" tabindex="0">
+<table class="mv-review-table">
+<thead><tr><th scope="col">사서함 동작</th><th scope="col">IMAP</th><th scope="col" translate="no">POP3</th></tr></thead>
+<tbody>
+<tr><th scope="row">서버 폴더</th><td>서버가 제공하는 폴더를 동기화</td><td>수신 메일 보관함에서 다운로드하며, 보통 받은편지함에 해당</td></tr>
+<tr><th scope="row">읽음 상태</th><td>연결된 기기 간에 동기화</td><td>각 앱에만 저장</td></tr>
+<tr><th scope="row">서버에 남는 사본</th><td>삭제되거나 보관 정책에 따라 제거될 때까지 유지</td><td>설정에 따라 다운로드 후 삭제될 수 있음</td></tr>
+<tr><th scope="row">오프라인 접근</th><td>앱이 캐시하거나 다운로드한 내용</td><td>해당 기기에 저장한 메시지</td></tr>
+<tr><th scope="row">적합한 사용자</th><td>휴대전화, 컴퓨터, 웹메일에서 사서함 하나를 함께 사용</td><td>주로 사용하는 기기 한 대에 수신 메일 다운로드</td></tr>
+</tbody>
+</table>
+</div>
 <h2 id="help-section-1">여러 기기에서 메일을 쓰기 위한 IMAP</h2>
 <p>IMAP은 서버 폴더와 읽음 등의 플래그를 동기화할 수 있습니다. 한 기기에서 바꾼 내용이 다른 기기에도 나타날 수 있습니다. 오프라인으로 읽을 수 있는 내용은 앱이 내려받은 항목에 따라 달라집니다. <a href="https://www.rfc-editor.org/rfc/rfc9051.html">IMAP 규격</a></p>
 <h2 id="help-section-2">메시지를 내려받기 위한 POP3</h2>
 <p>POP3는 서버의 수신 사서함에서 메일을 가져옵니다. IMAP과 같은 폴더 및 플래그 동기화는 제공하지 않습니다. 전환하기 전에 앱이 서버에 복사본을 남기는지 확인하세요. 두 프로토콜은 모두 수신용이며 발신에는 보통 SMTP를 씁니다. <a href="https://www.rfc-editor.org/rfc/rfc1939.html">POP3 규격</a></p>
 <h2 id="help-section-3">직접 관리하는 복사본 보관하기</h2>
 <p>여러 기기에서 같은 사서함을 사용하려면 IMAP을 선택하세요. 별도 백업이 필요하다면 메시지와 첨부 파일을 저장한 뒤 일부를 오프라인에서 열어 보세요. <a href="/ko/guides/archive-imap-emails-locally.html">IMAP 이메일을 로컬에 보관하기</a>.</p>
-</div></article></div><!-- help-version:start --><footer class="mv-help-review"><div class="mv-help-version"><div>버전 <span translate="no">2.25.0</span></div><div>검토일 <time datetime="2026-11-22">2026년 11월 22일</time></div></div></footer><!-- help-version:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
+<h2 id="switching-from-pop3">POP3에서 IMAP으로 전환하기 전에</h2>
+<p>이전 앱과 웹메일을 비교하세요. 이전 앱에만 보이는 메시지는 POP3 계정을 제거하기 전에 내보내세요. IMAP으로는 서버에 남아 있는 메시지만 볼 수 있습니다.</p>
+<h2 id="related-reading">관련 자료</h2>
+<ul>
+<li><a href="/ko/blog/how-does-imap-work.html">IMAP은 어떻게 작동하나요?</a></li>
+<li><a href="/ko/blog/how-does-pop3-work.html">POP3는 어떻게 작동하나요?</a></li>
+<li><a href="/ko/blog/how-does-smtp-work.html">SMTP는 어떻게 작동하나요?</a></li>
+<li><a href="/ko/blog/what-is-an-eml-file.html">EML 파일이란?</a></li>
+</ul>
+</div></article></div><!-- help-version:start --><footer class="mv-help-review"><div class="mv-help-version"><div>버전 <span translate="no">2.25.1</span></div><div>검토일 <time datetime="2026-11-28">2026년 11월 28일</time></div></div></footer><!-- help-version:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat가 만들었습니다</p><h2 id="studio-title">MailVault를 만든 사람들을 만나 보세요.</h2><p>저희는 2013년부터 유용한 소프트웨어를 만드는 독립 제품 스튜디오 Graphic Meat입니다.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat 알아보기 ↗</a></div></div></aside>
   <footer class="mv-footer"><div class="mv-wrap"><div class="mv-footer-top"><div><a class="mv-brand" href="/ko/"><img src="/icon-128.webp" width="28" height="28" alt=""><span class="mv-brand-mail">Mail</span>Vault</a><p>메일을 읽고, 메일을 보관하세요.</p></div><nav aria-label="MailVault 살펴보기"><a href="/ko/use-cases.html">사용 사례</a><a href="/ko/blog.html">블로그</a><a href="/changelog.html">새로운 소식</a><a href="/ko/faq.html">FAQ</a><a href="/ko/docs.html">도움말</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub의 코드 ↗</a><a href="https://discord.gg/3GB62ethD8" target="_blank" rel="noopener">Discord ↗</a></nav></div><div class="mv-footer-bottom"><p>© 2026 MailVault. 제작: <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p><div><a href="/privacy.html">개인정보</a><a href="/terms.html">약관</a></div></div></div></footer>
 <dialog class="mv-lightbox" aria-label="제품 스크린샷"><button type="button" class="mv-button mv-secondary" data-close-image>스크린샷 닫기</button><img src="/screenshots/ko/thread-view-1440.webp" alt="MailVault 받은편지함 · MailVault version 2.16.0" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0">

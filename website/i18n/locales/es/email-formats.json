@@ -7,7 +7,6 @@
   "ad38559c2090": "Un archivo EML contiene un correo, con sus cabeceras, cuerpo y adjuntos guardados. Úsalo para conservar o mover mensajes individuales.",
   "5053b695e336": "Qué conserva EML",
   "33270d2f5af5": "Cómo abrir un archivo EML",
-  "df2c2f4299f1": "En Mac, abre el archivo en Apple Mail o elige esa aplicación en Abrir con en Finder. Comprueba el remitente, la fecha y el cuerpo, y abre un adjunto conocido. Un adjunto enlazado en la web puede requerir Internet.",
   "4f1075384b3a": "Cuándo elegir EML",
   "e2e49f494c4c": "Un archivo EML contiene un correo. Descubre qué conserva, cómo abrirlo y cuándo elegirlo frente a MBOX.",
   "048d9384af65": "MBOX guarda una secuencia de mensajes con sus cabeceras, cuerpos y adjuntos incrustados. La separación de los mensajes varía entre implementaciones. Las carpetas, etiquetas y estados de lectura dependen de la exportación e importación. <a href=\"https://www.rfc-editor.org/rfc/rfc4155.html\">RFC 4155 sobre MBOX</a>",

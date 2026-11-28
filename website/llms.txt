@@ -61,6 +61,12 @@
 
 ## Email guides and research
 
+- [What is an EML file?](https://mailvaultapp.com/blog/what-is-an-eml-file.html): what an exported message contains, how to open it, and how to verify its attachments offline
+- [How Does IMAP Work?](https://mailvaultapp.com/blog/how-does-imap-work.html): Learn how IMAP syncs email folders and read status across devices, what works offline, and when you need a separate backup.
+- [How Does SMTP Work?](https://mailvaultapp.com/blog/how-does-smtp-work.html): Follow an email from your app to the recipient’s mail server, and learn when SMTP uses ports 587, 465, and 25.
+- [How Does POP3 Work?](https://mailvaultapp.com/blog/how-does-pop3-work.html): Learn how POP3 downloads email, when copies stay on the server, and what to check before you switch email apps.
+- [IMAP vs POP3: Syncing and Downloading Email](https://mailvaultapp.com/blog/imap-vs-pop3.html): folder and read-status sync, server retention, offline access, and how to switch safely
+
 - [Does Archiving Gmail Free Up Space?](https://mailvaultapp.com/blog/does-archiving-gmail-free-up-space.html): No. Archived Gmail messages still count toward your Google storage. To free space, save a copy elsewhere, check that it opens, then delete the server copy.
 - [Do Archived Emails Count Towards Storage?](https://mailvaultapp.com/blog/do-archived-emails-count-towards-storage.html): Yes, in Gmail, Outlook.com, Yahoo Mail and iCloud Mail. Only deleting mail, or moving it to a local archive and then deleting it, frees space.
 - [How to Archive Mail in Gmail](https://mailvaultapp.com/blog/how-to-archive-mail-in-gmail.html): Archive on a computer or phone, in bulk and with filters, find archived mail in All Mail, and archive Gmail to your own computer.
