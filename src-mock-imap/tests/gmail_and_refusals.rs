@@ -183,6 +183,20 @@ fn gmail_expunge_out_of_a_label_keeps_the_other_copies() {
     assert_eq!(gm_ids(&server, ALL_MAIL), vec![111, 222, 333]);
 }
 
+/// Gmail's default for a message expunged from the last folder it shows in
+/// is to archive it: an expunge in All Mail deletes nothing.
+#[test]
+fn gmail_expunge_in_all_mail_keeps_the_message() {
+    let server = gmail_server();
+    let mut c = Client::select(&server, ALL_MAIL);
+    assert!(status(&c.send("UID STORE 1 +FLAGS (\\Deleted)")).contains(" OK "));
+    let out = c.send("UID EXPUNGE 1");
+    assert!(status(&out).contains(" OK "), "{out:?}");
+    assert_eq!(gm_ids(&server, ALL_MAIL), vec![111, 222, 333]);
+    assert_eq!(gm_ids(&server, "INBOX"), vec![111]);
+    assert!(!out.iter().any(|l| l.contains("EXPUNGE") && l.starts_with('*')), "nothing left All Mail: {out:?}");
+}
+
 #[test]
 fn gmail_all_mail_keeps_its_copy_when_a_label_is_added() {
     let server = gmail_server();

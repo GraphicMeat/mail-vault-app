@@ -380,7 +380,8 @@ pub struct ServerState {
     /// Gmail's label model: a MOVE or COPY into the `\Trash` folder takes every
     /// copy of that X-GM-MSGID out of every non-Trash, non-Spam folder (All Mail
     /// included) and leaves one in Trash; a MOVE or EXPUNGE out of a label
-    /// folder removes that folder's copy only, and All Mail keeps its own.
+    /// folder removes that folder's copy only, and All Mail keeps its own; an
+    /// EXPUNGE in All Mail itself archives (the message stays there).
     /// `Scenario::gmail()` turns it on.
     pub gmail: bool,
     /// The next X-GM-MSGID `add_gmail_message` hands out.

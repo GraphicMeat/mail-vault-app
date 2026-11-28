@@ -987,6 +987,7 @@ fn do_copy(cmd: &Command, state: &mut ServerState, sess: &Session, is_move: bool
 
 fn do_expunge(cmd: &Command, state: &mut ServerState, sess: &Session) -> Response {
     let bump = state.has_cap("QRESYNC");
+    let gmail = state.gmail;
     let Some(mb) = selected_mut(state, sess) else {
         return Response::bad("No mailbox selected");
     };
@@ -1006,6 +1007,17 @@ fn do_expunge(cmd: &Command, state: &mut ServerState, sess: &Session) -> Respons
         .filter(|m| scope.as_ref().map_or(true, |s| s.contains(&m.uid)))
         .map(|m| m.uid)
         .collect();
+
+    // Gmail's label model: All Mail is the last place a message lives, and
+    // Gmail's default for "expunged from the last visible folder" is to
+    // archive it. The expunge is accepted and the message stays, \Deleted
+    // dropped: only a move to Trash (or Spam) takes it out of All Mail.
+    if gmail && mb.is_all_mail() {
+        for m in mb.messages.iter_mut().filter(|m| doomed.contains(&m.uid)) {
+            m.flags.retain(|f| !f.eq_ignore_ascii_case("\\Deleted"));
+        }
+        return Response::ok("EXPUNGE completed");
+    }
 
     let mut r = Response::ok("EXPUNGE completed");
     for line in removal_lines(sess, mb, &doomed) {
