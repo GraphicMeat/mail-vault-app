@@ -155,6 +155,7 @@ export const RPC_METHODS = Object.freeze([
   "graph_create_folder",
   "graph_delete_folder",
   "graph_delete_message",
+  "graph_delete_messages",
   "graph_get_message",
   "graph_list_folders",
   "graph_list_messages",

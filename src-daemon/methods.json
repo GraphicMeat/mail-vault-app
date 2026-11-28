@@ -154,6 +154,7 @@
   {"name": "graph_create_folder", "replySecs": null},
   {"name": "graph_delete_folder", "replySecs": null},
   {"name": "graph_delete_message", "replySecs": null},
+  {"name": "graph_delete_messages", "replySecs": null},
   {"name": "graph_get_message", "replySecs": null},
   {"name": "graph_list_folders", "replySecs": null},
   {"name": "graph_list_messages", "replySecs": null},

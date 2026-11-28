@@ -433,6 +433,15 @@ fn error_code(body: &str) -> Option<String> {
     v.get("error")?.get("code")?.as_str().map(str::to_string)
 }
 
+/// What `GraphClient::move_message_outcome` found.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MoveOutcome {
+    /// Moved; the message's new id in the destination.
+    Moved(String),
+    /// The source no longer holds the message (404 `ErrorItemNotFound`).
+    Gone,
+}
+
 /// RFC 3986 percent-encoding of one URL component (unreserved characters pass).
 fn percent_encode(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
@@ -1128,12 +1137,29 @@ impl GraphClient {
     }
 
     /// Move a message to a different folder. Returns the new message ID.
+    /// A message the source no longer holds is an error carrying `(404)`, as
+    /// every other 404 (`abd::throttle::classify_graph` reads it as gone).
     pub async fn move_message(
         &self,
         message_id: &str,
         destination_folder_id: &str,
     ) -> Result<String, String> {
-        let url = format!("{}/me/messages/{}/move", graph_base(), message_id);
+        match self.move_message_outcome(message_id, destination_folder_id).await? {
+            MoveOutcome::Moved(new_id) => Ok(new_id),
+            MoveOutcome::Gone => Err("Graph move_message failed (404) ErrorItemNotFound".to_string()),
+        }
+    }
+
+    /// `move_message`, telling a message the source no longer holds (404
+    /// `ErrorItemNotFound`, read as `delete_message` reads it) apart from a
+    /// failure: an earlier move that landed with its reply lost answers so,
+    /// since Graph gives a moved message a new id.
+    pub async fn move_message_outcome(
+        &self,
+        message_id: &str,
+        destination_folder_id: &str,
+    ) -> Result<MoveOutcome, String> {
+        let url = format!("{}/me/messages/{}/move", graph_base(), percent_encode(message_id));
 
         let resp = self
             .client
@@ -1156,6 +1182,9 @@ impl GraphClient {
                 return Err(format!("Graph move_message failed (429:retry_after={}) {}", retry_after, body));
             }
             let body = resp.text().await.unwrap_or_default();
+            if status == reqwest::StatusCode::NOT_FOUND && error_code(&body).as_deref() == Some("ErrorItemNotFound") {
+                return Ok(MoveOutcome::Gone);
+            }
             return Err(format!(
                 "Graph move_message failed ({}) {}",
                 status.as_u16(),
@@ -1168,7 +1197,7 @@ impl GraphClient {
             .await
             .map_err(|e| format!("Graph move_message parse error: {}", e))?;
 
-        Ok(moved.id)
+        Ok(MoveOutcome::Moved(moved.id))
     }
 
     /// Download the raw MIME (.eml) content of a message.

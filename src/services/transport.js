@@ -276,6 +276,9 @@ export const DAEMON_OWNED = new Set([
   // `graph_allocate_uids` above (Task 2.7) is unrelated and already here.
   'graph_list_folders', 'graph_list_messages', 'graph_get_message', 'graph_cache_mime',
   'graph_set_read', 'graph_set_flagged', 'graph_delete_message', 'graph_move_emails',
+  // The batched delete (per-message results, bin copy each): daemon-only,
+  // so it must be here or it falls through to Tauri ("Command not found").
+  'graph_delete_messages',
   'graph_create_folder', 'graph_rename_folder', 'graph_move_folder', 'graph_delete_folder',
   // Task 5.7: OAuth2 (auth URL, code exchange, token refresh). Their Tauri
   // twins are deleted in this same task — flat names, no rename layer, no

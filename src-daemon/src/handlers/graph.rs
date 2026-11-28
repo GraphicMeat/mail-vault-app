@@ -299,18 +299,100 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
         }
 
         "graph_move_emails" => {
+            use mailvault_core::graph::MoveOutcome;
             let access_token = req!(str_arg(&id, params, "accessToken"));
             let message_ids = req!(vec_arg::<String>(&id, params, "messageIds"));
             let target_folder_id = req!(str_arg(&id, params, "targetFolderId"));
             let client = GraphClient::new(&access_token);
-            let mut moved = 0u32;
-            for msg_id in &message_ids {
-                if let Err(e) = client.move_message(msg_id, &target_folder_id).await {
-                    return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, e));
+            let (client, target) = (&client, target_folder_id.as_str());
+            // Every message is tried, `BATCH_CONCURRENCY` at a time, and
+            // answered on its own: a failure stops nothing, so the caller
+            // knows exactly which moved. `gone`: the source no longer holds it
+            // (an earlier move landed with its reply lost; a moved message
+            // has a new id), which is not a failure to retry.
+            let results = run_batched(message_ids, |msg_id| async move {
+                let outcome =
+                    retry_throttled(|| client.move_message_outcome(&msg_id, target), |e: &String| throttle_of(e)).await;
+                (msg_id, outcome)
+            })
+            .await;
+            let (mut done, mut gone, mut failed) = (Vec::new(), Vec::new(), Vec::new());
+            for (msg_id, outcome) in results {
+                match outcome {
+                    Ok(MoveOutcome::Moved(_)) => done.push(msg_id),
+                    Ok(MoveOutcome::Gone) => gone.push(msg_id),
+                    Err(error) => failed.push(json!({"messageId": msg_id, "error": error})),
                 }
-                moved += 1;
             }
-            RpcResponse::success(id, json!({"success": true, "moved": moved}))
+            RpcResponse::success(
+                id,
+                json!({"success": true, "moved": done.len(), "done": done, "gone": gone, "failed": failed}),
+            )
+        }
+
+        // Many `graph_delete_message`s in one call: each item through the
+        // same `delete_one` (its own best-effort bin copy when the call names
+        // the account and mailbox), `BATCH_CONCURRENCY` at a time, a throttle
+        // retried, and every item answered on its own. Only bad params fail
+        // the call.
+        "graph_delete_messages" => {
+            use crate::message_delete::{delete_one, Mode, Provider, Refusal};
+            #[derive(serde::Deserialize)]
+            #[serde(rename_all = "camelCase")]
+            struct Item {
+                uid: u32,
+                message_id: String,
+            }
+            let access_token = req!(str_arg(&id, params, "accessToken"));
+            let items: Vec<Item> = match params.get("items").cloned().map(serde_json::from_value) {
+                Some(Ok(items)) => items,
+                Some(Err(e)) => return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, format!("Invalid items: {e}"))),
+                None => return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, "Missing items")),
+            };
+            let mode = match Mode::from_params(params) {
+                Ok(mode) => mode,
+                Err(e) => return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, e)),
+            };
+            let (account_id, mailbox, bin) = match (opt_str_arg(params, "accountId"), opt_str_arg(params, "mailbox")) {
+                (Some(account_id), Some(mailbox)) => (account_id, mailbox, true),
+                _ => (String::new(), String::new(), false),
+            };
+            let (token, account_id, mailbox) = (access_token.as_str(), account_id.as_str(), mailbox.as_str());
+            let results = run_batched(items, |item| async move {
+                let outcome = retry_throttled(
+                    || {
+                        let provider = Provider::Graph { message_id: &item.message_id, token };
+                        delete_one(state, provider, account_id, mailbox, item.uid, mode, bin)
+                    },
+                    |refusal: &Refusal| match refusal {
+                        Refusal::Server(e) => throttle_of(e),
+                        _ => None,
+                    },
+                )
+                .await;
+                (item.uid, outcome)
+            })
+            .await;
+            let (mut done, mut failed, mut bin_ids) = (Vec::new(), Vec::new(), serde_json::Map::new());
+            for (uid, outcome) in results {
+                match outcome {
+                    Ok(out) => {
+                        done.push(uid);
+                        if let Some(bin_id) = out.bin_id {
+                            bin_ids.insert(uid.to_string(), json!(bin_id));
+                        }
+                    }
+                    Err(refusal) => {
+                        let error = match refusal {
+                            Refusal::BinCapture(e) => e.wire(),
+                            Refusal::Server(e) => e,
+                            Refusal::Renumbered => "errors.bulkIdentityChanged".to_string(),
+                        };
+                        failed.push(json!({"uid": uid, "error": error}));
+                    }
+                }
+            }
+            RpcResponse::success(id, json!({"done": done, "failed": failed, "binIds": bin_ids}))
         }
 
         "graph_create_folder" => {
@@ -361,6 +443,63 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
 
         _ => return None,
     })
+}
+
+/// How many Graph calls one batch (`graph_delete_messages`,
+/// `graph_move_emails`) keeps in flight.
+const BATCH_CONCURRENCY: usize = 4;
+/// Tries per message while Graph answers 429, the first included.
+const THROTTLE_TRIES: u32 = 3;
+/// The longest a throttled message waits before its next try.
+const THROTTLE_MAX_WAIT_SECS: u64 = 30;
+
+/// `f` over every item, `BATCH_CONCURRENCY` at a time, answers in input order.
+async fn run_batched<I, T, F, Fut>(items: Vec<I>, f: F) -> Vec<T>
+where
+    F: FnMut(I) -> Fut,
+    Fut: std::future::Future<Output = T>,
+{
+    use futures::StreamExt;
+    futures::stream::iter(items).map(f).buffered(BATCH_CONCURRENCY).collect().await
+}
+
+/// The seconds Graph asked a throttled call to wait (`(429:retry_after=N)`),
+/// `None` for any other error.
+fn throttle_of(error: &str) -> Option<u64> {
+    GraphClient::is_rate_limited(error).then(|| mailvault_core::sync_core::throttle::retry_after_from(error).unwrap_or(5))
+}
+
+/// Wait out a throttle, at most `THROTTLE_MAX_WAIT_SECS`; tests wait the
+/// same number of milliseconds.
+async fn throttle_pause(secs: u64) {
+    let secs = secs.min(THROTTLE_MAX_WAIT_SECS);
+    #[cfg(test)]
+    let wait = std::time::Duration::from_millis(secs);
+    #[cfg(not(test))]
+    let wait = std::time::Duration::from_secs(secs);
+    tokio::time::sleep(wait).await;
+}
+
+/// `attempt` again after a throttle (`throttled` reads the wait out of its
+/// error), up to `THROTTLE_TRIES` tries; any other answer is final.
+async fn retry_throttled<T, E, F, Fut>(mut attempt: F, throttled: impl Fn(&E) -> Option<u64>) -> Result<T, E>
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = Result<T, E>>,
+{
+    let mut tries = 1;
+    loop {
+        match attempt().await {
+            Err(e) if tries < THROTTLE_TRIES => match throttled(&e) {
+                Some(secs) => {
+                    tries += 1;
+                    throttle_pause(secs).await;
+                }
+                None => return Err(e),
+            },
+            other => return other,
+        }
+    }
 }
 
 /// Test seam for other modules' tests that reach Graph: points the process-wide
@@ -494,6 +633,10 @@ mod tests {
     static TEST_LOCK: Mutex<()> = Mutex::new(());
     static QUEUE: Mutex<VecDeque<(u16, String)>> = Mutex::new(VecDeque::new());
     pub(crate) static SEEN: Mutex<Vec<SeenRequest>> = Mutex::new(Vec::new());
+    /// Answers by request path, for calls that run concurrently and so reach
+    /// the mock in no fixed order: the first entry whose path the request's
+    /// path equals, with an answer left, answers it; else `QUEUE` does.
+    static ROUTED: Mutex<Vec<(String, VecDeque<(u16, String)>)>> = Mutex::new(Vec::new());
 
     /// One request the mock answered: request line, lower-cased headers, body.
     #[derive(Clone, Debug)]
@@ -552,14 +695,20 @@ mod tests {
     }
 
     fn handle_conn(mut stream: TcpStream) {
+        let mut path = String::new();
         if let Some(req) = read_request(&mut stream) {
+            path = req.path.clone();
             SEEN.lock().unwrap_or_else(|e| e.into_inner()).push(req);
         }
-        let (status, body) = QUEUE
+        let routed = ROUTED
             .lock()
-            .unwrap()
-            .pop_front()
-            .unwrap_or((500, "no response queued".into()));
+            .unwrap_or_else(|e| e.into_inner())
+            .iter_mut()
+            .find(|(p, answers)| *p == path && !answers.is_empty())
+            .and_then(|(_, answers)| answers.pop_front());
+        let (status, body) = routed.unwrap_or_else(|| {
+            QUEUE.lock().unwrap().pop_front().unwrap_or((500, "no response queued".into()))
+        });
         let body = body.replace("{{GRAPH_BASE}}",
             &std::env::var("MAILVAULT_GRAPH_BASE").unwrap_or_default());
         let gate = {
@@ -601,6 +750,16 @@ mod tests {
         q.clear();
         q.extend(responses);
         drop(q);
+        ROUTED.lock().unwrap_or_else(|e| e.into_inner()).clear();
+        guard
+    }
+
+    /// `mock_graph` answering by path (`ROUTED`), request log cleared.
+    fn mock_graph_routed(routes: Vec<(&str, Vec<(u16, String)>)>) -> std::sync::MutexGuard<'static, ()> {
+        let guard = mock_graph(Vec::new());
+        SEEN.lock().unwrap_or_else(|e| e.into_inner()).clear();
+        *ROUTED.lock().unwrap_or_else(|e| e.into_inner()) =
+            routes.into_iter().map(|(p, answers)| (p.to_string(), answers.into())).collect();
         guard
     }
 
@@ -932,6 +1091,220 @@ mod tests {
         let result = resp.result.expect("success");
         assert_eq!(result["success"], json!(true));
         assert_eq!(result["moved"], json!(2));
+    }
+
+    // ── Batched delete and move: per-message results ──
+
+    fn not_found() -> (u16, String) {
+        (404, json!({"error": {"code": "ErrorItemNotFound", "message": "gone"}}).to_string())
+    }
+
+    fn throttled() -> (u16, String) {
+        (429, json!({"error": {"code": "TooManyRequests"}}).to_string())
+    }
+
+    fn keep_local(s: &Arc<DaemonState>, uid: u32) {
+        let raw = format!("From: a@x.com\r\nSubject: Bye {uid}\r\nMessage-ID: <g{uid}@x>\r\n\r\nbody\r\n");
+        common::with_mailbox_write(s, "acct1", "INBOX", |root| {
+            vault_files::store(&s.vault_registry, root, "acct1", "INBOX", uid, raw.as_bytes(), &[], false)
+        })
+        .unwrap();
+    }
+
+    fn bin_rows(s: &Arc<DaemonState>, uid: u32) -> usize {
+        mailvault_core::app_db::with(&s.app_dir, |c| mailvault_core::app_db::deleted::captures_of(c, &s.app_dir, "acct1", "INBOX", uid))
+            .unwrap()
+            .len()
+    }
+
+    fn requests_to(path: &str) -> usize {
+        test_graph_requests().iter().filter(|r| r.path == path).count()
+    }
+
+    fn delete_items(uids: &[u32]) -> Value {
+        json!({
+            "accessToken": "tok", "accountId": "acct1", "mailbox": "INBOX", "mode": "auto",
+            "items": uids.iter().map(|u| json!({"uid": u, "messageId": format!("m{u}")})).collect::<Vec<_>>(),
+        })
+    }
+
+    /// One refused delete fails that message alone: the rest are deleted,
+    /// each with its own bin copy, and the refused one keeps no bin row.
+    #[tokio::test]
+    async fn a_batch_delete_carries_on_past_a_failure_and_answers_per_uid() {
+        let _g = mock_graph_routed(vec![
+            ("/me/messages/m7", vec![(204, String::new())]),
+            ("/me/messages/m8", vec![(500, json!({"error": {"code": "InternalServerError"}}).to_string())]),
+            ("/me/messages/m9", vec![(204, String::new())]),
+        ]);
+        let s = st();
+        for uid in [7, 8, 9] {
+            keep_local(&s, uid);
+        }
+        let resp = call(&s, "graph_delete_messages", delete_items(&[7, 8, 9])).await;
+        let out = resp.result.expect("a batch answers success");
+        assert_eq!(out["done"], json!([7, 9]));
+        let failed = out["failed"].as_array().unwrap();
+        assert_eq!(failed.len(), 1);
+        assert_eq!(failed[0]["uid"], json!(8));
+        assert!(failed[0]["error"].as_str().unwrap().contains("500"), "{failed:?}");
+        let bins = out["binIds"].as_object().unwrap();
+        assert_eq!(bins.keys().cloned().collect::<Vec<_>>(), vec!["7".to_string(), "9".to_string()]);
+        assert_ne!(bins["7"], bins["9"], "each message has its own bin copy");
+        assert_eq!((bin_rows(&s, 7), bin_rows(&s, 8), bin_rows(&s, 9)), (1, 0, 1));
+        assert_eq!(test_graph_requests().len(), 3, "one DELETE each, no retry of a plain failure");
+    }
+
+    /// A message Graph no longer has counts as deleted (`delete_message`).
+    #[tokio::test]
+    async fn a_batch_delete_counts_a_message_already_gone_as_done() {
+        let _g = mock_graph_routed(vec![("/me/messages/m7", vec![not_found()])]);
+        let s = st();
+        let out = call(&s, "graph_delete_messages", delete_items(&[7])).await.result.expect("success");
+        assert_eq!(out["done"], json!([7]));
+        assert_eq!(out["failed"], json!([]));
+    }
+
+    /// A throttled delete waits and is sent again; the retry's capture reuses
+    /// nothing orphaned: one bin row for the message.
+    #[tokio::test]
+    async fn a_throttled_delete_is_retried_and_lands() {
+        let _g = mock_graph_routed(vec![
+            ("/me/messages/m7", vec![throttled(), (204, String::new())]),
+            ("/me/messages/m8", vec![(204, String::new())]),
+        ]);
+        let s = st();
+        keep_local(&s, 7);
+        let out = call(&s, "graph_delete_messages", delete_items(&[7, 8])).await.result.expect("success");
+        assert_eq!(out["done"], json!([7, 8]));
+        assert_eq!(out["failed"], json!([]));
+        assert_eq!(requests_to("/me/messages/m7"), 2);
+        assert!(out["binIds"]["7"].is_string());
+        assert_eq!(bin_rows(&s, 7), 1, "the throttled try leaves no orphan bin row");
+    }
+
+    /// Three throttles in a row: that message fails, after three tries.
+    #[tokio::test]
+    async fn a_delete_throttled_three_times_fails_alone() {
+        let _g = mock_graph_routed(vec![
+            ("/me/messages/m7", vec![throttled(), throttled(), throttled(), (204, String::new())]),
+            ("/me/messages/m8", vec![(204, String::new())]),
+        ]);
+        let s = st();
+        let out = call(&s, "graph_delete_messages", delete_items(&[7, 8])).await.result.expect("success");
+        assert_eq!(out["done"], json!([8]));
+        assert_eq!(out["failed"][0]["uid"], json!(7));
+        assert!(out["failed"][0]["error"].as_str().unwrap().contains("429"));
+        assert_eq!(requests_to("/me/messages/m7"), 3, "three tries, no fourth");
+    }
+
+    /// No place given: nothing is kept in the bin, the deletes still run.
+    #[tokio::test]
+    async fn a_batch_delete_without_a_mailbox_bins_nothing() {
+        let _g = mock_graph_routed(vec![("/me/messages/m7", vec![(204, String::new())])]);
+        let s = st();
+        keep_local(&s, 7);
+        let params = json!({"accessToken": "tok", "items": [{"uid": 7, "messageId": "m7"}]});
+        let out = call(&s, "graph_delete_messages", params).await.result.expect("success");
+        assert_eq!(out["done"], json!([7]));
+        assert_eq!(out["binIds"], json!({}));
+        assert_eq!(bin_rows(&s, 7), 0);
+    }
+
+    #[tokio::test]
+    async fn a_batch_delete_with_bad_items_is_invalid_params() {
+        let _g = mock_graph_routed(vec![]);
+        let s = st();
+        for params in [
+            json!({"accessToken": "tok"}),
+            json!({"accessToken": "tok", "items": [{"uid": 7}]}),
+            json!({"accessToken": "tok", "items": [{"uid": "x", "messageId": "m"}]}),
+            json!({"accessToken": "tok", "items": [], "mode": "nonsense"}),
+            json!({"items": [{"uid": 7, "messageId": "m7"}]}),
+        ] {
+            let resp = call(&s, "graph_delete_messages", params.clone()).await;
+            assert_eq!(resp.error.as_ref().map(|e| e.code), Some(ipc::INVALID_PARAMS), "{params}");
+        }
+        let out = call(&s, "graph_delete_messages", json!({"accessToken": "tok", "items": []})).await.result.expect("success");
+        assert_eq!(out, json!({"done": [], "failed": [], "binIds": {}}));
+        assert!(test_graph_requests().is_empty());
+    }
+
+    /// One move lands, one finds the message gone from the source, two fail:
+    /// each is reported, none stops the rest.
+    #[tokio::test]
+    async fn a_move_reports_done_gone_and_failed_per_message() {
+        let _g = mock_graph_routed(vec![
+            ("/me/messages/a/move", vec![(200, graph_message_json("a2").to_string())]),
+            ("/me/messages/b/move", vec![not_found()]),
+            ("/me/messages/c/move", vec![(500, json!({"error": {"code": "InternalServerError"}}).to_string())]),
+            ("/me/messages/d/move", vec![(404, json!({"error": {"code": "ErrorFolderNotFound"}}).to_string())]),
+        ]);
+        let s = st();
+        let resp = call(
+            &s,
+            "graph_move_emails",
+            json!({"accessToken": "tok", "messageIds": ["a", "b", "c", "d"], "targetFolderId": "fld-archive"}),
+        )
+        .await;
+        let out = resp.result.expect("a move answers success");
+        assert_eq!(out["success"], json!(true));
+        assert_eq!(out["moved"], json!(1));
+        assert_eq!(out["done"], json!(["a"]));
+        assert_eq!(out["gone"], json!(["b"]));
+        let failed = out["failed"].as_array().unwrap();
+        assert_eq!(failed.iter().map(|f| f["messageId"].clone()).collect::<Vec<_>>(), vec![json!("c"), json!("d")]);
+        assert!(failed[0]["error"].as_str().unwrap().contains("500"));
+        assert!(failed[1]["error"].as_str().unwrap().contains("ErrorFolderNotFound"));
+    }
+
+    #[tokio::test]
+    async fn a_throttled_move_is_retried_and_lands() {
+        let _g = mock_graph_routed(vec![("/me/messages/a/move", vec![throttled(), (200, graph_message_json("a2").to_string())])]);
+        let s = st();
+        let out = call(&s, "graph_move_emails", json!({"accessToken": "tok", "messageIds": ["a"], "targetFolderId": "f"}))
+            .await
+            .result
+            .expect("success");
+        assert_eq!(out["done"], json!(["a"]));
+        assert_eq!(out["moved"], json!(1));
+        assert_eq!(requests_to("/me/messages/a/move"), 2);
+    }
+
+    /// Graph ids are base64ish (`/`, `+`, `=`): the move escapes the id as
+    /// the delete does, or `/` would split the path.
+    #[tokio::test]
+    async fn a_move_percent_encodes_the_message_id() {
+        let _g = mock_graph_routed(vec![("/me/messages/AA%2Fx%2By%3D/move", vec![(200, graph_message_json("n").to_string())])]);
+        let s = st();
+        let out = call(&s, "graph_move_emails", json!({"accessToken": "tok", "messageIds": ["AA/x+y="], "targetFolderId": "f"}))
+            .await
+            .result
+            .expect("success");
+        assert_eq!(out["done"], json!(["AA/x+y="]));
+        assert_eq!(requests_to("/me/messages/AA%2Fx%2By%3D/move"), 1);
+    }
+
+    /// The batch never has more than `BATCH_CONCURRENCY` (4) calls in flight,
+    /// does reach it, and answers in input order.
+    #[tokio::test]
+    async fn a_batch_runs_at_most_four_at_once_and_answers_in_order() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let in_flight = Arc::new(AtomicUsize::new(0));
+        let peak = Arc::new(AtomicUsize::new(0));
+        let out = super::run_batched((0..12u32).collect(), |n| {
+            let (in_flight, peak) = (Arc::clone(&in_flight), Arc::clone(&peak));
+            async move {
+                let now = in_flight.fetch_add(1, Ordering::SeqCst) + 1;
+                peak.fetch_max(now, Ordering::SeqCst);
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+                in_flight.fetch_sub(1, Ordering::SeqCst);
+                (n, n * 2)
+            }
+        })
+        .await;
+        assert_eq!(peak.load(Ordering::SeqCst), 4);
+        assert_eq!(out, (0..12u32).map(|n| (n, n * 2)).collect::<Vec<_>>());
     }
 
     #[tokio::test]
